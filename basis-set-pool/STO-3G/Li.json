@@ -1,0 +1,57 @@
+{
+    "electron_shells": [
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.1611957475E+02",
+                "0.2936200663E+01",
+                "0.7946504870E+00"
+            ],
+            "coefficients": [
+                [
+                    "0.1543289673E+00",
+                    "0.5353281423E+00",
+                    "0.4446345422E+00"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0,
+                1
+            ],
+            "exponents": [
+                "0.6362897469E+00",
+                "0.1478600533E+00",
+                "0.4808867840E-01"
+            ],
+            "coefficients": [
+                [
+                    "-0.9996722919E-01",
+                    "0.3995128261E+00",
+                    "0.7001154689E+00"
+                ],
+                [
+                    "0.1559162750E+00",
+                    "0.6076837186E+00",
+                    "0.3919573931E+00"
+                ]
+            ]
+        }
+    ],
+    "references": [
+        {
+            "reference_description": "STO-3G Minimal Basis (3 functions/AO)",
+            "reference_keys": [
+                "hehre1969a",
+                "hehre1970a"
+            ]
+        }
+    ]
+}

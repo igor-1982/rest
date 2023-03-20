@@ -1,0 +1,54 @@
+{
+    "electron_shells": [
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "3.836000E+01",
+                "5.770000E+00",
+                "1.240000E+00",
+                "2.976000E-01"
+            ],
+            "coefficients": [
+                [
+                    "2.380900E-02",
+                    "1.548910E-01",
+                    "4.699870E-01",
+                    "5.130270E-01"
+                ],
+                [
+                    "0.000000E+00",
+                    "0.000000E+00",
+                    "0.000000E+00",
+                    "1.000000E+00"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "1.275000E+00"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        }
+    ],
+    "references": [
+        {
+            "reference_description": "The cc-pVDZ basis set",
+            "reference_keys": [
+                "woon1994a"
+            ]
+        }
+    ]
+}

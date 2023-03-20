@@ -1,0 +1,158 @@
+{
+    "electron_shells": [
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "4.570000E+03",
+                "6.859000E+02",
+                "1.565000E+02",
+                "4.447000E+01",
+                "1.448000E+01",
+                "5.131000E+00",
+                "1.898000E+00",
+                "3.329000E-01",
+                "1.043000E-01"
+            ],
+            "coefficients": [
+                [
+                    "6.960000E-04",
+                    "5.353000E-03",
+                    "2.713400E-02",
+                    "1.013800E-01",
+                    "2.720550E-01",
+                    "4.484030E-01",
+                    "2.901230E-01",
+                    "1.432200E-02",
+                    "-3.486000E-03"
+                ],
+                [
+                    "-1.390000E-04",
+                    "-1.097000E-03",
+                    "-5.444000E-03",
+                    "-2.191600E-02",
+                    "-5.975100E-02",
+                    "-1.387320E-01",
+                    "-1.314820E-01",
+                    "5.395260E-01",
+                    "5.807740E-01"
+                ],
+                [
+                    "0.000000E+00",
+                    "0.000000E+00",
+                    "0.000000E+00",
+                    "0.000000E+00",
+                    "0.000000E+00",
+                    "0.000000E+00",
+                    "0.000000E+00",
+                    "0.000000E+00",
+                    "1.000000E+00"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "6.001000E+00",
+                "1.241000E+00",
+                "3.364000E-01",
+                "9.538000E-02"
+            ],
+            "coefficients": [
+                [
+                    "3.548100E-02",
+                    "1.980720E-01",
+                    "5.052300E-01",
+                    "4.794990E-01"
+                ],
+                [
+                    "0.000000E+00",
+                    "0.000000E+00",
+                    "0.000000E+00",
+                    "1.000000E+00"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "3.430000E-01"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.0310500"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.0237800"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.0904000"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        }
+    ],
+    "references": [
+        {
+            "reference_description": "The cc-pVDZ basis set",
+            "reference_keys": [
+                "dunning1989a"
+            ]
+        },
+        {
+            "reference_description": "Augmenting functions for cc-pVDZ",
+            "reference_keys": [
+                "kendall1992a"
+            ]
+        }
+    ]
+}

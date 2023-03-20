@@ -1,0 +1,83 @@
+Print level:                1
+The number of threads used for parallelism:      3
+The spheric-GTO basis set is taken from /home/igor/Documents/Package-Pool/Rust/rest/basis-set-pool/cc-pVQZ
+ERI Type: ri_v
+The spheric-GTO auxiliary basis set is taken from /home/igor/Documents/Package-Pool/Rust/rest/basis-set-pool/def2-QZVPPD-RIFIT
+The exchange-correlation method: x3lyp
+Charge:  -1; Spin:   2
+Spin polarization: On
+min_num_angular_points: 302
+max_num_angular_points: 302
+hardness: 3
+SCF convergency thresholds: 1e-5 for density matrix
+                            1e-5 Ha. for sum of eigenvalues
+                            1e-8 Ha. for total energy
+Max. SCF cycle number:      100
+The diis mixing with (param, max_vec_len) = (0.8, 8) is employed for the SCF procedure
+Turn on the diis mixing after 1 step(s) of SCF iteractions with the linear mixing
+WARNING: The specified external initial guess file (guessfile) is missing 
+(init_guess.chk.0). 
+ The external initial guess will not be imported.
+
+The specified checkfile exists but is not loaded because of 'external_init_guess
+It will be updated after the SCF procedure 
+(none)
+It is a cluster calculation for finite molecules
+nbas: 8, natm: 2 for standard basis sets
+The density functional 'X3LYP' belongs to the 'Hybrid GGA' family and is defined in the reference(s):
+(0): X. Xu and W. A. Goddard, Proc. Natl. Acad. Sci. U. S. A. 101, 2673 (2004)
+Libxc version used in REST: 5.2.3
+Nuc_energy: 0.696285800394737
+The evaluation of 2D-tensors spends             0.00 seconds
+num_basis: 60,num_auxbas: 130
+final nbas: 46,final natm: 4
+The evaluation of 3D-tensors spends             0.06 seconds
+Overlap matrix is nonsigular:
+  Lowest eigenvalue:       0.00022185 with the total number of basis functions:     60
+Unrestricted Hartree-Fock (or Kohn-Sham) algorithm is invoked.
+Read grids from the external file: grids-pvqz
+Size of imported grids: 18392
+electron number in alpha-channel:   1.99999999
+electron number in beta-channel:    1.00000000
+The total energy:        -0.7588472921 Ha by the initial guess
+electron number in alpha-channel:   1.99999999
+electron number in beta-channel:    0.99999999
+diis-norm :       1.11773387
+Energy:      -0.9790066562 Ha after    1 iterations (in       0.16 seconds).
+electron number in alpha-channel:   1.99999999
+electron number in beta-channel:    1.00000000
+diis-norm :       0.49219821
+SCF Change: DM (5.28486e-2,4.12106e-3); eev  1.40613e0 Ha; etot -6.18643e-2 Ha
+Energy:      -1.0408709223 Ha after    2 iterations (in       0.18 seconds).
+electron number in alpha-channel:   1.99999999
+electron number in beta-channel:    1.00000000
+diis-norm :       0.01784058
+SCF Change: DM (1.21151e-2,3.37145e-4); eev 4.95340e-2 Ha; etot -1.20412e-2 Ha
+Energy:      -1.0529120807 Ha after    3 iterations (in       0.17 seconds).
+electron number in alpha-channel:   1.99999999
+electron number in beta-channel:    1.00000000
+diis-norm :       0.00779546
+SCF Change: DM (1.68963e-3,1.89155e-4); eev 3.11798e-2 Ha; etot -1.13532e-4 Ha
+Energy:      -1.0530256127 Ha after    4 iterations (in       0.17 seconds).
+electron number in alpha-channel:   1.99999999
+electron number in beta-channel:    1.00000000
+diis-norm :       0.00071646
+SCF Change: DM (2.55339e-4,1.30232e-5); eev 2.44892e-3 Ha; etot -4.62557e-6 Ha
+Energy:      -1.0530302383 Ha after    5 iterations (in       0.17 seconds).
+electron number in alpha-channel:   1.99999999
+electron number in beta-channel:    1.00000000
+diis-norm :       0.00006289
+SCF Change: DM (3.95572e-6,3.03957e-7); eev 2.04479e-4 Ha; etot -4.91228e-8 Ha
+Energy:      -1.0530302874 Ha after    6 iterations (in       0.17 seconds).
+electron number in alpha-channel:   1.99999999
+electron number in beta-channel:    1.00000000
+diis-norm :       0.00000899
+SCF Change: DM (1.61644e-6,6.62800e-8); eev 2.99874e-5 Ha; etot -2.36565e-10 Ha
+Energy:      -1.0530302876 Ha after    7 iterations (in       0.17 seconds).
+electron number in alpha-channel:   1.99999999
+electron number in beta-channel:    1.00000000
+diis-norm :       0.00000025
+SCF Change: DM (1.90473e-7,2.79224e-9); eev 3.40117e-7 Ha; etot -5.73230e-12 Ha
+Energy:      -1.0530302876 Ha after    8 iterations (in       0.17 seconds).
+SCF is converged after    8 iterations.
+the job spends             2.56 seconds

@@ -1,0 +1,17 @@
+%chk=pen_00.chk
+%nprocshared=48
+%mem=100GB
+#p X3LYP/gen int=(grid=ultrafine,acc2e=12) test
+scf=(xqc,tight,maxcyc=200,novaracc,noincfock) geom=check guess=read
+opt(maxcyc=200) freq nosymm
+
+neutral pentance
+
+0   1
+
+H C 0
+6-31+G(d)
+****
+
+
+

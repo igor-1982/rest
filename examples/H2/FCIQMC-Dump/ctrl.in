@@ -1,0 +1,35 @@
+{"ctrl" : {
+     "print_level":               1,
+     "xc":                        "hf",
+     "basis_path":                "../../../basis-set-pool/cc-pVDZ",
+     "basis_type":                "spheric",
+     "auxbas_path":               "../../../basis-set-pool/def2-SV(P)-JKFIT",
+     "fciqmc_dump":               true,
+     "eri_type":                  "ri-v",
+     "auxbas_type":               "spheric",
+     "guessfile":                 "none",
+     "chkfile":                   "none",
+     "charge":                    0.0,
+     "spin":                      1.0,
+     "spin_polarization":         false,
+     "external_grids":            "none",
+     "mixer":                     "diis",
+     "num_max_diis":              8,
+     "start_diis_cycle":          3,
+     "mix_param":                 0.8,
+     "max_scf_cycle":             100,
+     "scf_acc_rho":               1.0e-5,
+     "scf_acc_eev":               1.0e-5,
+     "scf_acc_etot":              1.0e-8,
+     "num_threads":               3
+ },
+ "geom" : {
+     "name": "H2, example",
+     "unit": "Angstrom",
+     "position": [
+             "H   0.0000000000      0.0000000000      0.0000000000",
+             "H   0.7600000000      0.0000000000      0.0000000000"
+     ]
+ }
+}
+

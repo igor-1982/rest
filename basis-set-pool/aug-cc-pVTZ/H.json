@@ -1,0 +1,136 @@
+{
+    "electron_shells": [
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "3.387000E+01",
+                "5.095000E+00",
+                "1.159000E+00",
+                "3.258000E-01",
+                "1.027000E-01"
+            ],
+            "coefficients": [
+                [
+                    "6.068000E-03",
+                    "4.530800E-02",
+                    "2.028220E-01",
+                    "5.039030E-01",
+                    "3.834210E-01"
+                ],
+                [
+                    "0.000000E+00",
+                    "0.000000E+00",
+                    "0.000000E+00",
+                    "1.000000E+00",
+                    "0.000000E+00"
+                ],
+                [
+                    "0.000000E+00",
+                    "0.000000E+00",
+                    "0.000000E+00",
+                    "0.000000E+00",
+                    "1.000000E+00"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "1.407000E+00",
+                "3.880000E-01"
+            ],
+            "coefficients": [
+                [
+                    "1.000000E+00",
+                    "0.000000E+00"
+                ],
+                [
+                    "0.000000E+00",
+                    "1.000000E+00"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "1.057000E+00"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.0252600"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.1020000"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.2470000"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        }
+    ],
+    "references": [
+        {
+            "reference_description": "The cc-pVTZ basis set",
+            "reference_keys": [
+                "dunning1989a"
+            ]
+        },
+        {
+            "reference_description": "Augmenting functions for cc-pVTZ",
+            "reference_keys": [
+                "kendall1992a"
+            ]
+        }
+    ]
+}

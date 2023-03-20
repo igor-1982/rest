@@ -1,0 +1,39 @@
+[ctrl]
+     print_level =               3
+     xc =                        "x3lyp"
+     basis_path =                "../../../basis-set-pool/cc-pVQZ"
+     basis_type =                "spheric"
+     auxbas_path =               "../../../basis-set-pool/def2-SV(P)-JKFIT"
+     even_tempered_basis =       "none"
+     etb_start_atom_number =     1
+     etb_beta =                  2.0
+     eri_type =                  "ri-v"
+     auxbas_type =               "spheric"
+     initial_guess =             "vsap"
+     chkfile =                   "none"
+     charge =                    0.0
+     spin =                      1.0
+     spin_polarization =         false
+     pruning =                   "nwchem"
+     radial_grid_method =        "treutler"
+     external_grids =            "none"
+     mixer =                     "diis"
+     num_max_diis =              8
+     start_diis_cycle =          1
+     mix_param =                 0.8
+     max_scf_cycle =             15
+     scf_acc_rho =               1.0e-5
+     scf_acc_eev =               1.0e-5
+     scf_acc_etot =              1.0e-8
+     num_threads =               8
+
+[geom]
+     name = "NH3, example"
+     unit = "angstrom"
+     position = [
+             "N  -2.1988391019      1.8973746268      0.0000000000",
+             "H  -1.1788391019      1.8973746268      0.0000000000",
+             "H  -2.5388353987      1.0925460144     -0.5263586446",
+             "H  -2.5388400276      2.7556271745     -0.4338224694"
+     ]
+

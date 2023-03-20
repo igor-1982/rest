@@ -1,0 +1,47 @@
+{
+ "electron_shells": [
+     {
+         "function_type": "gto",
+         "region": "",
+         "angular_momentum": [
+             0
+         ],
+         "exponents": [
+             "0.9753937161679683E+01",
+             "0.1776691832695312E+01",
+             "0.4808421351562498E+00"
+         ],
+         "coefficients": [
+             [
+                 "0.1543289673E+00",
+                 "0.5353281423E+00",
+                 "0.4446345422E+00"
+         ]
+		 ] 
+     },
+    {
+        "function_type": "gto",
+        "region": "polarization",
+        "angular_momentum": [
+            1
+        ],
+        "exponents": [
+            "0.750"
+        ],
+        "coefficients": [
+            [
+                "1.000000"
+            ]
+        ]
+    }
+ ],
+ "references": [
+     {
+         "reference_description": "STO-3G Minimal Basis (3 functions/AO)",
+         "reference_keys": [
+             "hehre1969a",
+             "hehre1970a"
+         ]
+     }
+ ]
+}
