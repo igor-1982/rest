@@ -1,6 +1,8 @@
+use array_tool::vec::Intersect;
 use rayon::prelude::{IntoParallelRefIterator, IndexedParallelIterator, ParallelIterator};
 use rest_tensors::{ERIFull,RIFull,ERIFold4,TensorSlice,TensorSliceMut,TensorOptMut,TensorOpt, MatrixUpper, MatrixFull};
 use libc::regerror;
+use statrs::distribution::Continuous;
 use tensors::BasicMatrix;
 use tensors::external_libs::{ri_copy_from_ri, matr_copy_from_ri};
 use tensors::matrix_blas_lapack::_dgemm;
@@ -15,10 +17,10 @@ use crate::geom_io::{GeomCell,MOrC, GeomUnit, get_mass_charge};
 use crate::basis_io::{Basis4Elem,BasInfo};
 use crate::ctrl_io::{InputKeywords};
 use crate::utilities;
-use rust_libcint::{CINTR2CDATA, CintType};
+use rest_libcint::{CINTR2CDATA, CintType};
 use std::path::Path;
 use regex::Regex;
-use crate::basis_io::bse_downloader::{self, basis_modifier};
+use crate::basis_io::bse_downloader::{self, ctrl_element_checker, local_element_checker};
 use crate::basis_io::basis_list::{self, basis_fuzzy_matcher, check_basis_name};
 
 //extern crate nalgebra as na;
@@ -203,7 +205,7 @@ impl Molecule {
         };
 
 
-        let etb = if (self.ctrl.even_tempered_basis != String::from("none")) {
+        let etb = if (self.ctrl.even_tempered_basis == true) {
             let etb_elem = get_etb_elem(&self.geom, &self.ctrl.etb_start_atom_number);
             let etb_basis = etb_gen_for_atom_list(&self, &self.ctrl.etb_beta, &etb_elem);
             Some(etb_basis)
@@ -338,20 +340,37 @@ impl Molecule {
             None => InfoV2::new(),
         };
  */
-        //bse_auxbas_getter insert here
-        let re = Regex::new(r"/{1}[^/]*$").unwrap();
-        let cap = re.captures(&ctrl.auxbas_path).unwrap();
-        let auxbas_name = cap[0][1..].to_string();
-        if check_basis_name(&auxbas_name) {
-            bse_downloader::bse_auxbas_getter(&auxbas_name,&geom, &ctrl.auxbas_path);
-        }
-        else {
-            let matched = basis_fuzzy_matcher(&auxbas_name);
-            match matched {
-                Some(_) => panic!("{} may not be a valid basis set name, similar name is {}", auxbas_name, matched.unwrap()),
-                None => panic!("{} may not be a valid basis set name, please check.", auxbas_name),
+
+        let ctrl_elem = ctrl_element_checker(geom);
+        let local_elem = local_element_checker(&ctrl.auxbas_path);
+        //println!("local elements are {:?}", local_elem);
+        //println!("ctrl elements are {:?}", ctrl_elem);
+        let elem_intersection = ctrl_elem.intersect(local_elem.clone());
+        let mut required_elem = vec![];
+        for ctrl_item in ctrl_elem {
+            if !elem_intersection.contains(&ctrl_item) {
+                required_elem.push(ctrl_item)
             }
         }
+    
+        if required_elem.len() != 0 {
+            //bse_auxbas_getter insert here
+            let re = Regex::new(r"/{1}[^/]*$").unwrap();
+            let cap = re.captures(&ctrl.auxbas_path).unwrap();
+            let auxbas_name = cap[0][1..].to_string();
+            if check_basis_name(&auxbas_name) {
+                bse_downloader::bse_auxbas_getter_v2(&auxbas_name,&geom, &ctrl.auxbas_path, &required_elem);
+            }
+            else {
+                println!("Error: Missing local aux basis sets for {:?}", &required_elem);
+                let matched = basis_fuzzy_matcher(&auxbas_name);
+                match matched {
+                    Some(_) => panic!("{} may not be a valid basis set name, similar name is {}", auxbas_name, matched.unwrap()),
+                    None => panic!("{} may not be a valid basis set name, please check.", auxbas_name),
+            }
+        }
+
+        };
 
         for (atm_index, atm_elem) in geom.elem.iter().enumerate() {
             let tmp_path = format!("{}/{}.json",&ctrl.auxbas_path, &atm_elem);
@@ -492,21 +511,38 @@ impl Molecule {
         let mut cint_fdqc: Vec<Vec<usize>> = vec![];
         //let mut basis_global_index: Vec<(usize,usize)> = vec![(0,0);geom.elem.len()];
 
-        //function inserted here
-        let re = Regex::new(r"/{1}[^/]*$").unwrap();
-        let cap = re.captures(&ctrl.basis_path).unwrap();
-        let basis_name = cap[0][1..].to_string();
-        if check_basis_name(&basis_name) {
-            bse_downloader::bse_basis_getter(&basis_name,&geom, &ctrl.basis_path);
+        let ctrl_elem = ctrl_element_checker(geom);
+        let local_elem = local_element_checker(&ctrl.basis_path);
+        //println!("local elements are {:?}", local_elem);
+        //println!("ctrl elements are {:?}", ctrl_elem);
+        let elem_intersection = ctrl_elem.intersect(local_elem.clone());
+        let mut required_elem = vec![];
+        for ctrl_item in ctrl_elem {
+            if !elem_intersection.contains(&ctrl_item) {
+                required_elem.push(ctrl_item)
+            }
         }
-        else {
-            let matched = basis_fuzzy_matcher(&basis_name);
-            match matched {
-                Some(_) => panic!("{} may not be a valid basis set name, similar name is {}", basis_name, matched.unwrap()),
-                None => panic!("{} may not be a valid basis set name, please check.", basis_name),
+    
+        if required_elem.len() != 0 {
+                    //function inserted here
+
+            
+            let re = Regex::new(r"/{1}[^/]*$").unwrap();
+            let cap = re.captures(&ctrl.basis_path).unwrap();
+            let basis_name = cap[0][1..].to_string();
+            if check_basis_name(&basis_name) {
+                bse_downloader::bse_basis_getter_v2(&basis_name,&geom, &ctrl.basis_path, &required_elem);
+            }
+            else {
+                println!("Error: Missing local basis sets for {:?}", &required_elem);
+                let matched = basis_fuzzy_matcher(&basis_name);
+                match matched {
+                    Some(_) => panic!("{} may not be a valid basis set name, similar name is {}", basis_name, matched.unwrap()),
+                    None => panic!("{} may not be a valid basis set name, please check.", basis_name),
             }
         }
         //bse_downloader::bse_basis_getter(&basis_name,&geom, &ctrl.basis_path);
+        };
 
 
         for (atm_index, atm_elem) in geom.elem.iter().enumerate() {
@@ -1301,3 +1337,6 @@ fn test_get_slices_mut() {
     let bb = test_matrix.iter_submatrix_mut(0..3, 0..2).map(|a| *a).collect::<Vec<i32>>();
     println!("{:?}",bb);
 }
+
+
+

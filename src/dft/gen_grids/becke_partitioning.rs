@@ -1,3 +1,6 @@
+//! Becke partitioning according to _A. D. Becke. The Journal of Chemical Physics 88, 2547-2553 (1988)_.
+//! Reference can be found [here](https://doi.org/10.1063/1.454033).
+//! 
 use super::bragg;
 use super::parameters;
 

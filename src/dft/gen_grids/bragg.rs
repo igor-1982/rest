@@ -1,4 +1,7 @@
+//! Get bragg radius of the given atom.
+
 // we use the same values as the DIRAC15 code
+/// Get bragg radius of the given atom.
 pub fn get_bragg_angstrom(charge: i32) -> f64 {
     match charge {
         1 => 0.35,

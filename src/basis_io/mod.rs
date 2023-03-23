@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fs;
 use std::io::{Write,BufRead, BufReader};
-use rust_libcint::{CINTR2CDATA, CintType};
+use rest_libcint::{CINTR2CDATA, CintType};
 use std::f64::consts::{PI, E};
 use libm;
 use crate::constants::{C2S_L0, C2S_L1, C2S_L2, C2S_L3, C2S_L4, c2s_matrix_const, CarBasInfo, cartesian_gto_const, self};

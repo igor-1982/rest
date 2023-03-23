@@ -1,3 +1,6 @@
+//! Generate Lebedev angular grids.
+//! 
+
 use super::tables;
 
 pub fn angular_grid(num_points: usize) -> (Vec<(f64, f64, f64)>, Vec<f64>) {

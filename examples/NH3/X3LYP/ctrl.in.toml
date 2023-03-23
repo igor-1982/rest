@@ -1,13 +1,13 @@
 [ctrl]
-     print_level =               3
+     print_level =               1
      xc =                        "x3lyp"
      basis_path =                "../../../basis-set-pool/cc-pVQZ"
      basis_type =                "spheric"
-     auxbas_path =               "../../../basis-set-pool/def2-SV(P)-JKFIT"
-     even_tempered_basis =       "none"
+     auxbas_path =               "../../../basis-set-pool/def2-SVP-JKFIT"
+     eri_type =                  "ri-v"
+     even_tempered_basis =       false
      etb_start_atom_number =     1
      etb_beta =                  2.0
-     eri_type =                  "ri-v"
      auxbas_type =               "spheric"
      initial_guess =             "vsap"
      chkfile =                   "none"
@@ -21,11 +21,11 @@
      num_max_diis =              8
      start_diis_cycle =          1
      mix_param =                 0.8
-     max_scf_cycle =             15
+     max_scf_cycle =             100
      scf_acc_rho =               1.0e-5
      scf_acc_eev =               1.0e-5
      scf_acc_etot =              1.0e-8
-     num_threads =               8
+     num_threads =               4
 
 [geom]
      name = "NH3, example"

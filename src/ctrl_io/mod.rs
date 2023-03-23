@@ -31,6 +31,9 @@ pub struct InputKeywords {
     pub auxbas_path: String,
     pub auxbas_type: String,
     pub use_auxbas: bool,
+    pub even_tempered_basis: bool,
+    pub etb_start_atom_number: usize,
+    pub etb_beta: f64,
     // Keywords for systems
     pub eri_type: String,
     pub xc: String,
@@ -51,9 +54,6 @@ pub struct InputKeywords {
     pub pruning: String,
     pub rad_grid_method: String,
     pub external_grids: String,
-    pub even_tempered_basis: String,
-    pub etb_start_atom_number: usize,
-    pub etb_beta: f64,
     // Keywords for the scf procedures
     pub mixer: String,
     pub mix_param: f64,
@@ -115,7 +115,7 @@ impl InputKeywords {
             rad_grid_method: String::from("treutler"),
             external_grids: "none".to_string(),
             // ETB for autogen the auxbasis
-            even_tempered_basis: String::from("none"),
+            even_tempered_basis: false,
             etb_start_atom_number: 37,
             etb_beta: 2.0,
             // Keywords for the scf procedures
@@ -381,8 +381,8 @@ impl InputKeywords {
                 println!("Grid generation level: {}", tmp_input.grid_gen_level);
 
                 tmp_input.even_tempered_basis = match tmp_ctrl.get("even_tempered_basis").unwrap_or(&serde_json::Value::Null) {
-                    serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(String::from("none"))},
-                    other => {String::from("none")},
+                    serde_json::Value::Bool(tmp_str) => {*tmp_str},
+                    other => {false},
                 };
                 println!("Even tempered basis generation: {}", tmp_input.even_tempered_basis);
 
@@ -398,7 +398,7 @@ impl InputKeywords {
                     other => {2.0_f64},
                 };
 
-                if tmp_input.even_tempered_basis != String::from("none") {
+                if tmp_input.even_tempered_basis == true {
                     println!("Even tempered basis generation starts at: {}", tmp_input.etb_start_atom_number);
                     println!("Even tempered basis beta is: {}", tmp_input.etb_beta);
 

@@ -12,7 +12,7 @@ dunce = "1.0.0"
 
 [dependencies]
 rest_tensors = {path="../rest_tensors"}
-rust_libcint = {path="../rust_libcint"}
+rest_libcint = {path="../rest_libcint"}
 anyhow = "1"
 time = "0.1.12"
 clap = "3.0.0-beta.2"
@@ -35,9 +35,10 @@ toml = "0.7"
 #tuple-conv = "1.0.1"
 num-traits = "0.2.15"
 statrs = "0.13"
-rand = "0.8"
+rand = "0.3"
 array_tool = "1.0.3"
 fuzzy-matcher = "0.3.7"
+#katex-doc = "0.1.0"
 #pyo3 = { version = "0.13", features = ["extension-module"] }
 # default-features = false because it by defaults includes default-tls which
 # seems to pull in libssl and libcrypto which is rejected by manylinux
@@ -46,6 +47,14 @@ reqwest = { version = "0.10", default-features = false, features = ["blocking", 
 #lapack-src = { version = "0.8", features=["openblas"] }
 #openblas-src = {version = "0.10", features=["static"]}
 #mimalloc = { version = "0.1.17", default-features = false }
+
+[package.metadata.docs.rs]
+rustdoc-args = [
+    "--html-in-header",
+    #".cargo/registry/src/github.com-1ecc6299db9ec823/katex-doc-0.1.0/katex.html",
+    "/share/home/tygao/REST3.0/rest/katex.html",
+
+]
 
 [dev-dependencies]
 criterion = "0.4"

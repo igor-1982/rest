@@ -1,3 +1,15 @@
+//! This mod is used to generate radial grids for DFT calculation.<br>
+//! Currently supported methods: 
+//! * Krack-Koster radial grid[^1]
+//! * Lindh-Malmqvist-Gagliardi radial grid[^2]
+//! * Treutler-Ahlrichs radial grid[^3]
+//! 
+//! [^1]: [M. Krack, A. M. Köster. The Journal of Chemical Physics 108, 3226-3234 (1998)](https://doi.org/10.1063/1.475719).
+//! 
+//! [^2]: [R. Lindh, P.-Å. Malmqvist, L. Gagliardi. Theoretical Chemistry Accounts 106, 178-187 (2001)](https://dx.doi.org/10.1007/s002140100263).
+//! 
+//! [^3]: [O. Treutler, R. Ahlrichs. The Journal of Chemical Physics 102, 346-354 (1995)](https://doi.org/10.1063/1.469408).
+//! 
 
 use std::collections::HashMap;
 use std::f64::consts::PI;
@@ -7,9 +19,14 @@ use super::bse;
 use super::parameters;
 use statrs::function::gamma;
 
-//Krack-Koster radial grid
-// https://doi.org/10.1063/1.475719, eqs. 9-13
-
+/// Krack-Koster radial grid according to _M. Krack, A. M. Köster. The Journal of Chemical Physics 108, 3226-3234 (1998)_, eqs. 9-13.<br>
+/// Reference can be found [here](https://doi.org/10.1063/1.475719).  
+/// 
+/// Arguments:<br>
+/// num_points: Number of radial grids to be generated.<br>
+/// 
+/// Returns:<br>
+/// A tuple of two vectors, radial grid coordinates and weights respectively.<br>
 pub fn radial_grid_kk(num_points: usize) -> (Vec<f64>, Vec<f64>) {
     let n = num_points as i32;
     let mut rws: Vec<_> = (1..=n).map(|i| kk_r_w(i, n)).collect();
@@ -17,7 +34,19 @@ pub fn radial_grid_kk(num_points: usize) -> (Vec<f64>, Vec<f64>) {
     rws.iter().cloned().unzip()
 }
 
-//generate Krack-Koster radial grid and weight 
+/// Generate Krack-Koster radial grid $r_i$ and weight $w_i$<br>
+/// _M. Krack, A. M. Köster. The Journal of Chemical Physics 108, 3226-3234 (1998)_, eqs. 9-10.<br>
+/// # Math:
+/// $$
+/// \begin{aligned}
+/// &r_i = \frac{n+1-2i}{n+1} + \frac{2}{\pi}\left[1+\frac{2}{3}\sin^2\left(\frac{i\pi}{n+1}\right)\right]
+/// \cos\left(\frac{i\pi}{n+1}\right)\sin\left(\frac{i\pi}{n+1}\right)
+/// \newline
+/// &w_i = \frac{16}{3(n+1)}\sin^4\left(\frac{i\pi}{n+1}\right)
+/// \end{aligned}
+/// $$
+/// 
+/// 
 fn kk_r_w(i: i32, n: i32) -> (f64, f64) {
     let pi = std::f64::consts::PI;
 
@@ -34,9 +63,11 @@ fn kk_r_w(i: i32, n: i32) -> (f64, f64) {
     (r, w)
 }
 
-
+  
+/// Download basis set information from www.basissetexchange.org to determine alpha_max and alpha_min, 
+/// returning radial grids coordinates and weights.
 //let bse.rs to determine max and min angular grid number(alpha max & min)
-//Lindh, Malmqvist, and Gagliardi
+//
 pub fn radial_grid_lmg_bse(
     basis_set: &str,
     radial_precision: f64,
@@ -47,6 +78,9 @@ pub fn radial_grid_lmg_bse(
     radial_grid_lmg(alpha_min, alpha_max, radial_precision, proton_charge)
 }
 
+/// Lindh, Malmqvist, and Gagliardi radial grid according to _R. Lindh, P.-Å. Malmqvist, L. Gagliardi.
+/// Theoretical Chemistry Accounts 106, 178-187 (2001)_.<br>
+/// Reference can be found [here](https://dx.doi.org/10.1007/s002140100263).
 pub fn radial_grid_lmg(
     alpha_min: HashMap<usize, f64>,
     alpha_max: f64,
@@ -93,6 +127,8 @@ pub fn radial_grid_lmg(
     (rs, ws)
 }
 
+/// Same as [`radial_grid_kk`].
+/// 
 pub fn radial_grid_gc2nd (n: usize) -> (Vec<f64>, Vec<f64>)  {
     let ln2 = 1.0 / f64::ln(2.0);
     let fac = (16.0 / 3.0) / ((n+1) as f64);
@@ -117,17 +153,33 @@ pub fn radial_grid_gc2nd (n: usize) -> (Vec<f64>, Vec<f64>)  {
     let w: Vec<f64> = xi_new.iter().zip(x1.iter()).map(|(xi_new, x1)| fac * f64::sin(*x1).powf(4.0) * ln2 / (1.0 + xi_new)).collect();
     return (r,w);
 
-    /* 
-    # Gauss-Chebyshev of the second kind,  and the transformed interval [0,\infty)
-# Ref  Matthias Krack and Andreas M. Koster,  J. Chem. Phys. 108 (1998), 3226
-
- */
-
 }
 
+
+/// Treutler-Ahlrichs radial grid according to _O. Treutler, R. Ahlrichs. The Journal of Chemical Physics 102, 346-354 (1995)_.<br>
+/// Quadrature T2 with the mapping M4. <br>
+/// Reference can be found [here](https://doi.org/10.1063/1.469408).  
+/// 
+/// Arguments:<br>
+/// n: Number of radial grids to be generated.<br>
+/// 
+/// Returns:<br>
+/// A tuple of two vectors, radial grid coordinates and weights respectively.<br>
+/// # Math:
+/// $$
+/// \begin{aligned}
+/// &r_i = \frac{\xi}{\ln2}(a+x_i)^\alpha\ln{\frac{a+1}{1-x_i}}
+/// \newline
+/// &w_i = \frac{\pi}{n+1}\sqrt{1-x_i^2}\frac{(a+x_i)^{\alpha}}{\ln2}
+/// \left(\frac{\alpha}{a+x_i}\ln{\frac{a+1}{1-x_i}}+\frac{1}{1-x_i}\right)
+/// \newline
+/// &x_i = \cos{\frac{i\pi}{n+1}}
+/// \newline\newline
+/// &\text{where } \xi=1.0\text{, }\alpha=0.6\text{, }a=1.
+/// \end{aligned}
+
+/// $$
 pub fn radial_grid_treutler(n: usize) -> (Vec<f64>, Vec<f64>) {
-    //treutler_ahlrichs
-    //Treutler-Ahlrichs [JCP 102, 346 (1995); DOI:10.1063/1.469408] (M4) radial grids
     let mut r: Vec<f64> = vec![];
     let mut w: Vec<f64> = vec![];
     let step = PI / ((n+1) as f64);
@@ -147,7 +199,14 @@ pub fn radial_grid_treutler(n: usize) -> (Vec<f64>, Vec<f64>) {
 
 // TCA 106, 178 (2001), eq. 25
 // we evaluate r_inner for s functions
-//truncation error
+// truncation error
+/// Lindh, Malmqvist, and Gagliardi radial grid according to _R. Lindh, P.-Å. Malmqvist, L. Gagliardi.
+/// Theoretical Chemistry Accounts 106, 178-187 (2001)_, eq.25.<br>
+/// # Math:
+/// $$
+/// \ln\left(\frac{1}{R_\text{H}}\right)+\frac{m+3}{2}\ln\alpha_\text{H}r_l^2=D_\text{m}
+/// $$
+/// 
 fn get_r_inner(max_error: f64, alpha_inner: f64) -> f64 {
     let d = 1.9;
 
@@ -161,7 +220,16 @@ fn get_r_inner(max_error: f64, alpha_inner: f64) -> f64 {
 
 
 // TCA 106, 178 (2001), eq. 19
-//relative error
+// relative error
+/// Lindh, Malmqvist, and Gagliardi radial grid according to _R. Lindh, P.-Å. Malmqvist, L. Gagliardi.
+/// Theoretical Chemistry Accounts 106, 178-187 (2001)_, eq.19.<br>
+/// # Math:
+/// $$
+/// R_\text{L}\approx\Gamma\left(\frac{m+3}{2}\right)(\alpha{r_{k_\text{H}}}^2)
+/// ^{\frac{m+1}{2}}e^{-\alpha{r_{k_\text{H}}}^2}
+/// $$
+/// 
+///
 fn get_r_outer(max_error: f64, alpha_outer: f64, l: usize, guess: f64) -> f64 {
     let m = (2 * l) as f64;
     let mut r_old = std::f64::MAX;
@@ -193,7 +261,20 @@ fn get_r_outer(max_error: f64, alpha_outer: f64, l: usize, guess: f64) -> f64 {
 
 
 // TCA 106, 178 (2001), eqs. 17 and 18
-//absolute value of gamma function
+// absolute value of gamma function
+/// Lindh, Malmqvist, and Gagliardi radial grid according to _R. Lindh, P.-Å. Malmqvist, L. Gagliardi.
+/// Theoretical Chemistry Accounts 106, 178-187 (2001)_, eqs.17-18.<br>
+/// # Math:
+/// $$
+/// \begin{aligned}
+/// &R_\text{D}^{(0)}\approx\frac{4\sqrt{2}\pi}{h}e^{\frac{-\pi^2}{2h}}
+/// \newline
+/// &R_\text{D}^{(m)}\approx\frac{\Gamma(\frac{3}{2})}{\Gamma\left(\frac{m+3}{2}\right)}
+/// \left(\frac{\pi}{h}\right)^{\frac{m}{2}}R_\text{D}^{(0)}
+/// \end{aligned}
+/// $$
+/// 
+///
 fn get_h(max_error: f64, l: usize, guess: f64) -> f64 {
     let m = (2 * l) as f64;
     let mut h_old = std::f64::MAX;
@@ -227,3 +308,21 @@ fn get_h(max_error: f64, l: usize, guess: f64) -> f64 {
 
     h
 }
+
+
+pub fn radial_grid_murray(){
+
+}
+
+pub fn radial_grid_becke(){
+
+}
+
+pub fn radial_grid_delley(){
+
+}
+
+pub fn radial_grid_mura_knowles(){
+    
+}
+

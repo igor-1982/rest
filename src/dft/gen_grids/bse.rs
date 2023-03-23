@@ -1,3 +1,5 @@
+//! Download basis set information from www.basissetexchange.org to determine alpha_max and alpha_min.
+
 use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
 use serde::Deserialize;
 use std::{collections::HashMap, f64::MAX};
@@ -18,6 +20,7 @@ struct Shell {
     exponents: Vec<String>,
 }
 
+/// Download basis set information from www.basissetexchange.org to determine alpha_max and alpha_min.
 pub fn ang_min_and_max(basis_set: &str, element: usize) -> (HashMap<usize, f64>, f64) {
     let mut headers = HeaderMap::new();
     headers.insert(USER_AGENT, HeaderValue::from_static("reqwest"));

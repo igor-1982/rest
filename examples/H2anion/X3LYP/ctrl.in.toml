@@ -1,9 +1,9 @@
 [ctrl]
      print_level=              1
      xc=                       "x3lyp"
-     basis_path=               "../../../basis-set-pool/cc-pVQZ"
+     basis_path=               "../../../basis-set-pool/cc-pVDZ"
      basis_type=               "spheric"
-     auxbas_path=              "../../../basis-set-pool/def2-SV(P)-JKFIT"
+     auxbas_path=              "../../../basis-set-pool/def2-SV(P)-JKFIT/"
      eri_type=                 "ri-v"
      auxbas_type=              "spheric"
      chkfile=                  "none"
@@ -21,7 +21,7 @@
      scf_acc_rho=              1.0e-5
      scf_acc_eev=              1.0e-5
      scf_acc_etot=             1.0e-8
-     num_threads=              2
+     num_threads=              3
 [geom]
      name="H2, example"
      unit="Angstrom"

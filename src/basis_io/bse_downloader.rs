@@ -1,7 +1,13 @@
+//! This mod is designed to download basis set or auxiliary basis set from [basissetexchange.org] 
+//! if required basis sets for elements are missing in local. 
+//! 
+//! [basissetexchange.org]: https://www.basissetexchange.org/
+
+
 use libc::PTHREAD_CREATE_JOINABLE;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
-use rust_libcint::CintType;
+use rest_libcint::CintType;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str,to_string};
 use std::collections::HashMap;
@@ -13,19 +19,26 @@ use array_tool::vec::{self, Intersect};
 
 //use super::Basis4Elem;
 
-
+/// This structure works to hold results received from basissetexchange.org. It includes an hashmap 
+/// named 'elements' where the keys are element names and the values are structures named [`crate::basis_io::bse_downloader::Basis`] which
+/// stores basis set information for certain elements.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Info {
     pub elements: HashMap<String, Basis>,
  }
 
 
+/// This structure works to hold basis set information for certain elements. It contains two fields, 
+/// 'electron_shells' and 'references'. Similar to Structure [`crate::basis_io::Basis4Elem`].
  #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Basis {
     electron_shells: Vec<Shell>,
     references: Vec<Refs>,
  }
 
+/// This structure works to hold certain electron shell information for certain elements. It contains five fields, 
+/// 'function_type', 'region', 'angular_momentum', 'exponents' and 'coefficients'. Typically one Shell only holds the electron
+/// shell for only one angular momentum. Similar to Structure [`crate::basis_io::BasCell`].
  #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Shell {
     function_type: String,
@@ -35,13 +48,18 @@ pub struct Shell {
     coefficients: Vec<Vec<String>>,
 }
 
+/// This structure works to hold certain reference information for certain elements. It contains two fields, 
+/// reference_description and reference_keys. Similar to Structure [`crate::basis_io::RefCell`].
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Refs {
     reference_description: String,
     reference_keys: Vec<String>,
 }
 
-pub fn elem_indexer(elem: &String) -> usize {
+/// This function returns the matching atom number to the input element name. Deprecated due to low efficiency.
+/// Alternative method is [`crate::geom_io::get_mass_charge`].
+#[deprecated(note = "Low efficiency. Users should instead use crate::geom_io::get_mass_charge")]
+fn elem_indexer(elem: &String) -> usize {
 
     let keys = vec![String::from("H"), String::from("He"),
          String::from("Li"),String::from("Be"),String::from("B"), String::from("C"),
@@ -76,6 +94,8 @@ pub fn elem_indexer(elem: &String) -> usize {
 
 }
 
+/// This function download missing basis set from www.basissetexchange.org to a certain path. Basis set information
+/// will be written into local json files.
 pub fn bse_basis_getter(basis_set: &String, cell: &GeomCell, path: &String) {
 
     //check if path exists
@@ -144,7 +164,79 @@ pub fn bse_basis_getter(basis_set: &String, cell: &GeomCell, path: &String) {
 
 }
 
+/// This function download missing basis set from www.basissetexchange.org to a certain path. Basis set information
+/// will be written into local json files.
+pub fn bse_basis_getter_v2(basis_set: &String, cell: &GeomCell, path: &String, required_elem: &Vec<String>) {
 
+    //check if path exists
+    create_dir_all(path);
+/*     
+    //element checker
+    let ctrl_elem = ctrl_element_checker(cell);
+    let local_elem = local_element_checker(path);
+    //println!("local elements are {:?}", local_elem);
+    //println!("ctrl elements are {:?}", ctrl_elem);
+
+    let elem_intersection = ctrl_elem.intersect(local_elem.clone());
+    let mut required_elem = vec![];
+    for ctrl_item in ctrl_elem {
+        if !elem_intersection.contains(&ctrl_item) {
+            required_elem.push(ctrl_item)
+        }
+    }
+ */
+    //println!("required elements are {:?}", required_elem);
+
+    if required_elem.len() == 0 {
+        return
+    }
+
+    //make HTTP request
+
+    let mut headers = HeaderMap::new();
+    headers.insert(USER_AGENT, HeaderValue::from_static("reqwest"));
+
+    let elem_set: String = required_elem.iter().map(|a| format!("{},",a)).collect();
+    let elem_num = required_elem.len();
+
+    let url = format!("http://basissetexchange.org/api/basis/{}/format/json?elements={}", basis_set, elem_set);
+    
+    let resp = reqwest::blocking::Client::new()
+        .get(&url)
+        .headers(headers)
+        .send()
+        .expect("Download failed, please check basis set name or element.")
+        .json::<Info>()
+        .unwrap();
+    //let response = reqwest::blocking::Client::new().get(&url).headers(headers).send().unwrap()..unwrap();
+    if elem_num == resp.elements.len() {
+        println!("{} for {:?} has been successfully downloaded.", basis_set, required_elem);
+    }
+    else {
+        println!("Warning: the number of elements downloaded ({}) is not equal to the number of required elements ({})",
+        resp.elements.len(), elem_num);
+    }
+
+    let required_elem_mass_charge = get_mass_charge(&required_elem);
+    let required_elem_charge: Vec<String> = required_elem_mass_charge.iter().map(|(a, b)| (*b as usize).to_string()).collect();
+
+    let mut index = 0;
+    for elem in required_elem {
+        let path_to_elem = format!("{}/{}.json", path, elem); 
+        let atom_num = required_elem_charge[index].clone();
+        //let atom_num = elem_indexer(&elem).to_string();
+        let basis = resp.elements.get(&atom_num).unwrap();
+        let mut f = File::create(&path_to_elem).unwrap();
+        let basis_final = serde_json::to_writer_pretty(f, basis);
+        //basis_modifier(&path_to_elem);
+        index += 1;
+    }
+
+
+}
+
+/// This function download missing auxiliary basis set from www.basissetexchange.org to a certain path. Basis set information
+/// will be written into local json files.
 pub fn bse_auxbas_getter(basis_set: &String, cell: &GeomCell, path: &String) {
 
     //check if path exists
@@ -214,6 +306,79 @@ pub fn bse_auxbas_getter(basis_set: &String, cell: &GeomCell, path: &String) {
 }
 
 
+pub fn bse_auxbas_getter_v2(basis_set: &String, cell: &GeomCell, path: &String, required_elem: &Vec<String>) {
+
+    //check if path exists
+    create_dir_all(path);
+
+/*     
+    //element checker
+    let ctrl_elem = ctrl_element_checker(cell);
+    let local_elem = local_element_checker(path);
+    //println!("local elements are {:?}", local_elem);
+    //println!("ctrl elements are {:?}", ctrl_elem);
+
+    let elem_intersection = ctrl_elem.intersect(local_elem.clone());
+    let mut required_elem = vec![];
+    for ctrl_item in ctrl_elem {
+        if !elem_intersection.contains(&ctrl_item) {
+            required_elem.push(ctrl_item)
+        }
+    }
+ */
+    //println!("required elements are {:?}", required_elem);
+
+    if required_elem.len() == 0 {
+        return
+    }
+
+    //make HTTP request
+
+    let mut headers = HeaderMap::new();
+    headers.insert(USER_AGENT, HeaderValue::from_static("reqwest"));
+
+    let elem_set: String = required_elem.iter().map(|a| format!("{},",a)).collect();
+    let elem_num = required_elem.len();
+
+    let url = format!("http://basissetexchange.org/api/basis/{}/format/json?elements={}", basis_set, elem_set);
+
+    //println!("url = {}", url);
+    
+    let resp = reqwest::blocking::Client::new()
+        .get(&url)
+        .headers(headers)
+        .send()
+        .expect("Download failed, please check auxiliary basis set name or element.")
+        .json::<Info>()
+        .unwrap();
+    //let response = reqwest::blocking::Client::new().get(&url).headers(headers).send().unwrap()..unwrap();
+    if elem_num == resp.elements.len() {
+        println!("{} for {:?} has been successfully downloaded.", basis_set, required_elem);
+    }
+    else {
+        println!("Warning: the number of elements downloaded ({}) is not equal to the number of required elements ({})",
+        resp.elements.len(), elem_num);
+    }
+
+    let required_elem_mass_charge = get_mass_charge(&required_elem);
+    let required_elem_charge: Vec<String> = required_elem_mass_charge.iter().map(|(a, b)| (*b as usize).to_string()).collect();
+
+    let mut index = 0;
+    for elem in required_elem {
+        let path_to_elem = format!("{}/{}.json", path, elem); 
+        let atom_num = required_elem_charge[index].clone();
+        //let atom_num = elem_indexer(&elem).to_string();
+        let basis = resp.elements.get(&atom_num).unwrap();
+        let mut f = File::create(&path_to_elem).unwrap();
+        let basis_final = serde_json::to_writer_pretty(f, basis);
+        //basis_modifier(&path_to_elem);
+    }
+
+}
+
+/// This function modify basis set information if some coeifficients are non-zero. Works for cc-*VTZ basis sets, 
+/// but not stable for other basis sets. Deprecated therefore.  
+#[deprecated(note = "Not stable for basis sets other than cc type")]
 pub fn basis_modifier(basis_path: &String) {
     let file_content = fs::read_to_string(basis_path).unwrap();
     let origin_basis = serde_json::from_str::<Basis>(&file_content).unwrap();
@@ -260,7 +425,8 @@ pub fn basis_modifier(basis_path: &String) {
 
 }
 
-fn local_element_checker(path: &String) -> Vec<String> {
+/// Checks elements information (.json) of a certain basis set in a given path. Returning a vector of element names.
+pub fn local_element_checker(path: &String) -> Vec<String> {
     let elem_pattern = format!("{}/*.json", path);
     let mut elem_set = vec![];
     let re = Regex::new(r".*\.json$").unwrap();
@@ -279,6 +445,7 @@ fn local_element_checker(path: &String) -> Vec<String> {
     elem_set
 }
 
+/// Checks elements in the given molecule. Returning a vector of element names.
 pub fn ctrl_element_checker(cell: &GeomCell) -> Vec<String> {
     let raw_elem = &cell.elem;
     let mut elem_set = vec![];
@@ -299,13 +466,13 @@ fn local_test() {
 //passed
 
 
-
+/* 
 #[test]
 fn modifier() {
     let basis_path = String::from("/share/home/tygao/REST/BasisSets/cc-pVTZ/Cl.json");
     basis_modifier(&basis_path);
 }
-
+ */
 #[test]
 fn getter() {
     //bse_basis_getter(&String::from("6-31G*"), &String::from("Cl"), &"test".to_string());

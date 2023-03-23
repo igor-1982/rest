@@ -6,7 +6,7 @@ use std::fmt::format;
 //use std::{fs, vec};
 use std::thread::panicking;
 use std::vec;
-use rust_libcint::{CINTR2CDATA, CintType};
+use rest_libcint::{CINTR2CDATA, CintType};
 use crate::geom_io::{GeomCell,MOrC, GeomUnit};
 use crate::basis_io::{Basis4Elem,BasInfo};
 use crate::molecule_io::Molecule;
@@ -2380,14 +2380,14 @@ impl ScfTraceRecord {
         }
         tmp_records
     }
+    /// This subroutine updates:  
+    ///     scf_energy:         from previous to the current value  
+    ///     scf_eigenvalues:    from previous to the current value  
+    ///     scf_eigenvectors:   from previous to the current value  
+    ///     scf_density_matrix: [pre, cur]  
+    ///     num_iter  
+    /// This subroutine should be called after [`scf.check_scf_convergence`] and before [`self.prepare_next_input`]"
     pub fn update(&mut self, scf: &SCF) {
-        /// This subroutine updates:
-        ///     scf_energy:         from previous to the current value
-        ///     scf_eigenvalues:    from previous to the current value
-        ///     scf_eigenvectors:   from previous to the current value
-        ///     scf_density_matrix: [pre, cur]
-        ///     num_iter
-        /// This subroutine should be called after scf.check_scf_convergence and before self.prepare_next_input"
 
         let spin_channel = scf.mol.spin_channel;
 
@@ -2403,25 +2403,26 @@ impl ScfTraceRecord {
 
         self.num_iter +=1;
     }
-    /// This subroutine prepare the fock matrix for the next step according different mixing algorithm
+    /// This subroutine prepares the fock matrix for the next step according different mixing algorithm  
     ///
-    /// self.mixer == "direct": the output density matrix in the current step "n0[out]" will be used directly 
-    ///                         to generate the the input fock matrix of the next step
-    ///               "linear": the density matrix used in the next step "n1[in]" is a mix between
-    ///                         the input density matrix in the current step "n0[in]" and n0[out]
-    ///                         n1[in] = alpha*n0[out] + (1-alpha)*n0[in]
-    ///                                = n0[in] + alpha * Rn0
-    ///                         where alpha the mixing parameter obtained from self.mix_param
-    ///                          and Rn0 = n0[out]-n0[in] is the density matrix change in the current step
-    ///                         n1[in] is then be used to generate the input fock matrix of the next step
-    ///               "diis":   the input fock matrix of the next step f1[in] = sum_{i} c_i*f_i[in],
-    ///                         where f_i[in] is the input fock matrix of the ith step and 
-    ///                         c_i is obtained by the diis altogirhm against the error vector
-    ///                         of the commutator (f_i[out]*d_i[out]*s-s*d_i[out]*f_i[out]),
-    ///                         where f_i[out] is the ith output fock matrix, 
-    ///                               d_i[out] is the ith output density matrix,
-    ///                               s is the overlap matrix
-    ///                         Ref: P. Pulay, Improved SCF Convergence Acceleration, JCC, 1982, 3:556-560.
+    /// self.mixer =  
+    /// * "direct": the output density matrix in the current step `n0[out]` will be used directly 
+    ///             to generate the the input fock matrix of the next step
+    /// * "linear": the density matrix used in the next step `n1[in]` is a mix between
+    ///             the input density matrix in the current step `n0[in]` and `n0[out]`  
+    ///             <span style="text-align:right">`n1[in] = alpha*n0[out] + (1-alpha)*n0[in]`</span>  
+    ///             <span style="text-align:right">`       = n0[in] + alpha * Rn0            ` </span>  
+    ///             where alpha the mixing parameter obtained from self.mix_param
+    ///              and `Rn0 = n0[out]-n0[in]` is the density matrix change in the current step.
+    ///             `n1[in]` is then be used to generate the input fock matrix of the next step
+    /// * "diis":   the input fock matrix of the next step `f1[in] = sum_{i} c_i*f_i[in]`,
+    ///            where `f_i[in]` is the input fock matrix of the ith step and 
+    ///            c_i is obtained by the diis altogirhm against the error vector
+    ///            of the commutator `(f_i[out]*d_i[out]*s-s*d_i[out]*f_i[out])`, where  
+    ///            - `f_i[out]` is the ith output fock matrix,   
+    ///            - `d_i[out]` is the ith output density matrix,  
+    ///            - `s` is the overlap matrix  
+    /// * **Ref**: P. Pulay, Improved SCF Convergence Acceleration, JCC, 1982, 3:556-560.
     ///
     pub fn prepare_next_input(&mut self, scf: &mut SCF) {
         let spin_channel = scf.mol.spin_channel;
@@ -2639,11 +2640,9 @@ pub fn diis_solver(em: &Vec<Vec<f64>>,
 
 }
 
-pub fn scf() -> anyhow::Result<SCF> {
+pub fn scf(mol:Molecule) -> anyhow::Result<SCF> {
     let dt0 = time::Local::now();
 
-    let ctrl_file = parse_input().value_of("input_file").unwrap_or("ctrl.in").to_string();
-    let mut mol = Molecule::build(ctrl_file)?;
     let mut scf_data = SCF::build(mol);
     // now generate the hamiltonian and the total energy according the initial guess density matrix
     scf_data.generate_hf_hamiltonian();

@@ -1,4 +1,10 @@
-//! Describe me ...
+//! Gen_grids is a library that produces numerical integration grid for
+//! molecules based on atom coordinates, atom types, and basis set information. <br>
+//! This work is based on [Numgrid] and [PySCF].
+//! 
+//! [Numgrid]: https://github.com/dftlibs/numgrid
+//! [PySCF]: https://pyscf.org/
+
 
 mod atom;
 mod becke_partitioning;

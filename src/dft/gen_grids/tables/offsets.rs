@@ -1,5 +1,7 @@
+//! Determine the offset according to the given Lebedev grid number.
 use std::collections::HashMap;
 
+/// Determine the offset according to the given Lebedev grid number.
 pub fn offsets() -> HashMap<usize, usize> {
     let mut mapping = HashMap::new();
     mapping.insert(6, 0);

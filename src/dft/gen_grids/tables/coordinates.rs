@@ -1,7 +1,8 @@
+//! Lebedev grid coordinates.
 #![allow(clippy::unreadable_literal)]
 
 const F: f64 = std::f64::consts::FRAC_1_SQRT_2;
-
+/// Lebedev grid coordinates.
 pub static COORDINATES: [(f64, f64, f64); 46976] = [
     (1.0, 0.0, 0.0),
     (-1.0, 0.0, 0.0),

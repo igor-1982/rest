@@ -47,13 +47,13 @@ mol = gto.Mole(
              H   -7.0692917090  1.2490690741  0.0000000000''',
     basis='cc-pvdz',verbose=4
 ).build()
-#method = scf.RHF(mol).density_fit(auxbasis="def2-svp-jkfit")
-
 method = dft.RKS(mol).density_fit(auxbasis="def2-svp-jkfit")
 method.xc = 'x3lypg'
+method.chkfile='restart.chk'
+method.grids.becke_scheme = dft.original_becke
+#method.grids.level = 3
 #method = scf.RHF(mol).density_fit(auxbasis="def2-svp-jkfit")
-method.init_guess = 'vsap'
-#method.small_rho_cutoff = 1.0e-2
+#method.init_guess = 'minao'
 print('Default DFT(X3LYPG).  E = %.12f' % method.kernel())
 print("Total job time: %10.2f(wall)" %(time()-TimeStart))
 

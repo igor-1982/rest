@@ -16,7 +16,6 @@ mol = gto.Mole(
     ).build()
 #method = scf.UHF(mol).density_fit(auxbasis="def2-tzvp-jkfit")
 method = dft.RKS(mol).density_fit(auxbasis="def2-tzvp-jkfit")
-method.init_guess = 'vsap'
 #method.scf
 method.xc = 'x3lypg'
 #method.init_guess = '1e'

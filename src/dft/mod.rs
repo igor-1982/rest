@@ -1063,9 +1063,9 @@ pub fn contract_vxc_0(mat_a: &mut MatrixFull<f64>, mat_b: &MatrixFullSlice<f64>,
     }
 }
 
-/// Prepare sigma[0] = rhop_u dot rhop_u => sigma_uu
-///         sigma[1] = rhop_u dot rhop_d => sigma_ud
-///         sigma[2] = rhop_d dot rhop_d => sigma_dd
+/// Prepare `sigma[0] = rhop_u dot rhop_u => sigma_uu`
+///         `sigma[1] = rhop_u dot rhop_d => sigma_ud`
+///         `sigma[2] = rhop_d dot rhop_d => sigma_dd`
 fn prepare_tabulated_sigma(rhop: &RIFull<f64>, spin_channel: usize) -> MatrixFull<f64> {
     let grids_len = rhop.size[0];
     if spin_channel==1 {
@@ -1105,9 +1105,10 @@ fn prepare_tabulated_sigma(rhop: &RIFull<f64>, spin_channel: usize) -> MatrixFul
         }
 }
 
-/// Prepare sigma[0] = rhop_u dot rhop_u => sigma_uu
-///         sigma[1] = rhop_u dot rhop_d => sigma_ud
-///         sigma[2] = rhop_d dot rhop_d => sigma_dd
+/// Rayon parallel version to prepare 
+///         `sigma[0] = rhop_u dot rhop_u => sigma_uu`
+///         `sigma[1] = rhop_u dot rhop_d => sigma_ud`
+///         `sigma[2] = rhop_d dot rhop_d => sigma_dd`
 fn prepare_tabulated_sigma_rayon(rhop: &RIFull<f64>, spin_channel: usize) -> MatrixFull<f64> {
     let grids_len = rhop.size[0];
     if spin_channel==1 {

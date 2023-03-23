@@ -1,10 +1,16 @@
+//! A set of constants used by gen_grids library.
+
 pub const SMALL: f64 = 1.0e-14;
+
+/// SG-1 radii for the first three periods.
 pub static SG1RADII: [f64; 19] = [0.0, 1.0000, 0.5882,   //H, He
 3.0769, 2.0513, 1.5385, 1.2308, 1.0256, 0.8791, 0.7692, 0.6838,  //2nd Period
 4.0909, 3.1579, 2.5714, 2.1687, 1.8750, 1.6514, 1.4754, 1.3333];  //3rd Period
 
+/// Bohr radius.
 pub const BOHR: f64 = 0.52917721092;
 
+/// Bragg radii for elements.
 pub static BRAGG0: [f64; 131] = [0.0,  // Ghost atom
 0.35,                                     1.40,             // 1s
 1.45, 1.05, 0.85, 0.70, 0.65, 0.60, 0.50, 1.50,             // 2s2p
@@ -28,6 +34,7 @@ pub static BRAGG0: [f64; 131] = [0.0,  // Ghost atom
 1.75, 1.75,
 1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75, 1.75];
 
+/// Lebedev angular grid number.
 pub static LEBEDEV_NGRID: [usize; 33] = [1, 6, 14, 26, 38, 50, 74, 86, 110, 146, 170,
 194,  230,  266,  302,  350,  434,  590,  770,  974, 1202, 1454,
 1730, 2030, 2354, 2702, 3074, 3470, 3890, 4334, 4802, 5294, 5810];

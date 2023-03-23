@@ -18,7 +18,7 @@
      scf_acc_rho=              1.0e-5
      scf_acc_eev=              1.0e-5
      scf_acc_etot=             1.0e-8
-     num_threads=              6
+     num_threads=              1
 [geom]
      name="NH3, example"
      unit="angstrom"

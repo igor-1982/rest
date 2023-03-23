@@ -5,7 +5,7 @@ use crate::basis_io;
 use crate::basis_io::basic_math::factorial;
 use crate::scf_io::SCF;
 use rest_tensors::{TensorOpt,MatrixFull};
-use rand::Rng;
+use rand::distributions::normal::StandardNormal;
 use itertools::Itertools;
 use rayon::iter::{IntoParallelRefIterator, IndexedParallelIterator, ParallelIterator, IntoParallelRefMutIterator};
 //mod lib;
@@ -16,7 +16,8 @@ pub fn generate_random_points (n_p: usize) -> Vec<[f64; 3]> {
     let mut random_points: Vec<[f64;3]> = vec![[0.0,0.0,0.0];n_p];
     random_points.iter_mut().for_each(|x|{
         x.iter_mut().for_each(|y|{
-            *y = rng.gen_range(-1.0..1.0);
+            let StandardNormal(a) = rand::random();
+            *y =a;
         })
     });
     //println!("{:?}",random_points);

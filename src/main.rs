@@ -1,9 +1,12 @@
+//! # Rust-based Electronic-Structure Tool (REST)
+//! 
 #![allow(unused)]
 extern crate rest_tensors as tensors;
 extern crate chrono as time;
 #[macro_use]
 extern crate lazy_static;
 use std::{f64, fs::File, io::Write};
+use std::path::PathBuf;
 
 use anyhow;
 use clap::{Command, Arg, ArgMatches};
@@ -18,6 +21,7 @@ mod scf_io;
 mod initial_guess;
 mod ri_pt2;
 mod ri_rpa;
+mod isdf;
 mod constants;
 pub mod post_scf_analysis;
 //use rayon;
@@ -26,8 +30,7 @@ static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 //static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 pub use crate::initial_guess::sap::*;
-use crate::post_scf_analysis::{rand_wf_real_space, cube_build, molden_build};
-
+use crate::{post_scf_analysis::{rand_wf_real_space, cube_build, molden_build}, isdf::error_isdf, molecule_io::Molecule};
 
 fn main() -> anyhow::Result<()> {
     let mut time_mark = utilities::TimeRecords::new();
@@ -37,7 +40,15 @@ fn main() -> anyhow::Result<()> {
     time_mark.new_item("SCF", "the scf procedure");
     time_mark.count_start("SCF");
 
-    let mut scf_data = scf_io::scf().unwrap();
+    let ctrl_file = parse_input().value_of("input_file").unwrap_or("ctrl.in").to_string();
+    if ! PathBuf::from(ctrl_file.clone()).is_file() {
+        panic!("Input file ({:}) does not exist", ctrl_file);
+    }
+
+
+    let mut mol = Molecule::build(ctrl_file)?;
+
+    let mut scf_data = scf_io::scf(mol).unwrap();
 
     time_mark.count("SCF");
 
@@ -72,6 +83,9 @@ fn main() -> anyhow::Result<()> {
         let molden_file = molden_build::gen_molden(&scf_data);
     }
 
+    /* let error_isdf = error_isdf(3..4, &scf_data);
+    println!("k_mu:{:?}, abs_error: {:?}, rel_error: {:?}", error_isdf.0, error_isdf.1, error_isdf.2); */
+
 
     if let Some(dft_method) = &scf_data.mol.xc_data.dfa_family_pos {
         match dft_method {
@@ -95,7 +109,7 @@ fn main() -> anyhow::Result<()> {
 
     println!("");
     println!("====================================================");
-    println!("              REST: Misson accomplished");
+    println!("              REST: Mission accomplished");
     println!("====================================================");
 
     time_mark.report_all();
@@ -108,12 +122,12 @@ fn parse_input() -> ArgMatches {
     Command::new("fdqc")
         .version("0.1")
         .author("Igor Ying Zhang <igor_zhangying@fudan.edu.cn>")
-        .about("Fudan Quantum Chemistry (FDQC) package ")
+        .about("Rust-based Electronic-Structure Tool (REST)")
         .arg(Arg::new("input_file")
              .short('i')
              .long("input-file")
              .value_name("input_file")
-             .help("Input file including \"ctrl\" and \"geom\" block")
+             .help("Input file including \"ctrl\" and \"geom\" block, in the format of either \"json\" or \"toml\"")
              .takes_value(true))
         .get_matches()
 }

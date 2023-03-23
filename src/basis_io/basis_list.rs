@@ -1,6 +1,12 @@
+//! This mod is designed to check if a given basis set name is available in [basissetexchange.org]. 
+//! If the given basis set name is not a exact match, a similar legal name will be suggested.
+//! The basis set name is not case sensitive.
+//! 
+//! [basissetexchange.org]: https://www.basissetexchange.org/
+
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 
-
+/// This function checks if a given basis name is available in www.basissetexchange.org.
 pub fn check_basis_name(basis: &String) -> bool {
     let basis_list_lower = vec![String::from("2zapa-nr"),
     String::from("2zapa-nr-cv"),
@@ -659,6 +665,7 @@ pub fn check_basis_name(basis: &String) -> bool {
 
 }
 
+/// This function gives a similar legal basis set name to the given one.
 pub fn basis_fuzzy_matcher(basis: &String) -> Option<String> {
     
     let basis_list = vec![String::from("2ZaPa-NR"),
