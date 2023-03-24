@@ -1,0 +1,840 @@
+{
+    "molssi_bse_schema": {
+        "schema_type": "complete",
+        "schema_version": "0.1"
+    },
+    "revision_description": "Data from the original Basis Set Exchange",
+    "revision_date": "2007-01-15",
+    "elements": {
+        "11": {
+            "electron_shells": [
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0
+                    ],
+                    "exponents": [
+                        "250.77243",
+                        "45.678511",
+                        "12.362388"
+                    ],
+                    "coefficients": [
+                        [
+                            "0.1543289673",
+                            "0.5353281423",
+                            "0.4446345422"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0,
+                        1
+                    ],
+                    "exponents": [
+                        "12.040193",
+                        "2.7978819",
+                        "0.9099580"
+                    ],
+                    "coefficients": [
+                        [
+                            "-0.09996722919",
+                            "0.39951282610",
+                            "0.70011546890"
+                        ],
+                        [
+                            "0.1559162750",
+                            "0.6076837186",
+                            "0.3919573931"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0,
+                        1
+                    ],
+                    "exponents": [
+                        "1.4787406",
+                        "0.4125649",
+                        "0.1614751"
+                    ],
+                    "coefficients": [
+                        [
+                            "-0.2196203690",
+                            "0.2255954336",
+                            "0.9003984260"
+                        ],
+                        [
+                            "0.01058760429",
+                            "0.59516700530",
+                            "0.46200101200"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto_spherical",
+                    "region": "",
+                    "angular_momentum": [
+                        2
+                    ],
+                    "exponents": [
+                        "0.090000"
+                    ],
+                    "coefficients": [
+                        [
+                            "1.000000"
+                        ]
+                    ]
+                }
+            ],
+            "references": [
+                {
+                    "reference_description": "STO-3G Minimal Basis (3 functions/AO)",
+                    "reference_keys": [
+                        "hehre1970a"
+                    ]
+                },
+                {
+                    "reference_description": "1P      Polarization functions from STO-3G*",
+                    "reference_keys": [
+                        "collins1976a"
+                    ]
+                }
+            ]
+        },
+        "12": {
+            "electron_shells": [
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0
+                    ],
+                    "exponents": [
+                        "299.2374",
+                        "54.50647",
+                        "14.75158"
+                    ],
+                    "coefficients": [
+                        [
+                            "0.1543289673",
+                            "0.5353281423",
+                            "0.4446345422"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0,
+                        1
+                    ],
+                    "exponents": [
+                        "15.12182",
+                        "3.513987",
+                        "1.142857"
+                    ],
+                    "coefficients": [
+                        [
+                            "-0.09996722919",
+                            "0.39951282610",
+                            "0.70011546890"
+                        ],
+                        [
+                            "0.1559162750",
+                            "0.6076837186",
+                            "0.3919573931"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0,
+                        1
+                    ],
+                    "exponents": [
+                        "1.395448",
+                        "0.389326",
+                        "0.152380"
+                    ],
+                    "coefficients": [
+                        [
+                            "-0.2196203690",
+                            "0.2255954336",
+                            "0.9003984260"
+                        ],
+                        [
+                            "0.01058760429",
+                            "0.59516700530",
+                            "0.46200101200"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto_spherical",
+                    "region": "",
+                    "angular_momentum": [
+                        2
+                    ],
+                    "exponents": [
+                        "0.090000"
+                    ],
+                    "coefficients": [
+                        [
+                            "1.000000"
+                        ]
+                    ]
+                }
+            ],
+            "references": [
+                {
+                    "reference_description": "STO-3G Minimal Basis (3 functions/AO)",
+                    "reference_keys": [
+                        "hehre1970a"
+                    ]
+                },
+                {
+                    "reference_description": "1P      Polarization functions from STO-3G*",
+                    "reference_keys": [
+                        "collins1976a"
+                    ]
+                }
+            ]
+        },
+        "13": {
+            "electron_shells": [
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0
+                    ],
+                    "exponents": [
+                        "351.4214767",
+                        "64.01186067",
+                        "17.32410761"
+                    ],
+                    "coefficients": [
+                        [
+                            "0.1543289673",
+                            "0.5353281423",
+                            "0.4446345422"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0,
+                        1
+                    ],
+                    "exponents": [
+                        "18.89939621",
+                        "4.391813233",
+                        "1.428353970"
+                    ],
+                    "coefficients": [
+                        [
+                            "-0.09996722919",
+                            "0.39951282610",
+                            "0.70011546890"
+                        ],
+                        [
+                            "0.1559162750",
+                            "0.6076837186",
+                            "0.3919573931"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0,
+                        1
+                    ],
+                    "exponents": [
+                        "1.3954482930",
+                        "0.3893265318",
+                        "0.1523797659"
+                    ],
+                    "coefficients": [
+                        [
+                            "-0.2196203690",
+                            "0.2255954336",
+                            "0.9003984260"
+                        ],
+                        [
+                            "0.01058760429",
+                            "0.59516700530",
+                            "0.46200101200"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto_spherical",
+                    "region": "",
+                    "angular_momentum": [
+                        2
+                    ],
+                    "exponents": [
+                        "0.390000"
+                    ],
+                    "coefficients": [
+                        [
+                            "1.000000"
+                        ]
+                    ]
+                }
+            ],
+            "references": [
+                {
+                    "reference_description": "STO-3G Minimal Basis (3 functions/AO)",
+                    "reference_keys": [
+                        "hehre1970a"
+                    ]
+                },
+                {
+                    "reference_description": "1P      Polarization functions from STO-3G*",
+                    "reference_keys": [
+                        "collins1976a"
+                    ]
+                }
+            ]
+        },
+        "14": {
+            "electron_shells": [
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0
+                    ],
+                    "exponents": [
+                        "407.7975514",
+                        "74.28083305",
+                        "20.10329229"
+                    ],
+                    "coefficients": [
+                        [
+                            "0.1543289673",
+                            "0.5353281423",
+                            "0.4446345422"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0,
+                        1
+                    ],
+                    "exponents": [
+                        "23.19365606",
+                        "5.389706871",
+                        "1.752899952"
+                    ],
+                    "coefficients": [
+                        [
+                            "-0.09996722919",
+                            "0.39951282610",
+                            "0.70011546890"
+                        ],
+                        [
+                            "0.1559162750",
+                            "0.6076837186",
+                            "0.3919573931"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0,
+                        1
+                    ],
+                    "exponents": [
+                        "1.4787406220",
+                        "0.4125648801",
+                        "0.1614750979"
+                    ],
+                    "coefficients": [
+                        [
+                            "-0.2196203690",
+                            "0.2255954336",
+                            "0.9003984260"
+                        ],
+                        [
+                            "0.01058760429",
+                            "0.59516700530",
+                            "0.46200101200"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto_spherical",
+                    "region": "",
+                    "angular_momentum": [
+                        2
+                    ],
+                    "exponents": [
+                        "0.390000"
+                    ],
+                    "coefficients": [
+                        [
+                            "1.000000"
+                        ]
+                    ]
+                }
+            ],
+            "references": [
+                {
+                    "reference_description": "STO-3G Minimal Basis (3 functions/AO)",
+                    "reference_keys": [
+                        "hehre1970a"
+                    ]
+                },
+                {
+                    "reference_description": "1P      Polarization functions from STO-3G*",
+                    "reference_keys": [
+                        "collins1976a"
+                    ]
+                }
+            ]
+        },
+        "15": {
+            "electron_shells": [
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0
+                    ],
+                    "exponents": [
+                        "468.3656378",
+                        "85.31338559",
+                        "23.08913156"
+                    ],
+                    "coefficients": [
+                        [
+                            "0.1543289673",
+                            "0.5353281423",
+                            "0.4446345422"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0,
+                        1
+                    ],
+                    "exponents": [
+                        "28.03263958",
+                        "6.514182577",
+                        "2.118614352"
+                    ],
+                    "coefficients": [
+                        [
+                            "-0.09996722919",
+                            "0.39951282610",
+                            "0.70011546890"
+                        ],
+                        [
+                            "0.1559162750",
+                            "0.6076837186",
+                            "0.3919573931"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0,
+                        1
+                    ],
+                    "exponents": [
+                        "1.7431032310",
+                        "0.4863213771",
+                        "0.1903428909"
+                    ],
+                    "coefficients": [
+                        [
+                            "-0.2196203690",
+                            "0.2255954336",
+                            "0.9003984260"
+                        ],
+                        [
+                            "0.01058760429",
+                            "0.59516700530",
+                            "0.46200101200"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto_spherical",
+                    "region": "",
+                    "angular_momentum": [
+                        2
+                    ],
+                    "exponents": [
+                        "0.390000"
+                    ],
+                    "coefficients": [
+                        [
+                            "1.000000"
+                        ]
+                    ]
+                }
+            ],
+            "references": [
+                {
+                    "reference_description": "STO-3G Minimal Basis (3 functions/AO)",
+                    "reference_keys": [
+                        "hehre1970a"
+                    ]
+                },
+                {
+                    "reference_description": "1P      Polarization functions from STO-3G*",
+                    "reference_keys": [
+                        "collins1976a"
+                    ]
+                }
+            ]
+        },
+        "16": {
+            "electron_shells": [
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0
+                    ],
+                    "exponents": [
+                        "533.1257359",
+                        "97.10951830",
+                        "26.28162542"
+                    ],
+                    "coefficients": [
+                        [
+                            "0.1543289673",
+                            "0.5353281423",
+                            "0.4446345422"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0,
+                        1
+                    ],
+                    "exponents": [
+                        "33.32975173",
+                        "7.745117521",
+                        "2.518952599"
+                    ],
+                    "coefficients": [
+                        [
+                            "-0.09996722919",
+                            "0.39951282610",
+                            "0.70011546890"
+                        ],
+                        [
+                            "0.1559162750",
+                            "0.6076837186",
+                            "0.3919573931"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0,
+                        1
+                    ],
+                    "exponents": [
+                        "2.0291942740",
+                        "0.5661400518",
+                        "0.2215833792"
+                    ],
+                    "coefficients": [
+                        [
+                            "-0.2196203690",
+                            "0.2255954336",
+                            "0.9003984260"
+                        ],
+                        [
+                            "0.01058760429",
+                            "0.59516700530",
+                            "0.46200101200"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto_spherical",
+                    "region": "",
+                    "angular_momentum": [
+                        2
+                    ],
+                    "exponents": [
+                        "0.390000"
+                    ],
+                    "coefficients": [
+                        [
+                            "1.000000"
+                        ]
+                    ]
+                }
+            ],
+            "references": [
+                {
+                    "reference_description": "STO-3G Minimal Basis (3 functions/AO)",
+                    "reference_keys": [
+                        "hehre1970a"
+                    ]
+                },
+                {
+                    "reference_description": "1P      Polarization functions from STO-3G*",
+                    "reference_keys": [
+                        "collins1976a"
+                    ]
+                }
+            ]
+        },
+        "17": {
+            "electron_shells": [
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0
+                    ],
+                    "exponents": [
+                        "601.3456136",
+                        "109.5358542",
+                        "29.64467686"
+                    ],
+                    "coefficients": [
+                        [
+                            "0.1543289673",
+                            "0.5353281423",
+                            "0.4446345422"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0,
+                        1
+                    ],
+                    "exponents": [
+                        "38.96041889",
+                        "9.053563477",
+                        "2.944499834"
+                    ],
+                    "coefficients": [
+                        [
+                            "-0.09996722919",
+                            "0.39951282610",
+                            "0.70011546890"
+                        ],
+                        [
+                            "0.1559162750",
+                            "0.6076837186",
+                            "0.3919573931"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0,
+                        1
+                    ],
+                    "exponents": [
+                        "2.1293864950",
+                        "0.5940934274",
+                        "0.2325241410"
+                    ],
+                    "coefficients": [
+                        [
+                            "-0.2196203690",
+                            "0.2255954336",
+                            "0.9003984260"
+                        ],
+                        [
+                            "0.01058760429",
+                            "0.59516700530",
+                            "0.46200101200"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto_spherical",
+                    "region": "",
+                    "angular_momentum": [
+                        2
+                    ],
+                    "exponents": [
+                        "0.390000"
+                    ],
+                    "coefficients": [
+                        [
+                            "1.000000"
+                        ]
+                    ]
+                }
+            ],
+            "references": [
+                {
+                    "reference_description": "STO-3G Minimal Basis (3 functions/AO)",
+                    "reference_keys": [
+                        "hehre1970a"
+                    ]
+                },
+                {
+                    "reference_description": "1P      Polarization functions from STO-3G*",
+                    "reference_keys": [
+                        "collins1976a"
+                    ]
+                }
+            ]
+        },
+        "18": {
+            "electron_shells": [
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0
+                    ],
+                    "exponents": [
+                        "674.4465184",
+                        "122.8512753",
+                        "33.24834945"
+                    ],
+                    "coefficients": [
+                        [
+                            "0.1543289673",
+                            "0.5353281423",
+                            "0.4446345422"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0,
+                        1
+                    ],
+                    "exponents": [
+                        "45.16424392",
+                        "10.49519900",
+                        "3.413364448"
+                    ],
+                    "coefficients": [
+                        [
+                            "-0.09996722919",
+                            "0.39951282610",
+                            "0.70011546890"
+                        ],
+                        [
+                            "0.1559162750",
+                            "0.6076837186",
+                            "0.3919573931"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0,
+                        1
+                    ],
+                    "exponents": [
+                        "2.6213665180",
+                        "0.7313546050",
+                        "0.2862472356"
+                    ],
+                    "coefficients": [
+                        [
+                            "-0.2196203690",
+                            "0.2255954336",
+                            "0.9003984260"
+                        ],
+                        [
+                            "0.01058760429",
+                            "0.59516700530",
+                            "0.46200101200"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto_spherical",
+                    "region": "",
+                    "angular_momentum": [
+                        2
+                    ],
+                    "exponents": [
+                        "0.390000"
+                    ],
+                    "coefficients": [
+                        [
+                            "1.000000"
+                        ]
+                    ]
+                }
+            ],
+            "references": [
+                {
+                    "reference_description": "STO-3G Minimal Basis (3 functions/AO)",
+                    "reference_keys": [
+                        "hehre1970a"
+                    ]
+                },
+                {
+                    "reference_description": "1P      Polarization functions from STO-3G*",
+                    "reference_keys": [
+                        "collins1976a"
+                    ]
+                }
+            ]
+        }
+    },
+    "version": "0",
+    "function_types": [
+        "gto",
+        "gto_spherical"
+    ],
+    "names": [
+        "STO-3G*"
+    ],
+    "tags": [],
+    "family": "sto",
+    "description": "MBP     Minimal Basis + Polarization on second row",
+    "role": "orbital",
+    "auxiliaries": {},
+    "name": "STO-3G*"
+}

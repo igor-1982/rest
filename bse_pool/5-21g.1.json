@@ -1,0 +1,263 @@
+{
+    "molssi_bse_schema": {
+        "schema_type": "complete",
+        "schema_version": "0.1"
+    },
+    "revision_description": "Data from Gaussian 09",
+    "revision_date": "2018-06-19",
+    "elements": {
+        "1": {
+            "electron_shells": [
+                {
+                    "function_type": "gto",
+                    "region": "valence",
+                    "angular_momentum": [
+                        0
+                    ],
+                    "exponents": [
+                        "0.5447178000E+01",
+                        "0.8245472400E+00"
+                    ],
+                    "coefficients": [
+                        [
+                            "0.1562849787E+00",
+                            "0.9046908767E+00"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "valence",
+                    "angular_momentum": [
+                        0
+                    ],
+                    "exponents": [
+                        "0.1831915800E+00"
+                    ],
+                    "coefficients": [
+                        [
+                            "1.0000000"
+                        ]
+                    ]
+                }
+            ],
+            "references": [
+                {
+                    "reference_description": "21G Split-valence basis set for H,He",
+                    "reference_keys": [
+                        "binkley1980a"
+                    ]
+                }
+            ]
+        },
+        "2": {
+            "electron_shells": [
+                {
+                    "function_type": "gto",
+                    "region": "valence",
+                    "angular_momentum": [
+                        0
+                    ],
+                    "exponents": [
+                        "0.1362670000E+02",
+                        "0.1999350000E+01"
+                    ],
+                    "coefficients": [
+                        [
+                            "0.1752298718E+00",
+                            "0.8934823465E+00"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "valence",
+                    "angular_momentum": [
+                        0
+                    ],
+                    "exponents": [
+                        "0.3829930000E+00"
+                    ],
+                    "coefficients": [
+                        [
+                            "1.0000000"
+                        ]
+                    ]
+                }
+            ],
+            "references": [
+                {
+                    "reference_description": "21G Split-valence basis set for H,He",
+                    "reference_keys": [
+                        "binkley1980a"
+                    ]
+                }
+            ]
+        },
+        "3": {
+            "electron_shells": [
+                {
+                    "function_type": "gto",
+                    "region": "valence",
+                    "angular_momentum": [
+                        0
+                    ],
+                    "exponents": [
+                        "0.2753944440E+03",
+                        "0.4143517540E+02",
+                        "0.9366993780E+01",
+                        "0.2537725330E+01",
+                        "0.7466365400E+00"
+                    ],
+                    "coefficients": [
+                        [
+                            "0.6121846910E-02",
+                            "0.4511296150E-01",
+                            "0.1926941500E+00",
+                            "0.4685442080E+00",
+                            "0.4406075150E+00"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "valence",
+                    "angular_momentum": [
+                        0,
+                        1
+                    ],
+                    "exponents": [
+                        "0.7345642606E+00",
+                        "0.8719796405E-01"
+                    ],
+                    "coefficients": [
+                        [
+                            "-0.2525367958E+00",
+                            "0.1097340795E+01"
+                        ],
+                        [
+                            "0.1435917321E+00",
+                            "0.9478030506E+00"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "valence",
+                    "angular_momentum": [
+                        0,
+                        1
+                    ],
+                    "exponents": [
+                        "0.4043865741E-01"
+                    ],
+                    "coefficients": [
+                        [
+                            "0.1000000000E+01"
+                        ],
+                        [
+                            "0.1000000000E+01"
+                        ]
+                    ]
+                }
+            ],
+            "references": [
+                {
+                    "reference_description": "5-21G Split-valence basis set",
+                    "reference_keys": [
+                        "dill1975a"
+                    ]
+                }
+            ]
+        },
+        "4": {
+            "electron_shells": [
+                {
+                    "function_type": "gto",
+                    "region": "valence",
+                    "angular_momentum": [
+                        0
+                    ],
+                    "exponents": [
+                        "0.5540100000E+03",
+                        "0.8326310000E+02",
+                        "0.1886350000E+02",
+                        "0.5177820000E+01",
+                        "0.1556020000E+01"
+                    ],
+                    "coefficients": [
+                        [
+                            "0.5409974372E-02",
+                            "0.4025153253E-01",
+                            "0.1768581429E+00",
+                            "0.4525593657E+00",
+                            "0.4702933800E+00"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "valence",
+                    "angular_momentum": [
+                        0,
+                        1
+                    ],
+                    "exponents": [
+                        "0.1441752491E+01",
+                        "0.3018610597E+00"
+                    ],
+                    "coefficients": [
+                        [
+                            "-0.4774290516E+00",
+                            "0.1247450135E+01"
+                        ],
+                        [
+                            "0.2011418992E+00",
+                            "0.8844825569E+00"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "valence",
+                    "angular_momentum": [
+                        0,
+                        1
+                    ],
+                    "exponents": [
+                        "0.1009613875E+00"
+                    ],
+                    "coefficients": [
+                        [
+                            "0.1000000000E+01"
+                        ],
+                        [
+                            "0.1000000000E+01"
+                        ]
+                    ]
+                }
+            ],
+            "references": [
+                {
+                    "reference_description": "5-21G Split-valence basis set",
+                    "reference_keys": [
+                        "binkley1977a"
+                    ]
+                }
+            ]
+        }
+    },
+    "version": "1",
+    "function_types": [
+        "gto"
+    ],
+    "names": [
+        "5-21G"
+    ],
+    "tags": [],
+    "family": "pople",
+    "description": "5-21G Split-valence basis set",
+    "role": "orbital",
+    "auxiliaries": {},
+    "name": "5-21G"
+}
