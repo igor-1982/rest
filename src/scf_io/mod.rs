@@ -108,7 +108,7 @@ impl SCF {
 
         let mut ri3fn = if mol.ctrl.use_auxbas {
             //Some(mol.prepare_ri3fn_for_ri_v())
-            Some(mol.prepare_ri3fn_for_ri_v_rayon())
+            Some(mol.prepare_ri3fn_for_ri_v_full_rayon())
         } else {
             None
         };

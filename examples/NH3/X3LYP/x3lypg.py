@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
+
 import pyscf
 import numpy
 from pyscf import gto, scf, ci,df,lib, dft
 import scipy
 from time import ctime, time
 
-lib.num_threads(1)
+lib.num_threads(4)
 TimeStart = time()
 mol = gto.Mole(
         atom='''
@@ -15,10 +16,9 @@ mol = gto.Mole(
          H       -2.5388400276      2.7556271745     -0.4338224694 ''',
         basis='cc-pvqz',verbose=4
     ).build()
-#method = dft.RKS(mol).density_fit(auxbasis="def2-SVP-JKFIT")
-#auxbasis = df.addons.aug_etb(mol, 2.0)
-auxbasis = df.addons.aug_etb_for_dfbasis(mol, beta=2.0, start_at=1)
-method = dft.RKS(mol).density_fit(auxbasis)
+method = dft.RKS(mol).density_fit(auxbasis="def2-SVP-JKFIT")
+#auxbasis = df.addons.aug_etb_for_dfbasis(mol, beta=2.0, start_at=1)
+#method = dft.RKS(mol).density_fit(auxbasis)
 method.xc = 'x3lypg'
 method.init_guess = 'vsap'
 #method.grids.becke_scheme = dft.original_becke
