@@ -11,6 +11,7 @@ use std::fs;
 use std::ops::Range;
 use std::sync::mpsc::channel;
 use std::thread::panicking;
+use std::path::PathBuf;
 use crate::basis_io::etb::{get_etb_elem, etb_gen_for_atom_list, InfoV2};
 use crate::constants::{ELEM1ST, ELEM2ND, ELEM3RD, ELEM4TH, ELEM5TH,ELEM6TH, ELEMTMS};
 use crate::dft::DFA4REST;
@@ -356,9 +357,9 @@ impl Molecule {
     
         if required_elem.len() != 0 {
             //bse_auxbas_getter insert here
-            let re = Regex::new(r"/{1}[^/]*$").unwrap();
+            let re = Regex::new(r"/?(?P<basis>[^/]*)/?$").unwrap();
             let cap = re.captures(&ctrl.auxbas_path).unwrap();
-            let auxbas_name = cap[0][1..].to_string();
+            let auxbas_name = cap.name("basis").unwrap().to_string();
             if check_basis_name(&auxbas_name) {
                 bse_downloader::bse_auxbas_getter_v2(&auxbas_name,&geom, &ctrl.auxbas_path, &required_elem);
             }
@@ -528,9 +529,9 @@ impl Molecule {
                     //function inserted here
 
             
-            let re = Regex::new(r"/{1}[^/]*$").unwrap();
+            let re = Regex::new(r"/?(?P<basis>[^/]*)/?$").unwrap();
             let cap = re.captures(&ctrl.basis_path).unwrap();
-            let basis_name = cap[0][1..].to_string();
+            let basis_name = cap.name("basis").unwrap().to_string();
             if check_basis_name(&basis_name) {
                 bse_downloader::bse_basis_getter_v2(&basis_name,&geom, &ctrl.basis_path, &required_elem);
             }
@@ -1386,7 +1387,6 @@ impl Molecule {
         };
 
         let (sender, receiver) = channel();
-        println!("debug 0");
         //self.cint_aux_fdqc.par_iter().enumerate().for_each_with(sender,|s,(k,bas_info)| {
         self.cint_fdqc.par_iter().enumerate().for_each_with(sender,|s, (j,bas_info_j)| {
             let basis_start_j = bas_info_j[0];
@@ -1446,7 +1446,6 @@ impl Molecule {
             s.send((ri_rayon,basis_start_j,basis_len_j)).unwrap()
 
         });
-        println!("debug 1");
 
         receiver.into_iter().for_each(|(ri_rayon, basis_start_j,basis_len_j)| {
             ri3fn.copy_from_ri(
@@ -1615,6 +1614,14 @@ fn test_get_slices_mut() {
     println!("{:?}",aa);
     let bb = test_matrix.iter_submatrix_mut(0..3, 0..2).map(|a| *a).collect::<Vec<i32>>();
     println!("{:?}",bb);
+}
+
+#[test]
+fn test_regex() {
+
+    let re = Regex::new(r"/?(?P<basis>[^/]*)/?$").unwrap();
+    let cap = re.captures("./p1/p2/p3").unwrap();
+    println!("{:?}",cap.name("basis").unwrap());
 }
 
 
