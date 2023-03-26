@@ -1423,7 +1423,7 @@ impl Grids {
         //In this subroutine, we call the lapack dgemm in a rayon parallel environment.
         //In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
         let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
-        println!("debug: default_omp_num_threads: {}", default_omp_num_threads);
+        //println!("debug: default_omp_num_threads: {}", default_omp_num_threads);
         unsafe{utilities::openblas_set_num_threads(1)};
 
         let num_grids = self.coordinates.len();

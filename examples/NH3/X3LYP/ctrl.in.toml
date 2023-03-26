@@ -1,13 +1,25 @@
 [ctrl]
-     print_level =               3
-     xc =                        "x3lyp"
-     basis_path =                "../../../basis-set-pool/cc-pVQZ"
-     basis_type =                "spheric"
-     auxbas_path =               "../../../basis-set-pool/def2-SVP-JKFIT"
+     # 设置Rayon和OpenMP的并行数，缺省为1
+     num_threads =               4                    
+     # 设置使用的电子结构方法，缺省为HF
+     xc =                        "x3lyp" 
+     # 设置程序输出的程度，缺省为1
+     print_level =               1
+     # 设置（辅助）基组的路径。如果找不到该路径，则创建该路径，并从BSE下载
+     # 注意：计算节点需支持连接外网。
+     basis_path =                "./cc-pVQZ"          
+     auxbas_path =               "./def2-SV(P)-JKFIT" 
+     # 使用resolution-of-identity (RI)技术处理四中心积分
      eri_type =                  "ri-v"
-     even_tempered_basis =       false
-     etb_start_atom_number =     1
-     etb_beta =                  2.0
+     mixer =                     "diis"
+     num_max_diis =              8
+     start_diis_cycle =          1
+     mix_param =                 0.8
+     max_scf_cycle =             100
+     scf_acc_rho =               1.0e-5
+     scf_acc_eev =               1.0e-5
+     scf_acc_etot =              1.0e-8
+     basis_type =                "spheric"
      auxbas_type =               "spheric"
      initial_guess =             "vsap"
      chkfile =                   "none"
@@ -17,15 +29,9 @@
      pruning =                   "nwchem"
      radial_grid_method =        "treutler"
      external_grids =            "none"
-     mixer =                     "diis"
-     num_max_diis =              8
-     start_diis_cycle =          1
-     mix_param =                 0.8
-     max_scf_cycle =             100
-     scf_acc_rho =               1.0e-5
-     scf_acc_eev =               1.0e-5
-     scf_acc_etot =              1.0e-8
-     num_threads =               4
+     even_tempered_basis =       false
+     etb_start_atom_number =     1
+     etb_beta =                  2.0
 
 [geom]
      name = "NH3, example"
