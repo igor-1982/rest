@@ -31,6 +31,7 @@ pub struct InputKeywords {
     pub auxbas_path: String,
     pub auxbas_type: String,
     pub use_auxbas: bool,
+    pub use_auxbas_symm: bool,
     pub even_tempered_basis: bool,
     pub etb_start_atom_number: usize,
     pub etb_beta: f64,
@@ -87,13 +88,14 @@ impl InputKeywords {
             print_level: 0,
             num_threads: None,
             // Keywords for (aux)-basis sets
-            basis_path: String::from("./"),
+            basis_path: String::from("./STO-3G"),
             basis_type: String::from("spheric"),
-            auxbas_path: String::from("./"),
+            auxbas_path: String::from("./def2-SV(P)-JKFIT"),
             auxbas_type: String::from("spheric"),
-            use_auxbas: false,
+            use_auxbas: true,
+            use_auxbas_symm: true,
             // Keywords associated with the method employed
-            xc: String::from("b3lyp"),
+            xc: String::from("x3lyp"),
             eri_type: String::from("ri-v"),
             charge: 0.0_f64,
             spin: 1.0_f64,
@@ -220,7 +222,7 @@ impl InputKeywords {
                     other => {String::from("treutler")} //default prune method: sg1
                 };
                 println!("The radial grid generation method will be {}", tmp_input.rad_grid_method);
-                
+
                 tmp_input.eri_type = match tmp_ctrl.get("eri_type").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_eri) => {
                         if tmp_eri.to_lowercase().eq("ri_v") || tmp_eri.to_lowercase().eq("ri-v")
@@ -230,14 +232,24 @@ impl InputKeywords {
                     },
                     other => {String::from("analytic")},
                 };
-                if tmp_input.eri_type.eq(&String::from("ri_v")) ||
-                   tmp_input.eri_type.eq(&String::from("ri-v")) 
+                if tmp_input.eri_type.eq(&String::from("ri_v"))
                 {
                     tmp_input.use_auxbas = true
                 } else {
                     tmp_input.use_auxbas = false
                 };
                 println!("ERI Type: {}", tmp_input.eri_type);
+
+                tmp_input.use_auxbas_symm = match tmp_ctrl.get("use_auxbas_symm").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::Bool(tmp_str) => {*tmp_str},
+                    other => {false},
+                };
+                if tmp_input.use_auxbas_symm {
+                    println!("Turn on the basis pair symmetry for RI 3D-tensors")
+                } else {
+                    println!("Turn off the basis pair symmetry for RI 3D-tensors")
+                };
+                
 
 
                 tmp_input.auxbas_type = match tmp_ctrl.get("auxbas_type").unwrap_or(&serde_json::Value::Null) {

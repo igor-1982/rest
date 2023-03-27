@@ -1203,17 +1203,17 @@ impl Molecule {
         let n_basis = self.num_basis;
         let n_auxbas = self.num_auxbas;
 
+        utilities::omp_set_num_threads(1);
+
         // First the Cholesky decomposition `L` of the inverse of the auxiliary 2-center coulumb matrix: V=(\nu|\mu)
         time_records.count_start("aux_ij");
         let mut aux_v = self.int_ij_aux_columb();
+        //aux_v = aux_v.lapack_power(-0.5, 1.0E-6).unwrap();
         aux_v = aux_v.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
         time_records.count("aux_ij");
 
 
         // Then, prepare the 3-center integrals: O_V = (ij|\nu), and multiple with `L`
-
-        utilities::omp_set_num_threads(1);
-
         time_records.count_start("prim ri");
         let mut ri3fn = RIFull::new([n_basis,n_basis,n_auxbas],0.0);
         let n_basis_shell = self.cint_bas.len();
@@ -1327,6 +1327,7 @@ impl Molecule {
         // First the Cholesky decomposition `L` of the inverse of the auxiliary 2-center coulumb matrix: V=(\nu|\mu)
         time_records.count_start("aux_ij");
         let mut aux_v = self.int_ij_aux_columb();
+        //aux_v = aux_v.lapack_power(-0.5, 1.0E-6).unwrap();
         aux_v = aux_v.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
         time_records.count("aux_ij");
 
@@ -1427,10 +1428,15 @@ impl Molecule {
                 ri_rayon.iter_auxbas(0..n_auxbas).unwrap().enumerate().for_each(|(k,i_matr)| {
                     let mut loc_ind = 0;
                     for jj in basis_start_j..basis_start_j+basis_len_j {
-                         let ri_ind = (jj+1)*jj/2;
-                        for ii in basis_start_j..basis_start_j+jj+1 {
-                            ri3fn[(ri_ind+ii,k)] = i_matr[loc_ind];
-                            loc_ind += 1;
+                        let ri_ind = (jj+1)*jj/2;
+                        for ii in basis_start_j..basis_start_j+basis_len_j {
+                            if ii <= jj {
+                                //println!("{:2},{:2},{:2},{:?},{:?}",ii,jj,ri_ind+ii,loc_ind,basis_len_j);
+                                ri3fn[(ri_ind+ii,k)] = i_matr[loc_ind];
+                                loc_ind += 1;
+                            } else {
+                                loc_ind += 1;
+                            }
                         }
                     }
                 });
@@ -1465,6 +1471,26 @@ impl Molecule {
 
 }
 
+pub fn generate_ri3fn_from_rimatr(rimatr: &MatrixFull<f64>, basbas2baspar: &MatrixFull<usize>, baspar2basbas: &Vec<[usize;2]>) -> RIFull<f64> {
+    let n_basis = basbas2baspar.size[0];
+    let n_baspar = rimatr.size[0];
+    let n_auxbas = rimatr.size[1];
+    let mut ri3fn = RIFull::new([n_basis,n_basis,n_auxbas],0.0);
+    for k in 0..n_auxbas {
+        for j in 0..n_basis {
+            for i in 0..n_basis {
+                let ind_baspar = basbas2baspar[[i,j]];
+                let val_matr = rimatr[[ind_baspar,k]];
+                ri3fn[[i,j,k]] = val_matr;
+                //if (val_full-val_matr).abs()>1E-8 {
+                //    println!("wrong value: i = {:}, j = {:}, k = {:}, ijpair = {:}, {:16.8}, {:16.8}",
+                //             i,j,k,ind_baspar,val_full, val_matr)
+                //}
+            }
+        }
+    };
+    ri3fn
+}
 
 pub fn count_frozen_core_states(n_frozen_shell: i32, elem: &Vec<String>) -> usize {
     let mut n_low_state = 0_usize;
@@ -1603,11 +1629,35 @@ pub fn count_frozen_core_states(n_frozen_shell: i32, elem: &Vec<String>) -> usiz
 
 #[test]
 fn test_get_slices_mut() {
-    let mut test_matrix = MatrixFull::from_vec([3,3],[0,1,2,3,4,5,6,7,8].to_vec()).unwrap();
-    let aa = test_matrix.iter_submatrix_mut(0..3, 0..2).map(|a| *a).collect::<Vec<i32>>();
-    println!("{:?}",aa);
-    let bb = test_matrix.iter_submatrix_mut(0..3, 0..2).map(|a| *a).collect::<Vec<i32>>();
-    println!("{:?}",bb);
+    //let mut test_matrix = MatrixFull::from_vec([3,3],[0.0,1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0].to_vec()).unwrap();
+    let mut test_matrix = MatrixFull::from_vec([3,3], vec![
+         4.0,  12.0, -16.0,
+        12.0,  37.0, -43.0,
+       -16.0, -43.0,  98.0
+    ]).unwrap();
+    utilities::omp_set_num_threads(1);
+    //aux_v = aux_v.lapack_power(-0.5, 1.0E-6).unwrap();
+    let aux_v = test_matrix.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
+    println!("{:?}", aux_v);
+    utilities::omp_set_num_threads(2);
+    let aux_v = test_matrix.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
+    println!("{:?}", aux_v);
+    utilities::omp_set_num_threads(3);
+    let aux_v = test_matrix.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
+    println!("{:?}", aux_v);
+    utilities::omp_set_num_threads(4);
+    let aux_v = test_matrix.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
+    println!("{:?}", aux_v);
+    utilities::omp_set_num_threads(5);
+    let aux_v = test_matrix.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
+    println!("{:?}", aux_v);
+    utilities::omp_set_num_threads(6);
+    let aux_v = test_matrix.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
+    println!("{:?}", aux_v);
+    //let aa = test_matrix.iter_submatrix_mut(0..3, 0..2).map(|a| *a).collect::<Vec<i32>>();
+    //println!("{:?}",aa);
+    //let bb = test_matrix.iter_submatrix_mut(0..3, 0..2).map(|a| *a).collect::<Vec<i32>>();
+    //println!("{:?}",bb);
 }
 
 #[test]
