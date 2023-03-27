@@ -93,7 +93,7 @@ impl InputKeywords {
             auxbas_path: String::from("./def2-SV(P)-JKFIT"),
             auxbas_type: String::from("spheric"),
             use_auxbas: true,
-            use_auxbas_symm: true,
+            use_auxbas_symm: false,
             // Keywords associated with the method employed
             xc: String::from("x3lyp"),
             eri_type: String::from("ri-v"),

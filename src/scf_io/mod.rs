@@ -118,17 +118,6 @@ impl SCF {
         } else {
             None
         };
-        let mut eris = if mol.ctrl.use_auxbas {
-            if let Some(tmp_r3fn) = &ri3fn {
-                None
-                //Some(mol.int_ijkl_from_r3fn(tmp_r3fn))
-            } else {
-                None
-            }
-        } else {
-            Some(mol.int_ijkl_erifold4())
-            //None
-        };
 
         let mut rimatr = if mol.ctrl.use_auxbas && mol.ctrl.use_auxbas_symm {
             //println!("generate ri3fn from rimatr");
@@ -145,6 +134,18 @@ impl SCF {
         } else {
             println!("The evaluation of 4D-tensors spends {:16.2} seconds",timecost);
         }
+
+        let mut eris = if mol.ctrl.use_auxbas {
+            if let Some(tmp_r3fn) = &ri3fn {
+                None
+                //Some(mol.int_ijkl_from_r3fn(tmp_r3fn))
+            } else {
+                None
+            }
+        } else {
+            Some(mol.int_ijkl_erifold4())
+            //None
+        };
  
         //let mut tmp_eris = mol.int_ijkl_erifold4();
         //let mut tmp_ri3fn = mol.prepare_ri3fn_for_ri_v();

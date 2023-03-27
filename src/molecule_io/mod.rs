@@ -1325,6 +1325,7 @@ impl Molecule {
         let n_baspar = (self.num_basis+1)*self.num_basis/2;
 
         // First the Cholesky decomposition `L` of the inverse of the auxiliary 2-center coulumb matrix: V=(\nu|\mu)
+        utilities::omp_set_num_threads(1);
         time_records.count_start("aux_ij");
         let mut aux_v = self.int_ij_aux_columb();
         //aux_v = aux_v.lapack_power(-0.5, 1.0E-6).unwrap();
@@ -1332,7 +1333,6 @@ impl Molecule {
         time_records.count("aux_ij");
 
         // Then, prepare the 3-center integrals: O_V = (ij|\nu), and multiple with `L`
-        utilities::omp_set_num_threads(1);
         time_records.count_start("prim ri");
         let mut ri3fn = MatrixFull::new([n_baspar,n_auxbas],0.0);
         let n_basis_shell = self.cint_bas.len();
