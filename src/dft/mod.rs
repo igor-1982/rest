@@ -1352,8 +1352,7 @@ impl Grids {
         //In this subroutine, we call the lapack dgemm in a rayon parallel environment.
         //In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
         let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
-        //println!("debug: default_omp_num_threads: {}", default_omp_num_threads);
-        unsafe{utilities::openblas_set_num_threads(1)};
+        utilities::omp_set_num_threads(1);
 
         let num_grids = self.coordinates.len();
         let num_basis = mol.num_basis;
@@ -1416,7 +1415,7 @@ impl Grids {
         self.ao = Some(ao);
         self.aop = aop;
 
-        unsafe{utilities::openblas_set_num_threads(default_omp_num_threads)};
+        utilities::omp_set_num_threads(default_omp_num_threads as usize);
     }
 
     pub fn prepare_tabulated_ao_rayon(&mut self, mol: &Molecule) {
@@ -1424,7 +1423,7 @@ impl Grids {
         //In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
         let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
         //println!("debug: default_omp_num_threads: {}", default_omp_num_threads);
-        unsafe{utilities::openblas_set_num_threads(1)};
+        utilities::omp_set_num_threads(1);
 
         let num_grids = self.coordinates.len();
 
@@ -1478,7 +1477,7 @@ impl Grids {
         self.ao = Some(ao.transpose_and_drop());
         self.aop = aop;
 
-        unsafe{utilities::openblas_set_num_threads(default_omp_num_threads)};
+        utilities::omp_set_num_threads(default_omp_num_threads as usize);
 
     }
 
@@ -1486,7 +1485,6 @@ impl Grids {
         // In this subroutine, we call the lapack dgemm in a rayon parallel environment.
         // In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
         // let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
-        // unsafe{utilities::openblas_set_num_threads(1)};
         //let dt_1 = time::Local::now();
         let num_grids = self.coordinates.len();
         // first for density
@@ -1563,7 +1561,6 @@ impl Grids {
 
         time_records.count("TabAO");
         time_records.report_all();
-        //unsafe{utilities::openblas_set_num_threads(default_omp_num_threads)};
 
         // to implement kinetic density
     }
@@ -1588,8 +1585,8 @@ impl Grids {
         cur_rho
     }
     pub fn prepare_tabulated_density(&mut self, dm: &mut Vec<MatrixFull<f64>>, spin_channel: usize) -> MatrixFull<f64> {
-        let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
-        unsafe{utilities::openblas_set_num_threads(1)};
+        let default_omp_num_threads = utilities::omp_get_num_threads();
+        utilities::omp_set_num_threads(1);
         let num_grids = self.coordinates.len();
         let mut cur_rho = MatrixFull::new([num_grids,spin_channel],0.0);
         for i_spin in 0..spin_channel {
@@ -1597,9 +1594,7 @@ impl Grids {
                 let dt0 = utilities::init_timing();
                 let dm_s = dm.get_mut(i_spin).unwrap();
                 let mut wao = MatrixFull::new(ao.size.clone(),0.0);
-                //unsafe{utilities::openblas_set_num_threads(6)};
                 wao.lapack_dgemm(dm_s, ao, 'N', 'N', 1.0, 0.0);
-                //unsafe{utilities::openblas_set_num_threads(1)};
                 //let wao = _degemm_nn_(&dm_s.to_matrixfullslice(), &ao.to_matrixfullslice());
                 let dt1 = utilities::timing(&dt0, Some("Evalute weighted ao (wao)"));
                 ao.par_iter_columns_full().zip(wao.par_iter_columns_full()).map(|(ao_r,wao_r)| (ao_r,wao_r))
@@ -1613,12 +1608,11 @@ impl Grids {
                 let dt2 = utilities::timing(&dt1, Some("Contracting ao*wao"));
             };
         };
-        unsafe{utilities::openblas_set_num_threads(default_omp_num_threads)};
+        utilities::omp_set_num_threads(default_omp_num_threads);
         cur_rho
     }
 
     pub fn prepare_tabulated_density_2(&self, mo: &[MatrixFull<f64>;2], occ: &[Vec<f64>;2], spin_channel: usize) -> (MatrixFull<f64>,RIFull<f64>) {
-        //unsafe{utilities::openblas_set_num_threads(1)};
         let mut cur_rho = MatrixFull::new([self.coordinates.len(),spin_channel],0.0);
         let num_grids = self.coordinates.len();
         let num_basis = mo[0].size.get(0).unwrap();
@@ -1669,13 +1663,11 @@ impl Grids {
             let mut cur_rhop = RIFull::empty();
             return (cur_rho, cur_rhop)
         }
-        //unsafe{utilities::openblas_set_num_threads(6)};
         let cur_rhop = RIFull::empty();
         (cur_rho, cur_rhop)
     }
 
     pub fn prepare_tabulated_density_slots(&self, mo: &[MatrixFull<f64>;2], occ: &[Vec<f64>;2], spin_channel: usize, range_grids: Range<usize>) -> (MatrixFull<f64>,RIFull<f64>) {
-        //unsafe{utilities::openblas_set_num_threads(1)};
         let num_grids = range_grids.len();
         let num_basis = mo[0].size.get(0).unwrap();
         let num_state = mo[0].size.get(1).unwrap();
@@ -1743,7 +1735,6 @@ impl Grids {
             let mut cur_rhop = RIFull::empty();
             return (cur_rho, cur_rhop)
         }
-        //unsafe{utilities::openblas_set_num_threads(6)};
         let cur_rhop = RIFull::empty();
         (cur_rho, cur_rhop)
     }
@@ -1760,9 +1751,7 @@ impl Grids {
                 for i in (0..3) {
                     let mut aop_i = aop.get_reducing_matrix(i).unwrap();
                     let mut wao = MatrixFull::new([num_basis,num_grids],0.0);
-                    //unsafe{utilities::openblas_set_num_threads(6)};
                     wao.to_matrixfullslicemut().lapack_dgemm(&dm.to_matrixfullslice(),&aop_i, 'N','N', 1.0, 0.0);
-                    //unsafe{utilities::openblas_set_num_threads(1)};
 
                     // ====== native dgemm coded by rust
                     //let mut aop_i = aop.get_reducing_matrix(i).unwrap();
@@ -1781,7 +1770,6 @@ impl Grids {
                 };
             }
         };
-        //unsafe{utilities::openblas_set_num_threads(6)};
         cur_rhop
     }
     pub fn evaluate_density(&self, dm: &mut Vec<MatrixFull<f64>>) -> [f64;2] {
@@ -1837,9 +1825,9 @@ pub fn par_numerical_density(grid: &Grids, mol: &Molecule, dm: &mut [MatrixFull<
     //let mut count:usize = 0;
     // In this subroutine, we call the lapack dgemm in a rayon parallel environment.
     // In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
-    let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
+    let default_omp_num_threads = utilities::omp_get_num_threads();
     //println!("debug: default omp_num_threads: {}", default_omp_num_threads);
-    unsafe{utilities::openblas_set_num_threads(1)};
+    utilities::omp_set_num_threads(1);
 
     let local_basis4elem = mol.basis4elem.clone();
     let local_position = mol.geom.position.clone();
@@ -1880,7 +1868,7 @@ pub fn par_numerical_density(grid: &Grids, mol: &Molecule, dm: &mut [MatrixFull<
     });
 
     // reuse the default omp_num_threads setting
-    unsafe{utilities::openblas_set_num_threads(default_omp_num_threads)};
+    utilities::omp_set_num_threads(default_omp_num_threads);
     
     total_density
 }

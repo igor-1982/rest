@@ -105,8 +105,14 @@ pub fn omp_get_num_threads() -> usize {
     let num_threads = unsafe{openblas_get_num_threads()} as usize;
     num_threads
 }
+/// NOTE: the current OpenBLAS only supports at most 32 threads. Otherwise, it panics with an error:  
+/// "BLAS : Program is Terminated. Because you tried to allocate too many memory regions."
 pub fn omp_set_num_threads(n:usize)  {
-    unsafe{openblas_set_num_threads(n as std::os::raw::c_int)} 
+    unsafe{if n<=32 {
+        openblas_set_num_threads(n as std::os::raw::c_int)
+    } else {
+        openblas_set_num_threads(32)
+    } } 
 }
 
 //#[test]

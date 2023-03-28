@@ -1973,9 +1973,9 @@ impl SCF {
     pub fn generate_vxc_rayon(&self, scaling_factor: f64) -> (f64, Vec<MatrixUpper<f64>>) {
         //In this subroutine, we call the lapack dgemm in a rayon parallel environment.
         //In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
-        let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
+        let default_omp_num_threads = utilities::omp_get_num_threads();
         //println!("debug: default_omp_num_threads: {}", default_omp_num_threads);
-        unsafe{utilities::openblas_set_num_threads(1)};
+        utilities::omp_set_num_threads(1);
 
         let num_basis = self.mol.num_basis;
         let num_state = self.mol.num_state;
@@ -2066,7 +2066,7 @@ impl SCF {
             }
         };
 
-        unsafe{utilities::openblas_set_num_threads(default_omp_num_threads)};
+        utilities::omp_set_num_threads(default_omp_num_threads);
 
         (exc_total, vxc)
 
@@ -2210,12 +2210,23 @@ impl SCF {
                 ri3fn.par_iter_columns_full().enumerate().for_each_with(sender, |s, (i,m)| {
                     //prepare \sum_{kl}D_{kl}*M_{kl}^{\mu} for each \mu -> tmp_mu
                     let riupper = MatrixUpperSlice::from_vec(m);
+                    //let full_m = riupper.to_matrixfull().unwrap();
+                    //let tmp_mu =
+                    //    full_m.data.chunks_exact(num_basis).zip(dm[i_spin].data.chunks_exact(num_basis))
+                    //        .fold(0.0_f64,|acc, (m,d)| {
+                    //            acc + m.iter().zip(d.iter()).map(|value| value.0*value.1).sum::<f64>()
+                    //        });
                     let tmp_mu =
-                        m.chunks_exact(num_basis).zip(dm[i_spin].data.chunks_exact(num_basis))
-                            .fold(0.0_f64,|acc, (m,d)| {
-                                acc + m.iter().zip(d.iter()).map(|value| value.0*value.1).sum::<f64>()
-                            });
+                        m.iter().zip(dm[i_spin].iter_matrixupper().unwrap()).fold(0.0_f64, |acc,(m,d)| {
+                            acc + *m * (*d)
+                        });
+                        //m.chunks_exact(num_basis).zip(dm[i_spin].data.chunks_exact(num_basis))
+                        //    .fold(0.0_f64,|acc, (m,d)| {
+                        //        acc + m.iter().zip(d.iter()).map(|value| value.0*value.1).sum::<f64>()
+                        //    });
                     // filter out the upper part (ij pair) of M_{ij}^{\mu} for each \mu -> m_ij_upper
+                    //let m_ij_upper = full_m.data.iter().enumerate().filter(|(i,v)| i%num_basis<=i/num_basis)
+                    //    .map(|(i,v)| v.clone() ).collect_vec();
                     let m_ij_upper = m.iter().enumerate().filter(|(i,v)| i%num_basis<=i/num_basis)
                         .map(|(i,v)| v.clone() ).collect_vec();
                     s.send((m_ij_upper,tmp_mu)).unwrap();
@@ -2225,7 +2236,7 @@ impl SCF {
                 // M_{ij}^{\mu}*(\sum_{kl}D_{kl}*M_{kl}^{\mu})
                 //
                 receiver.iter().for_each(|(m_ij_upper, tmp_mu)| {
-                    vj_spin.data.par_iter_mut().zip(m_ij_upper.par_iter())
+                    vj_spin.data.iter_mut().zip(m_ij_upper.iter())
                         .for_each(|value| *value.0 += *value.1*tmp_mu); 
                 });
 
@@ -2331,9 +2342,9 @@ impl SCF {
                     spin_channel: usize, scaling_factor: f64)  -> Vec<MatrixUpper<f64>> {
         // In this subroutine, we call the lapack dgemm in a rayon parallel environment.
         // In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
-        let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
-        println!("debug: default omp_num_threads: {}", default_omp_num_threads);
-        unsafe{utilities::openblas_set_num_threads(1)};
+        let default_omp_num_threads = utilities::omp_get_num_threads();
+        //println!("debug: default omp_num_threads: {}", default_omp_num_threads);
+        utilities::omp_set_num_threads(1);
 
         //let mut bm = RIFull::new([num_state,num_basis,num_auxbas], 0.0f64);
         let mut vk: Vec<MatrixUpper<f64>> = vec![MatrixUpper::new(1,0.0f64),MatrixUpper::new(1,0.0f64)];
@@ -2397,7 +2408,7 @@ impl SCF {
         };
 
         // reuse the default omp_num_threads setting
-        unsafe{utilities::openblas_set_num_threads(default_omp_num_threads)};
+        utilities::omp_set_num_threads(default_omp_num_threads);
 
         vk
     }
