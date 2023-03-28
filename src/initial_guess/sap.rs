@@ -7,7 +7,7 @@ use rayon::prelude::IntoParallelRefIterator;
 use rayon::prelude::IntoParallelRefMutIterator;
 use rayon::prelude::ParallelIterator;
 //use crate::scf::io;
-use rest_tensors::{MatrixFull, matrix_blas_lapack::_einsum_01,matrix_blas_lapack::_dgemm_nn};
+use rest_tensors::{MatrixFull, matrix_blas_lapack::_einsum_01_rayon,matrix_blas_lapack::_dgemm_nn};
 use crate::constants::ARR;
 
     
@@ -80,7 +80,7 @@ pub fn get_vsap(mol: &molecule_io::Molecule, grids: &dft::Grids) -> MatrixFull<f
     });
     //println!("v_grid:{:?}",&v_diag_grid);
 
-    let mut int_mat = _einsum_01(&a_matrix.unwrap().to_matrixfullslice(),&v_diag_grid);
+    let mut int_mat = _einsum_01_rayon(&a_matrix.unwrap().to_matrixfullslice(),&v_diag_grid);
     //&int_mat.formated_output(5, "full");
 
     let mut f_mat = MatrixFull::new([a_matrix.unwrap().size[0],int_mat.size[0]],0.0);

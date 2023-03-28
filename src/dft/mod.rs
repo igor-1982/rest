@@ -2,7 +2,7 @@ mod libxc;
 mod gen_grids;
 
 use rest_tensors::{MatrixFull, MatrixFullSliceMut, TensorSliceMut, RIFull, MatrixFullSlice};
-use rest_tensors::matrix_blas_lapack::{_dgemm_nn,_dgemm_tn, _einsum_01, _einsum_02};
+use rest_tensors::matrix_blas_lapack::{_dgemm_nn,_dgemm_tn, _einsum_01_serial, _einsum_02_serial, _einsum_01_rayon, _einsum_02_rayon};
 use itertools::{Itertools, izip};
 use libc::access;
 use tensors::{BasicMatrix, MathMatrix, ParMathMatrix};
@@ -1628,18 +1628,18 @@ impl Grids {
                     .iter().filter(|occ| **occ>0.0).map(|occ| occ.sqrt()).collect_vec();
                 let num_occ = occ_s.len();
                 // wmo = weigthed mo ('ij,j->ij'): mo_s(ij), occ_s(j) -> wmo(ij)
-                let mut wmo = _einsum_01(&mo_s.to_matrixfullslice(),&occ_s);
+                let mut wmo = _einsum_01_rayon(&mo_s.to_matrixfullslice(),&occ_s);
 
                 let mut tmo = MatrixFull::new([num_occ,num_grids],0.0);
                 tmo.to_matrixfullslicemut().lapack_dgemm(&wmo.to_matrixfullslice(), &ao.to_matrixfullslice(), 'T', 'N', 1.0, 0.0);
-                let rho_s = _einsum_02(&tmo.to_matrixfullslice(), &tmo.to_matrixfullslice());
+                let rho_s = _einsum_02_rayon(&tmo.to_matrixfullslice(), &tmo.to_matrixfullslice());
                 cur_rho.par_iter_column_mut(i_spin).zip(rho_s.par_iter()).for_each(|(to, from)| {*to = *from});
                 
                 for i in (0..3) {
                     let mut tmop = MatrixFull::new([num_occ,num_grids],0.0);
                     tmop.to_matrixfullslicemut()
                         .lapack_dgemm(&wmo.to_matrixfullslice(), &aop.get_reducing_matrix(i).unwrap(), 'T','N',1.0,0.0);
-                    let rhopi_s = _einsum_02(&tmop.to_matrixfullslice(), &tmo.to_matrixfullslice());
+                    let rhopi_s = _einsum_02_rayon(&tmop.to_matrixfullslice(), &tmo.to_matrixfullslice());
                     cur_rhop.get_reducing_matrix_mut(i_spin).unwrap().par_iter_mut_j(i)
                     .zip(rhopi_s.par_iter()).for_each(|(to, from)| {*to = *from*2.0});
                 }
@@ -1654,11 +1654,11 @@ impl Grids {
                     .iter().filter(|occ| **occ>0.0).map(|occ| occ.sqrt()).collect_vec();
                 let num_occu = occ_s.len();
                 // wmo = weigthed mo ('ij,j->ij'): mo_s(ij), occ_s(j) -> wmo(ij)
-                let mut wmo = _einsum_01(&mo_s.to_matrixfullslice(),&occ_s);
+                let mut wmo = _einsum_01_rayon(&mo_s.to_matrixfullslice(),&occ_s);
 
                 let mut tmo = MatrixFull::new([wmo.size[1],ao.size[1]],0.0);
                 tmo.to_matrixfullslicemut().lapack_dgemm(&wmo.to_matrixfullslice(), &ao.to_matrixfullslice(), 'T', 'N', 1.0, 0.0);
-                let rho_s = _einsum_02(&tmo.to_matrixfullslice(), &tmo.to_matrixfullslice());
+                let rho_s = _einsum_02_rayon(&tmo.to_matrixfullslice(), &tmo.to_matrixfullslice());
                 cur_rho.par_iter_column_mut(i_spin).zip(rho_s.par_iter()).for_each(|(to, from)| {*to = *from});
 
             };
@@ -1684,7 +1684,7 @@ impl Grids {
                     .iter().filter(|occ| **occ>0.0).map(|occ| occ.sqrt()).collect_vec();
                 let num_occ = occ_s.len();
                 // wmo = weigthed mo ('ij,j->ij'): mo_s(ij), occ_s(j) -> wmo(ij)
-                let mut wmo = _einsum_01(&mo_s.to_matrixfullslice(),&occ_s);
+                let mut wmo = _einsum_01_serial(&mo_s.to_matrixfullslice(),&occ_s);
 
                 let mut tmo = MatrixFull::new([num_occ,num_grids],0.0);
                 _dgemm(&wmo, (0..wmo.size[0], 0..wmo.size[1]), 'T',
@@ -1693,8 +1693,8 @@ impl Grids {
                        1.0,0.0
                 );
                 //tmo.to_matrixfullslicemut().lapack_dgemm(&wmo.to_matrixfullslice(), &ao.to_matrixfullslice(), 'T', 'N', 1.0, 0.0);
-                let rho_s = _einsum_02(&tmo.to_matrixfullslice(), &tmo.to_matrixfullslice());
-                cur_rho.par_iter_column_mut(i_spin).zip(rho_s.par_iter()).for_each(|(to, from)| {*to = *from});
+                let rho_s = _einsum_02_serial(&tmo.to_matrixfullslice(), &tmo.to_matrixfullslice());
+                cur_rho.iter_column_mut(i_spin).zip(rho_s.iter()).for_each(|(to, from)| {*to = *from});
                 
                 for i in (0..3) {
                     let mut tmop = MatrixFull::new([num_occ,num_grids],0.0);
@@ -1706,9 +1706,9 @@ impl Grids {
                     );
                     //tmop.to_matrixfullslicemut()
                     //    .lapack_dgemm(&wmo.to_matrixfullslice(), &aop.get_reducing_matrix(i).unwrap(), 'T','N',1.0,0.0);
-                    let rhopi_s = _einsum_02(&tmop.to_matrixfullslice(), &tmo.to_matrixfullslice());
-                    cur_rhop.get_reducing_matrix_mut(i_spin).unwrap().par_iter_mut_j(i)
-                    .zip(rhopi_s.par_iter()).for_each(|(to, from)| {*to = *from*2.0});
+                    let rhopi_s = _einsum_02_serial(&tmop.to_matrixfullslice(), &tmo.to_matrixfullslice());
+                    cur_rhop.get_reducing_matrix_mut(i_spin).unwrap().iter_mut_j(i)
+                    .zip(rhopi_s.iter()).for_each(|(to, from)| {*to = *from*2.0});
                 }
             };
             return (cur_rho, cur_rhop)
@@ -1721,7 +1721,7 @@ impl Grids {
                     .iter().filter(|occ| **occ>0.0).map(|occ| occ.sqrt()).collect_vec();
                 let num_occu = occ_s.len();
                 // wmo = weigthed mo ('ij,j->ij'): mo_s(ij), occ_s(j) -> wmo(ij)
-                let mut wmo = _einsum_01(&mo_s.to_matrixfullslice(),&occ_s);
+                let mut wmo = _einsum_01_serial(&mo_s.to_matrixfullslice(),&occ_s);
 
                 let mut tmo = MatrixFull::new([wmo.size[1],num_grids],0.0);
                 _dgemm(&wmo, (0..wmo.size[0], 0..wmo.size[1]), 'T',
@@ -1730,8 +1730,8 @@ impl Grids {
                        1.0,0.0
                 );
                 //tmo.to_matrixfullslicemut().lapack_dgemm(&wmo.to_matrixfullslice(), &ao.to_matrixfullslice(), 'T', 'N', 1.0, 0.0);
-                let rho_s = _einsum_02(&tmo.to_matrixfullslice(), &tmo.to_matrixfullslice());
-                cur_rho.par_iter_column_mut(i_spin).zip(rho_s.par_iter()).for_each(|(to, from)| {*to = *from});
+                let rho_s = _einsum_02_serial(&tmo.to_matrixfullslice(), &tmo.to_matrixfullslice());
+                cur_rho.iter_column_mut(i_spin).zip(rho_s.iter()).for_each(|(to, from)| {*to = *from});
 
             };
             let mut cur_rhop = RIFull::empty();
