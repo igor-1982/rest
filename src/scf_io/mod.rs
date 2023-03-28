@@ -1973,9 +1973,9 @@ impl SCF {
     pub fn generate_vxc_rayon(&self, scaling_factor: f64) -> (f64, Vec<MatrixUpper<f64>>) {
         //In this subroutine, we call the lapack dgemm in a rayon parallel environment.
         //In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
-        let default_omp_num_threads = utilities::omp_get_num_threads();
+        let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
         //println!("debug: default_omp_num_threads: {}", default_omp_num_threads);
-        utilities::omp_set_num_threads(1);
+        utilities::omp_set_num_threads_wrapper(1);
 
         let num_basis = self.mol.num_basis;
         let num_state = self.mol.num_state;
@@ -2066,7 +2066,7 @@ impl SCF {
             }
         };
 
-        utilities::omp_set_num_threads(default_omp_num_threads);
+        utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
 
         (exc_total, vxc)
 
@@ -2342,9 +2342,9 @@ impl SCF {
                     spin_channel: usize, scaling_factor: f64)  -> Vec<MatrixUpper<f64>> {
         // In this subroutine, we call the lapack dgemm in a rayon parallel environment.
         // In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
-        let default_omp_num_threads = utilities::omp_get_num_threads();
+        let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
         //println!("debug: default omp_num_threads: {}", default_omp_num_threads);
-        utilities::omp_set_num_threads(1);
+        utilities::omp_set_num_threads_wrapper(1);
 
         //let mut bm = RIFull::new([num_state,num_basis,num_auxbas], 0.0f64);
         let mut vk: Vec<MatrixUpper<f64>> = vec![MatrixUpper::new(1,0.0f64),MatrixUpper::new(1,0.0f64)];
@@ -2408,7 +2408,7 @@ impl SCF {
         };
 
         // reuse the default omp_num_threads setting
-        utilities::omp_set_num_threads(default_omp_num_threads);
+        utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
 
         vk
     }

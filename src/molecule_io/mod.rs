@@ -1203,7 +1203,7 @@ impl Molecule {
         let n_basis = self.num_basis;
         let n_auxbas = self.num_auxbas;
 
-        utilities::omp_set_num_threads(1);
+        utilities::omp_set_num_threads_wrapper(1);
 
         // First the Cholesky decomposition `L` of the inverse of the auxiliary 2-center coulumb matrix: V=(\nu|\mu)
         time_records.count_start("aux_ij");
@@ -1297,7 +1297,7 @@ impl Molecule {
         });
         time_records.count("prim ri");
 
-        utilities::omp_set_num_threads(self.ctrl.num_threads.unwrap());
+        utilities::omp_set_num_threads_wrapper(self.ctrl.num_threads.unwrap());
 
 
         time_records.count("all ri");
@@ -1325,7 +1325,7 @@ impl Molecule {
         let n_baspar = (self.num_basis+1)*self.num_basis/2;
 
         // First the Cholesky decomposition `L` of the inverse of the auxiliary 2-center coulumb matrix: V=(\nu|\mu)
-        utilities::omp_set_num_threads(1);
+        utilities::omp_set_num_threads_wrapper(1);
         time_records.count_start("aux_ij");
         let mut aux_v = self.int_ij_aux_columb();
         //aux_v = aux_v.lapack_power(-0.5, 1.0E-6).unwrap();
@@ -1455,7 +1455,7 @@ impl Molecule {
 
         time_records.count("prim ri");
 
-        utilities::omp_set_num_threads(self.ctrl.num_threads.unwrap());
+        utilities::omp_set_num_threads_wrapper(self.ctrl.num_threads.unwrap());
 
 
         time_records.count("all ri");
@@ -1635,23 +1635,23 @@ fn test_get_slices_mut() {
         12.0,  37.0, -43.0,
        -16.0, -43.0,  98.0
     ]).unwrap();
-    utilities::omp_set_num_threads(1);
+    utilities::omp_set_num_threads_wrapper(1);
     //aux_v = aux_v.lapack_power(-0.5, 1.0E-6).unwrap();
     let aux_v = test_matrix.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
     println!("{:?}", aux_v);
-    utilities::omp_set_num_threads(2);
+    utilities::omp_set_num_threads_wrapper(2);
     let aux_v = test_matrix.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
     println!("{:?}", aux_v);
-    utilities::omp_set_num_threads(3);
+    utilities::omp_set_num_threads_wrapper(3);
     let aux_v = test_matrix.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
     println!("{:?}", aux_v);
-    utilities::omp_set_num_threads(4);
+    utilities::omp_set_num_threads_wrapper(4);
     let aux_v = test_matrix.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
     println!("{:?}", aux_v);
-    utilities::omp_set_num_threads(5);
+    utilities::omp_set_num_threads_wrapper(5);
     let aux_v = test_matrix.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
     println!("{:?}", aux_v);
-    utilities::omp_set_num_threads(6);
+    utilities::omp_set_num_threads_wrapper(6);
     let aux_v = test_matrix.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
     println!("{:?}", aux_v);
     //let aa = test_matrix.iter_submatrix_mut(0..3, 0..2).map(|a| *a).collect::<Vec<i32>>();

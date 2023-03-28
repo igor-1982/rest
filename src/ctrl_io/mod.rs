@@ -181,11 +181,9 @@ impl InputKeywords {
                 if let Some(num_threads) = tmp_input.num_threads {
                     println!("The number of threads used for parallelism:      {}", num_threads);
                     rayon::ThreadPoolBuilder::new().num_threads(num_threads).build_global()?;
-                    utilities::omp_set_num_threads(num_threads);
-                    //unsafe{utilities::openblas_set_num_threads(num_threads as i32)};
+                    utilities::omp_set_num_threads_wrapper(num_threads);
                 } else {
-                    //unsafe{utilities::openblas_set_num_threads(rayon::current_num_threads() as i32)};
-                    utilities::omp_set_num_threads(rayon::current_num_threads());
+                    utilities::omp_set_num_threads_wrapper(rayon::current_num_threads());
                     println!("The default rayon num_threads value is used:      {}", rayon::current_num_threads());
                 };
                 //println!("max_num_threads: {}, current_num_threads: {}", rayon::max_num_threads(), rayon::current_num_threads());

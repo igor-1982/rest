@@ -1351,8 +1351,9 @@ impl Grids {
     pub fn prepare_tabulated_ao_rayon_v02(&mut self, mol: &Molecule) {
         //In this subroutine, we call the lapack dgemm in a rayon parallel environment.
         //In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
-        let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
-        utilities::omp_set_num_threads(1);
+        //let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
+        let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
+        utilities::omp_set_num_threads_wrapper(1);
 
         let num_grids = self.coordinates.len();
         let num_basis = mol.num_basis;
@@ -1415,15 +1416,16 @@ impl Grids {
         self.ao = Some(ao);
         self.aop = aop;
 
-        utilities::omp_set_num_threads(default_omp_num_threads as usize);
+        utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
     }
 
     pub fn prepare_tabulated_ao_rayon(&mut self, mol: &Molecule) {
         //In this subroutine, we call the lapack dgemm in a rayon parallel environment.
         //In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
-        let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
+        //let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
+        let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
         //println!("debug: default_omp_num_threads: {}", default_omp_num_threads);
-        utilities::omp_set_num_threads(1);
+        utilities::omp_set_num_threads_wrapper(1);
 
         let num_grids = self.coordinates.len();
 
@@ -1477,7 +1479,7 @@ impl Grids {
         self.ao = Some(ao.transpose_and_drop());
         self.aop = aop;
 
-        utilities::omp_set_num_threads(default_omp_num_threads as usize);
+        utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
 
     }
 
@@ -1585,8 +1587,8 @@ impl Grids {
         cur_rho
     }
     pub fn prepare_tabulated_density(&mut self, dm: &mut Vec<MatrixFull<f64>>, spin_channel: usize) -> MatrixFull<f64> {
-        let default_omp_num_threads = utilities::omp_get_num_threads();
-        utilities::omp_set_num_threads(1);
+        let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
+        utilities::omp_set_num_threads_wrapper(1);
         let num_grids = self.coordinates.len();
         let mut cur_rho = MatrixFull::new([num_grids,spin_channel],0.0);
         for i_spin in 0..spin_channel {
@@ -1608,7 +1610,7 @@ impl Grids {
                 let dt2 = utilities::timing(&dt1, Some("Contracting ao*wao"));
             };
         };
-        utilities::omp_set_num_threads(default_omp_num_threads);
+        utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
         cur_rho
     }
 
@@ -1825,9 +1827,9 @@ pub fn par_numerical_density(grid: &Grids, mol: &Molecule, dm: &mut [MatrixFull<
     //let mut count:usize = 0;
     // In this subroutine, we call the lapack dgemm in a rayon parallel environment.
     // In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
-    let default_omp_num_threads = utilities::omp_get_num_threads();
+    let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
     //println!("debug: default omp_num_threads: {}", default_omp_num_threads);
-    utilities::omp_set_num_threads(1);
+    utilities::omp_set_num_threads_wrapper(1);
 
     let local_basis4elem = mol.basis4elem.clone();
     let local_position = mol.geom.position.clone();
@@ -1868,7 +1870,7 @@ pub fn par_numerical_density(grid: &Grids, mol: &Molecule, dm: &mut [MatrixFull<
     });
 
     // reuse the default omp_num_threads setting
-    utilities::omp_set_num_threads(default_omp_num_threads);
+    utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
     
     total_density
 }

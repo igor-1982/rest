@@ -99,19 +99,27 @@ pub fn debug_print_slices(s: &[f64]) {
 extern "C" {
     pub fn openblas_get_num_threads() -> ::std::os::raw::c_int;
     pub fn openblas_set_num_threads(n: ::std::os::raw::c_int);
+    pub fn goto_get_num_threads() -> ::std::os::raw::c_int;
+    pub fn goto_set_num_threads(n: ::std::os::raw::c_int);
+}
+extern "C" {
+    pub fn omp_get_num_threads() -> ::std::os::raw::c_int;
+    pub fn omp_set_num_threads(n: ::std::os::raw::c_int);
 }
 
-pub fn omp_get_num_threads() -> usize {
+pub fn omp_get_num_threads_wrapper() -> usize {
     let num_threads = unsafe{openblas_get_num_threads()} as usize;
     num_threads
 }
 /// NOTE: the current OpenBLAS only supports at most 32 threads. Otherwise, it panics with an error:  
 /// "BLAS : Program is Terminated. Because you tried to allocate too many memory regions."
-pub fn omp_set_num_threads(n:usize)  {
+pub fn omp_set_num_threads_wrapper(n:usize)  {
     unsafe{if n<=32 {
-        openblas_set_num_threads(n as std::os::raw::c_int)
+        openblas_set_num_threads(n as std::os::raw::c_int);
+        goto_set_num_threads(n as std::os::raw::c_int)
     } else {
-        openblas_set_num_threads(32)
+        openblas_set_num_threads(32);
+        goto_set_num_threads(32)
     } } 
 }
 
