@@ -728,6 +728,8 @@ impl DFA4REST {
         let loc_coordinates = &grids.coordinates[range_grids.clone()];
         let loc_weights = &grids.weights[range_grids.clone()];
 
+        //println!("thread_id: {:?}, rayon_threads_number: {:?}, omp_threads_number: {:?}",
+        //    rayon::current_thread_index().unwrap(), rayon::current_num_threads(), utilities::omp_get_num_threads_wrapper());
 
         let mut loc_exc = MatrixFull::new([num_grids,1],0.0);
         let mut loc_exc_total = vec![0.0;spin_channel];
