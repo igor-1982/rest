@@ -1880,6 +1880,8 @@ impl SCF {
             );
         };
         write!(input, "Number of atom                             I {:16}\n", self.mol.geom.elem.len());
+        write!(input, "Charge                                     I {:16}\n", self.mol.ctrl.charge as i32);
+        write!(input, "Multiplicity                               I {:16}\n", self.mol.ctrl.spin as i32);
         write!(input, "Number of electrons                        I {:16}\n", self.mol.num_elec[0]);
         write!(input, "Number of alpha electrons                  I {:16}\n", self.mol.num_elec[1]);
         write!(input, "Number of beta electrons                   I {:16}\n", self.mol.num_elec[2]);
