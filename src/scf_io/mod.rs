@@ -2156,20 +2156,6 @@ impl SCF {
             if i_index % 5 != 0 {write!(input, "\n");}
         }
 
-        write!(input, "Contraction coefficients                   R   N={:12}\n", coeff_vec.len());
-        let mut i_index = 0;
-        coeff_vec.iter().for_each(|x| {
-            let sdd = format!("{:16.8E}", x);
-            if (i_index + 1)%5 == 0 {
-                write!(input, "{}\n",r2f(&sdd))
-            } else {
-                write!(input, "{}",r2f(&sdd))
-            };
-            i_index += 1;
-        });
-        if i_index % 5 != 0 {write!(input, "\n");}
-
-
         input.sync_all().unwrap();
     }
 
