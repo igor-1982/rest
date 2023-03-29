@@ -1,0 +1,543 @@
+{
+    "electron_shells": [
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "5.35691"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "3.31227"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "2.35834"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "1.54135"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.690232"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.410541"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.205239"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.0984094"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "8.40225"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "5.22925"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "3.23167"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "1.88718"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "1.10097"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.298023"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.204425"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.0930735"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "8.76011"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "5.20505"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "2.28331"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "1.33062"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.575818"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.36208"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.177087"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                3
+            ],
+            "exponents": [
+                "5.70752"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                3
+            ],
+            "exponents": [
+                "2.46581"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                3
+            ],
+            "exponents": [
+                "1.3011"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                3
+            ],
+            "exponents": [
+                "0.538954"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                3
+            ],
+            "exponents": [
+                "0.200926"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                4
+            ],
+            "exponents": [
+                "1.91193"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                4
+            ],
+            "exponents": [
+                "0.975217"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                4
+            ],
+            "exponents": [
+                "0.301896"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                5
+            ],
+            "exponents": [
+                "0.983285"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.00531265"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.0482429"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.0736123"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        }
+    ],
+    "references": [
+        {
+            "reference_description": "def2-SVP-RIFIT",
+            "reference_keys": [
+                "weigend1998a"
+            ]
+        },
+        {
+            "reference_description": "def2-SVPD-RIFIT",
+            "reference_keys": [
+                "hellweg2015a"
+            ]
+        }
+    ]
+}

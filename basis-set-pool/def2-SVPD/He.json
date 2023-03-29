@@ -1,0 +1,82 @@
+{
+    "electron_shells": [
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "38.354936737",
+                "5.7689081479",
+                "1.2399407035"
+            ],
+            "coefficients": [
+                [
+                    "0.23814288905E-01",
+                    "0.15490906777",
+                    "0.46998096633"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.29757815953"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "1.0000000"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.22039119441"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        }
+    ],
+    "references": [
+        {
+            "reference_description": "Common base shells for def2-SV* basis sets",
+            "reference_keys": [
+                "weigend2005a"
+            ]
+        },
+        {
+            "reference_description": "Additional functions to form def2-SVPD",
+            "reference_keys": [
+                "rappoport2010a"
+            ]
+        }
+    ]
+}

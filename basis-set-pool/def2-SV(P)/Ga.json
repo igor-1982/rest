@@ -1,0 +1,228 @@
+{
+    "electron_shells": [
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "87842.1262960",
+                "13189.4964020",
+                "3000.9482141",
+                "847.38425966",
+                "276.00980642",
+                "95.216672071"
+            ],
+            "coefficients": [
+                [
+                    "0.14271588798E-02",
+                    "0.10938894097E-01",
+                    "0.54308200127E-01",
+                    "0.18951055983",
+                    "0.38615185918",
+                    "0.30051082719"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "184.00703968",
+                "21.827051433",
+                "9.0026963761"
+            ],
+            "coefficients": [
+                [
+                    "-0.11124461963",
+                    "0.64831322918",
+                    "0.44358383594"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "16.033176938",
+                "2.6707724878",
+                "1.1252834170"
+            ],
+            "coefficients": [
+                [
+                    "-0.23014299555",
+                    "0.72946861516",
+                    "0.46214976951"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.15967608829"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.57643044753E-01"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "1167.2665844",
+                "275.38062789",
+                "87.375073070",
+                "31.597254670",
+                "11.824122798"
+            ],
+            "coefficients": [
+                [
+                    "0.90974021307E-02",
+                    "0.68456273343E-01",
+                    "0.26922293888",
+                    "0.53507897882",
+                    "0.35279062760"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "6.2881845133",
+                "2.5199853240",
+                "1.0169726306"
+            ],
+            "coefficients": [
+                [
+                    "0.33938244530",
+                    "0.56871947608",
+                    "0.27717694939"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.24748373604"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.66685294163E-01"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "65.354237674",
+                "18.504656747",
+                "6.3179620632",
+                "2.1641389426"
+            ],
+            "coefficients": [
+                [
+                    "0.27370146382E-01",
+                    "0.15099463976",
+                    "0.37485328545",
+                    "0.47510606851"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.66693092754"
+            ],
+            "coefficients": [
+                [
+                    ".29843287401"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.2070000"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        }
+    ],
+    "references": [
+        {
+            "reference_description": "Common base shells for def2-SV* basis sets",
+            "reference_keys": [
+                "weigend2005a"
+            ]
+        }
+    ]
+}

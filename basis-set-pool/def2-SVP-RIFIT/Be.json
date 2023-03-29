@@ -1,0 +1,189 @@
+{
+    "electron_shells": [
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "86.81101212",
+                "17.98174975",
+                "7.76958894",
+                "2.77177455",
+                "1.14846369"
+            ],
+            "coefficients": [
+                [
+                    "1.18820240",
+                    "1.71284790",
+                    "1.07129590",
+                    "-.21982450",
+                    "-.58936217"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                ".39330203"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                ".23135414"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                ".09682460"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                ".05658797"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "8.77639612",
+                "2.91244194"
+            ],
+            "coefficients": [
+                [
+                    "2.28316930",
+                    "2.27145280"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                ".64524808"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                ".23829384"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                ".14017285"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "3.46723845",
+                ".58304893"
+            ],
+            "coefficients": [
+                [
+                    ".63489064",
+                    "1.95150326"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                ".17384257"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        }
+    ],
+    "references": [
+        {
+            "reference_description": "def2-SV(P)-RIFIT",
+            "reference_keys": [
+                "weigend1998a"
+            ]
+        }
+    ]
+}

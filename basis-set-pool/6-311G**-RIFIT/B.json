@@ -1,0 +1,267 @@
+{
+    "electron_shells": [
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "127.537268"
+            ],
+            "coefficients": [
+                [
+                    "1.0"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "27.013690"
+            ],
+            "coefficients": [
+                [
+                    "1.0"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "7.184714"
+            ],
+            "coefficients": [
+                [
+                    "1.0"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "2.385215"
+            ],
+            "coefficients": [
+                [
+                    "1.0"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.962511"
+            ],
+            "coefficients": [
+                [
+                    "1.0"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.446087"
+            ],
+            "coefficients": [
+                [
+                    "1.0"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.217512"
+            ],
+            "coefficients": [
+                [
+                    "1.0"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "11.640290"
+            ],
+            "coefficients": [
+                [
+                    "1.0"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "4.155040"
+            ],
+            "coefficients": [
+                [
+                    "1.0"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "1.483155"
+            ],
+            "coefficients": [
+                [
+                    "1.0"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.529417"
+            ],
+            "coefficients": [
+                [
+                    "1.0"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.188977"
+            ],
+            "coefficients": [
+                [
+                    "1.0"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "2.795844"
+            ],
+            "coefficients": [
+                [
+                    "1.0"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.734371"
+            ],
+            "coefficients": [
+                [
+                    "1.0"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.513776"
+            ],
+            "coefficients": [
+                [
+                    "1.0"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                3
+            ],
+            "exponents": [
+                "0.717054"
+            ],
+            "coefficients": [
+                [
+                    "1.0"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                4
+            ],
+            "exponents": [
+                "0.536060"
+            ],
+            "coefficients": [
+                [
+                    "1.0"
+                ]
+            ]
+        }
+    ],
+    "references": [
+        {
+            "reference_description": "RI-MP2 auxiliary basis for 6-311G** basis",
+            "reference_keys": [
+                "tanaka2013a"
+            ]
+        }
+    ]
+}

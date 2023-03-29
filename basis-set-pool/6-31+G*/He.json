@@ -1,0 +1,46 @@
+{
+    "electron_shells": [
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.3842163400E+02",
+                "0.5778030000E+01",
+                "0.1241774000E+01"
+            ],
+            "coefficients": [
+                [
+                    "0.4013973935E-01",
+                    "0.2612460970E+00",
+                    "0.7931846246E+00"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.2979640000E+00"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        }
+    ],
+    "references": [
+        {
+            "reference_description": "31G Split-valence basis set for H,He",
+            "reference_keys": [
+                "gaussian09e01"
+            ]
+        }
+    ]
+}

@@ -1,0 +1,220 @@
+{
+    "electron_shells": [
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "93413.4",
+                "13961.7",
+                "3169.91",
+                "902.456",
+                "297.158",
+                "108.702"
+            ],
+            "coefficients": [
+                [
+                    "0.000743",
+                    "0.005793",
+                    "0.029954",
+                    "0.119028",
+                    "0.368432",
+                    "0.577299"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "108.702",
+                "43.1553",
+                "18.1079"
+            ],
+            "coefficients": [
+                [
+                    "0.143186",
+                    "0.624465",
+                    "0.283366"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "5.56009"
+            ],
+            "coefficients": [
+                [
+                    "1.000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "2.13183"
+            ],
+            "coefficients": [
+                [
+                    "1.000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.420403"
+            ],
+            "coefficients": [
+                [
+                    "1.000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.136045"
+            ],
+            "coefficients": [
+                [
+                    "1.000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "495.040",
+                "117.221",
+                "37.7749",
+                "14.0584"
+            ],
+            "coefficients": [
+                [
+                    "0.008309",
+                    "0.064024",
+                    "0.277614",
+                    "0.745076"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "5.56574",
+                "2.26297"
+            ],
+            "coefficients": [
+                [
+                    "0.613712",
+                    "0.443818"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.807994"
+            ],
+            "coefficients": [
+                [
+                    "1.000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.277460"
+            ],
+            "coefficients": [
+                [
+                    "1.000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.077141"
+            ],
+            "coefficients": [
+                [
+                    "1.000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_cartesian",
+            "region": "polarization",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.6500000"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        }
+    ],
+    "references": [
+        {
+            "reference_description": "VTZ Valence Triple Zeta: 3 Funct.'s/Valence AO",
+            "reference_keys": [
+                "mclean1980a"
+            ]
+        },
+        {
+            "reference_description": "Polarization functions associated with 6-31G",
+            "reference_keys": [
+                "francl1982a"
+            ]
+        }
+    ]
+}

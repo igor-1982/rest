@@ -2161,7 +2161,7 @@ impl SCF {
                 // M_{ij}^{\mu}*(\sum_{kl}D_{kl}*M_{kl}^{\mu})
                 //
                 receiver.iter().for_each(|(m_ij_upper, tmp_mu)| {
-                    vj_spin.data.par_iter_mut().zip(m_ij_upper.par_iter())
+                    vj_spin.data.iter_mut().zip(m_ij_upper.iter())
                         .for_each(|value| *value.0 += *value.1*tmp_mu); 
                 });
 

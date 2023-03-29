@@ -1,0 +1,121 @@
+{
+    "electron_shells": [
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "6293.480",
+                "949.0440",
+                "218.7760",
+                "63.69160",
+                "18.82820",
+                "2.720230"
+            ],
+            "coefficients": [
+                [
+                    "0.00196979",
+                    "0.0149613",
+                    "0.0735006",
+                    "0.2489370",
+                    "0.6024600",
+                    "0.2562020"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0,
+                1
+            ],
+            "exponents": [
+                "30.63310",
+                "7.026140",
+                "2.112050"
+            ],
+            "coefficients": [
+                [
+                    "0.111906",
+                    "0.921666",
+                    "-0.00256919"
+                ],
+                [
+                    "0.0383119",
+                    "0.237403",
+                    "0.817592"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0,
+                1
+            ],
+            "exponents": [
+                "0.684009"
+            ],
+            "coefficients": [
+                [
+                    "1.000000"
+                ],
+                [
+                    "1.000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0,
+                1
+            ],
+            "exponents": [
+                "0.200878"
+            ],
+            "coefficients": [
+                [
+                    "1.000000"
+                ],
+                [
+                    "1.000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "polarization",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.913"
+            ],
+            "coefficients": [
+                [
+                    "1.000000"
+                ]
+            ]
+        }
+    ],
+    "references": [
+        {
+            "reference_description": "VTZ Valence Triple Zeta: 3 Funct.'s/Valence AO",
+            "reference_keys": [
+                "krishnan1980a"
+            ]
+        },
+        {
+            "reference_description": "1P Polarization functions associated with 6-311G",
+            "reference_keys": [
+                "krishnan1980a"
+            ]
+        }
+    ]
+}

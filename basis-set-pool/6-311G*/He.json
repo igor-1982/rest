@@ -1,0 +1,61 @@
+{
+    "electron_shells": [
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "98.12430",
+                "14.76890",
+                "3.318830"
+            ],
+            "coefficients": [
+                [
+                    "0.0287452",
+                    "0.208061",
+                    "0.837635"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.874047"
+            ],
+            "coefficients": [
+                [
+                    "1.000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.244564"
+            ],
+            "coefficients": [
+                [
+                    "1.000000"
+                ]
+            ]
+        }
+    ],
+    "references": [
+        {
+            "reference_description": "VTZ Valence Triple Zeta: 3 Funct.'s/Valence AO for H,He",
+            "reference_keys": [
+                "gaussian09e01"
+            ]
+        }
+    ]
+}

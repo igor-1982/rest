@@ -1,0 +1,240 @@
+{
+    "electron_shells": [
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "51528.0863490",
+                "7737.2103487",
+                "1760.3748470",
+                "496.87706544",
+                "161.46520598",
+                "55.466352268"
+            ],
+            "coefficients": [
+                [
+                    "0.14405823106E-02",
+                    "0.11036202287E-01",
+                    "0.54676651806E-01",
+                    "0.18965038103",
+                    "0.38295412850",
+                    "0.29090050668"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "107.54732999",
+                "12.408671897",
+                "5.0423628826"
+            ],
+            "coefficients": [
+                [
+                    "-0.10932281100",
+                    "0.64472599471",
+                    "0.46262712560"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "8.5461640165",
+                "1.3900441221",
+                "0.56066602876"
+            ],
+            "coefficients": [
+                [
+                    "-0.22711013286",
+                    "0.73301527591",
+                    "0.44225565433"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.71483705972E-01"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.28250687604E-01"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "640.48536096",
+                "150.69711194",
+                "47.503755296",
+                "16.934120165",
+                "6.2409680590"
+            ],
+            "coefficients": [
+                [
+                    "0.96126715203E-02",
+                    "0.70889834655E-01",
+                    "0.27065258990",
+                    "0.52437343414",
+                    "0.34107994714"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "3.0885463206",
+                "1.1791047769",
+                "0.43369774432"
+            ],
+            "coefficients": [
+                [
+                    "0.33973986903",
+                    "0.57272062927",
+                    "0.24582728206"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.1206750"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "27.559479426",
+                "7.4687020327",
+                "2.4345903574",
+                "0.78244754808"
+            ],
+            "coefficients": [
+                [
+                    "0.30612488044E-01",
+                    "0.15593270944",
+                    "0.36984421276",
+                    "0.47071118077"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.21995774311"
+            ],
+            "coefficients": [
+                [
+                    ".33941649889"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                3
+            ],
+            "exponents": [
+                "1.1470000"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.33978554488E-01"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        }
+    ],
+    "references": [
+        {
+            "reference_description": "Common base shells for def2-SV* basis sets",
+            "reference_keys": [
+                "weigend2005a"
+            ]
+        },
+        {
+            "reference_description": "Additional functions to form def2-SVP",
+            "reference_keys": [
+                "weigend2005a"
+            ]
+        },
+        {
+            "reference_description": "Additional functions to form def2-SVPD",
+            "reference_keys": [
+                "rappoport2010a"
+            ]
+        }
+    ]
+}
