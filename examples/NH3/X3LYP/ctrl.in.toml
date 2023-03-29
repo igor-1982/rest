@@ -1,14 +1,15 @@
 [ctrl]
      # 设置Rayon和OpenMP的并行数，缺省为1
-     num_threads =               1
+     num_threads =               2
      # 设置使用的电子结构方法，缺省为HF
      xc =                        "x3lyp" 
      # 设置程序输出的程度，缺省为1
      print_level =               1
      # 设置（辅助）基组的路径。如果找不到该路径，则创建该路径，并从BSE下载
      # 注意：计算节点需支持连接外网。
-     basis_path =                "./cc-pVDZ"
-     auxbas_path =               "./def2-SV(P)-JKFIT" 
+     basis_path =                "/home/igor/Documents/Package-Pool/rest_workspace/rest/basis-set-pool/6-31G*"
+     auxbas_path =               "/home/igor/Documents/Package-Pool/rest_workspace/rest/basis-set-pool/def2-SV(P)-JKFIT" 
+     #auxbas_path =               "/home/igor/Documents/Package-Pool/rest_workspace/rest/basis-set-pool/def2-QZVPPD-RIFIT" 
      # 使用resolution-of-identity (RI)技术处理四中心积分
      eri_type =                  "ri-v"
      mixer =                     "diis"
@@ -34,7 +35,7 @@
      etb_beta =                  2.0
 
 [geom]
-     name = "NH3, example"
+     name = "NH3"
      unit = "angstrom"
      position = [
              "N  -2.1988391019      1.8973746268      0.0000000000",

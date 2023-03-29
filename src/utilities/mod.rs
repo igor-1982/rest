@@ -1,5 +1,6 @@
 use time::{DateTime,Local};
 use std::{time::Instant, collections::HashMap, ops::Range};
+use regex::Regex;
 enum DebugTiming {
    Yes,
    Not,
@@ -150,4 +151,38 @@ pub fn balancing(num_tasks:usize, num_threads: usize) -> Vec<Range<usize>> {
     });
 
     distribute_vec
+}
+
+pub fn convert_scientific_notation_to_fortran_format(n: &String) -> String {
+    let re = Regex::new(r"(?P<num> *-?\d.\d*)[E|e](?P<exp>-?\d)").unwrap();
+    let o_len = n.len();
+
+    if let Some(cap) = re.captures(n) {
+        let main_part = cap["num"].to_string();
+        let exp_part = cap["exp"].to_string();
+        let exp: i32 = exp_part.parse().unwrap();
+        let out_str = if exp>=0 {
+            format!("{}E+{:0>2}",main_part,exp)
+        } else {
+            format!("{}E-{:0>2}",main_part,exp.abs())
+        };
+        let n_len = out_str.len();
+        return out_str[n_len-o_len..n_len].to_string()
+    } else {
+        panic!("Error: the input string is not a standard scientific notation")
+    }
+
+}
+
+#[test]
+fn test_scientific_number() {
+    let dd = -0.0003356;
+    let sdd = format!("{:16.8E}",dd);
+    println!("{}", &sdd);
+    println!("{}", convert_scientific_notation_to_fortran_format(&sdd));
+    let dd = -100.0003356;
+    let sdd = format!("{:16.8E}",dd);
+    println!("{}", &sdd);
+    println!("{}", convert_scientific_notation_to_fortran_format(&sdd));
+
 }
