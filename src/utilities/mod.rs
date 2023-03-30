@@ -154,7 +154,7 @@ pub fn balancing(num_tasks:usize, num_threads: usize) -> Vec<Range<usize>> {
 }
 
 pub fn convert_scientific_notation_to_fortran_format(n: &String) -> String {
-    let re = Regex::new(r"(?P<num> *-?\d.\d*)[E|e](?P<exp>-?\d)").unwrap();
+    let re = Regex::new(r"(?P<num> *-?\d.\d*)[E|e](?P<exp>-?\d{1,2})").unwrap();
     let o_len = n.len();
 
     if let Some(cap) = re.captures(n) {
@@ -180,7 +180,11 @@ fn test_scientific_number() {
     let sdd = format!("{:16.8E}",dd);
     println!("{}", &sdd);
     println!("{}", convert_scientific_notation_to_fortran_format(&sdd));
-    let dd = -100.0003356;
+    let dd = 1.563E-16;
+    let sdd = format!("{:16.8E}",dd);
+    println!("{}", &sdd);
+    println!("{}", convert_scientific_notation_to_fortran_format(&sdd));
+    let dd = 1.563E16;
     let sdd = format!("{:16.8E}",dd);
     println!("{}", &sdd);
     println!("{}", convert_scientific_notation_to_fortran_format(&sdd));

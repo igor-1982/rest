@@ -2150,8 +2150,8 @@ impl SCF {
             }
             let mut i_index = 0;
             //self.eigenvectors[i_spin].iter_rows(0..self.mol.num_basis).for_each(|irow| {
-            self.eigenvectors[i_spin].iter().for_each(|irow| {
-                let sdd = format!("{:16.8E}", irow);
+            self.eigenvectors[i_spin].iter().for_each(|icoeff| {
+                let sdd = format!("{:16.8E}", icoeff);
                 if (i_index + 1)%5 == 0 {
                     write!(input, "{}\n",r2f(&sdd))
                 } else {
