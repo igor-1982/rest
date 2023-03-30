@@ -1894,14 +1894,14 @@ impl SCF {
         let mut i_index = 0;
         self.mol.geom.elem.iter().for_each(|x| {
             let (mass, charge) = SPECIES_INFO.get(x.as_str()).unwrap();
-            if (i_index + 1)%5 == 0 {
+            if (i_index + 1)%6 == 0 {
                 write!(input, "{:12}\n",*charge as i32)
             } else {
                 write!(input, "{:12}",*charge as i32)
             };
             i_index += 1;
         });
-        if i_index % 5 != 0 {write!(input, "\n");}
+        if i_index % 6 != 0 {write!(input, "\n");}
         // ==============================
         // Now for Nuclear charges
         // ==============================
@@ -2149,8 +2149,9 @@ impl SCF {
                 write!(input, "Beta MO coefficients                       R   N={:12}\n", self.eigenvectors[i_spin].data.len());
             }
             let mut i_index = 0;
-            self.eigenvectors[i_spin].iter().for_each(|x| {
-                let sdd = format!("{:16.8E}", x);
+            //self.eigenvectors[i_spin].iter_rows(0..self.mol.num_basis).for_each(|irow| {
+            self.eigenvectors[i_spin].iter().for_each(|irow| {
+                let sdd = format!("{:16.8E}", irow);
                 if (i_index + 1)%5 == 0 {
                     write!(input, "{}\n",r2f(&sdd))
                 } else {
