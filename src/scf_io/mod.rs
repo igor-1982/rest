@@ -1879,7 +1879,7 @@ impl SCF {
                 basis_name.to_uppercase()
             );
         };
-        write!(input, "Number of atom                             I {:16}\n", self.mol.geom.elem.len());
+        write!(input, "Number of atoms                            I {:16}\n", self.mol.geom.elem.len());
         write!(input, "Charge                                     I {:16}\n", self.mol.ctrl.charge as i32);
         write!(input, "Multiplicity                               I {:16}\n", self.mol.ctrl.spin as i32);
         write!(input, "Number of electrons                        I {:16}\n", self.mol.num_elec[0]);
@@ -1925,7 +1925,7 @@ impl SCF {
         let mut i_index = 0;
         self.mol.geom.position.iter_columns_full().for_each(|x_position| {
             x_position.iter().for_each(|x| {
-                let sdd = format!("{:16.8E}\n",x);
+                let sdd = format!("{:16.8E}",x);
                 if (i_index + 1)%5 ==0 {
                     write!(input,"{}\n", r2f(&sdd));
                 } else {
@@ -1957,14 +1957,14 @@ impl SCF {
         write!(input, "MicOpt                                     I   N={:12}\n", self.mol.geom.elem.len());
         let mut i_index = 0;
         self.mol.geom.elem.iter().for_each(|x| {
-            if (i_index + 1)%5 == 0 {
+            if (i_index + 1)%6 == 0 {
                 write!(input, "{:12}\n", -1)
             } else {
                 write!(input, "{:12}", -1)
             };
             i_index += 1;
         });
-        if i_index % 5 != 0 {write!(input, "\n");}
+        if i_index % 6 != 0 {write!(input, "\n");}
 
         //================================
         // Now for basis set info.
@@ -2002,7 +2002,12 @@ impl SCF {
                     max_contract = std::cmp::max(max_contract, ibascell.exponents.len());
                     if ibascell.angular_momentum[0] == 2 {num_d_shell += 1};
                     if ibascell.angular_momentum[0] == 3 {num_f_shell += 1};
-                    shell_type.push(ibascell.angular_momentum[0]*shell_type_fac);
+                    let tmp_shell_type = if ibascell.angular_momentum[0] == 1 {
+                        ibascell.angular_momentum[0]
+                    } else {
+                        ibascell.angular_momentum[0]*shell_type_fac
+                    };
+                    shell_type.push(tmp_shell_type);
                     num_primitiv_vec.push(ibascell.exponents.len());
                     shell_to_atom_map.push(i_atom+1);
                     primitive_exp.extend(ibascell.exponents.iter());
