@@ -140,6 +140,10 @@ fn main() -> anyhow::Result<()> {
     println!("              REST: Mission accomplished");
     println!("====================================================");
 
+    println!("The SCF ({}) energy: {:16.8} Ha", 
+        scf_data.mol.ctrl.xc.to_uppercase(),
+        scf_data.scf_energy);
+
     time_mark.report_all();
 
     Ok(())

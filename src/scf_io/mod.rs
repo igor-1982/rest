@@ -11,6 +11,7 @@ use std::{vec, fs};
 use rest_libcint::{CINTR2CDATA, CintType};
 use crate::geom_io::{GeomCell,MOrC, GeomUnit};
 use crate::basis_io::{Basis4Elem,BasInfo};
+use crate::initial_guess::sad::sad_dm;
 use crate::molecule_io::{Molecule, generate_ri3fn_from_rimatr};
 use crate::tensors::{TensorOpt,TensorOptMut,TensorSlice};
 use crate::dft::{Grids, numerical_density, par_numerical_density};
@@ -101,16 +102,21 @@ impl SCF {
         time_mark.count_start("CInt");
 
         let nuc_energy = mol.geom.calc_nuc_energy();
+
+        if mol.ctrl.print_level>0 {println!("Nuc_energy: {}",nuc_energy)};
+
         let dt1 = time::Local::now();
         let mut ovlp = mol.int_ij_matrixupper(String::from("ovlp"));
         let mut h_core = mol.int_ij_matrixupper(String::from("hcore"));
         let dt2 = time::Local::now();
         let timecost = (dt2.timestamp_millis()-dt1.timestamp_millis()) as f64 /1000.0;
-        println!("The evaluation of 2D-tensors spends {:16.2} seconds",timecost);
+        if mol.ctrl.print_level>1 {println!("The evaluation of 2D-tensors spends {:16.2} seconds",timecost)};
         let dt1 = time::Local::now();
 
         // check and prepare the auxiliary basis sets
         if mol.ctrl.use_auxbas {mol.initialize_auxbas()};
+        if mol.ctrl.print_level>0 {println!("numbasis: {:2}, num_auxbas: {:2}", mol.num_basis,mol.num_auxbas)};
+
 
         let mut ri3fn = if mol.ctrl.use_auxbas && !mol.ctrl.use_auxbas_symm {
             //Some(mol.prepare_ri3fn_for_ri_v_rayon())
@@ -132,10 +138,12 @@ impl SCF {
 
         let dt2 = time::Local::now();
         let timecost = (dt2.timestamp_millis()-dt1.timestamp_millis()) as f64 /1000.0;
-        if mol.ctrl.use_auxbas {
-            println!("The evaluation of 3D-tensors spends {:16.2} seconds",timecost);
-        } else {
-            println!("The evaluation of 4D-tensors spends {:16.2} seconds",timecost);
+        if mol.ctrl.print_level>0 {
+            if mol.ctrl.use_auxbas {
+                println!("The evaluation of 3D-tensors spends {:16.2} seconds",timecost);
+            } else {
+                println!("The evaluation of 4D-tensors spends {:16.2} seconds",timecost);
+            }
         }
 
         let mut eris = if mol.ctrl.use_auxbas {
@@ -202,8 +210,10 @@ impl SCF {
             println!("  Lowest remaining eigenvalue: {:16.8}",eigenvalues[0]);
             mol.num_state = n_found as usize;
         } else {
-            println!("Overlap matrix is nonsigular:");
-            println!("  Lowest eigenvalue: {:16.8} with the total number of basis functions: {:6}",eigenvalues[0],mol.num_state);
+            if mol.ctrl.print_level>0 {
+                println!("Overlap matrix is nonsigular:");
+                println!("  Lowest eigenvalue: {:16.8} with the total number of basis functions: {:6}",eigenvalues[0],mol.num_state);
+            }
         };
 
         //let mut eigenvectors = [MatrixFull::new([1,1],0.0),MatrixFull::new([1,1],0.0)];
@@ -220,18 +230,28 @@ impl SCF {
         };
         match &tmp_scf.scftype {
             SCFType::RHF => {
-                println!("Restricted Hartree-Fock (or Kohn-Sham) algorithm is invoked.")},
+                if mol.ctrl.print_level>0 {println!("Restricted Hartree-Fock (or Kohn-Sham) algorithm is invoked.")}},
             SCFType::ROHF => {
-                println!("Restricted-orbital Hartree-Fock (or Kohn-Sham) algorithm is invoked.");
+                if mol.ctrl.print_level>0 {println!("Restricted-orbital Hartree-Fock (or Kohn-Sham) algorithm is invoked.")};
                 mol.ctrl.spin_channel=2;
                 mol.spin_channel=2;
             },
-            SCFType::UHF => {println!("Unrestricted Hartree-Fock (or Kohn-Sham) algorithm is invoked.")},
+            SCFType::UHF => {
+                if mol.ctrl.print_level>0 {println!("Unrestricted Hartree-Fock (or Kohn-Sham) algorithm is invoked.")}
+            },
         };
+
+        tmp_scf.generate_occupation();
 
         time_mark.new_item("DFT Grids", "the generation of DFT grids");
         time_mark.count_start("DFT Grids");
-        let mut grids = if mol.xc_data.is_dfa_scf() {Some(Grids::build(&mol))} else {None};
+        let mut grids = if mol.xc_data.is_dfa_scf() {
+            let grids = Grids::build(&mol);
+            if mol.ctrl.print_level>0 {
+                println!("Grid size: {:}", grids.coordinates.len());
+            }
+            Some(grids)
+        } else {None};
         time_mark.count("DFT Grids");
 
         time_mark.new_item("Grids AO", "the generation of the tabulated AO");
@@ -241,8 +261,9 @@ impl SCF {
         }
         time_mark.count("Grids AO");
 
+
         if mol.ctrl.external_init_guess {
-            println!("Importing density matrix from external inital guess file");
+            if mol.ctrl.print_level>0 {println!("Importing density matrix from external inital guess file")};
             let file = hdf5::File::open(&mol.ctrl.guessfile).unwrap();
             let init_guess = file.dataset("init_guess").unwrap().read_raw::<f64>().unwrap();
             let mut tmp_dm = MatrixFull::from_vec([mol.num_basis,mol.num_basis],init_guess).unwrap();
@@ -258,10 +279,10 @@ impl SCF {
             let scf = file.group("scf").unwrap();
             let member = scf.member_names().unwrap();
             let e_tot = scf.dataset("e_tot").unwrap().read_scalar::<f64>().unwrap();
-            if mol.ctrl.print_level>=1 {
+            if mol.ctrl.print_level>1 {
                 println!("HDF5 Group: {:?} \nMembers: {:?}", scf, member);
             }
-            println!("E_tot from chkfile: {:18.10}", e_tot);
+            if mol.ctrl.print_level>0 {println!("E_tot from chkfile: {:18.10}", e_tot)};
             let buf01 = scf.dataset("mo_coeff").unwrap().read_raw::<f64>().unwrap();
             let buf02 = scf.dataset("mo_energy").unwrap().read_raw::<f64>().unwrap();
             let mut tmp_eigenvectors = vec![MatrixFull::empty(), MatrixFull::empty()];
@@ -285,13 +306,23 @@ impl SCF {
                     println!("eigenval {:?}", &tmp_scf.eigenvalues[i]);
                 });
             }
+
+            tmp_scf.generate_density_matrix()
+        } else if mol.ctrl.initial_guess.eq(&"sad") {
+            let dm = sad_dm(&mol);
+            if ! mol.ctrl.spin_polarization {
+                tmp_scf.density_matrix[0] = dm;
+            } else {
+                tmp_scf.density_matrix[0] = dm.clone()*0.5;
+                tmp_scf.density_matrix[1] = dm*0.5;
+            }
         } else {
             let mut init_fock = if mol.ctrl.initial_guess.eq(&"vsap") {
 
                 time_mark.new_item("SAP", "Generation of SAP initial guess");
                 time_mark.count_start("SAP");
 
-                println!("Initial guess from SAP");
+                if mol.ctrl.print_level>0 {println!("Initial guess from SAP")};
                 let mut h_sap = mol.int_ij_matrixupper(String::from("kinetic"));
                 //let tmp_kinetic = MatrixUpper::to_matrixfull(&kinetic).unwrap();
                 //let tmp_v = if let Some( ref grids1 ) = grids {
@@ -302,7 +333,7 @@ impl SCF {
                 //let tmp_h = MatrixFull::add(&tmp_kinetic, &tmp_v).unwrap();
                 //tmp_h.to_matrixupper()
                 let tmp_v = if let Some( ref grids1 ) = grids {
-                    get_vsap(&mol, grids1)
+                    get_vsap(&mol, grids1, mol.ctrl.print_level)
                 } else {
                     MatrixFull::new([mol.num_basis,mol.num_basis],0.0)
                 };
@@ -317,7 +348,7 @@ impl SCF {
 
             } else if mol.ctrl.initial_guess.eq(&"hcore") {
                 h_core.clone()
-            } else {
+            }else {
                 h_core.clone()
             };
             let (eigenvectors_alpha,eigenvalues_alpha)=init_fock.to_matrixupperslicemut().lapack_dspgvx(ovlp.to_matrixupperslicemut(),mol.num_state).unwrap();
@@ -327,13 +358,19 @@ impl SCF {
             (0..mol.spin_channel).into_iter().for_each(|i| {
                 tmp_scf.eigenvalues[i] = eigenvalues_alpha.clone();
             });
+            //println!("debug: {:?}, {:?}", &tmp_scf.eigenvalues, &tmp_scf.occupation);
+            tmp_scf.generate_density_matrix()
         }
-
-        tmp_scf.generate_occupation();
 
         //tmp_scf.formated_eigenvalues(mol.num_state);
 
-        if ! mol.ctrl.external_init_guess {tmp_scf.generate_density_matrix()};
+        if ! mol.ctrl.atom_sad && mol.ctrl.print_level>2 {
+            println!("Initial density matrix:");
+            tmp_scf.density_matrix[0].formated_output(5, "full");
+            //println!("Occupation: {:?}", tmp_scf.occupation);
+        }
+
+
         let mut hamiltonian = [MatrixUpper::new(1,0.0),MatrixUpper::new(1,0.0)];
 
         //println!("debug dm_a");
@@ -343,13 +380,9 @@ impl SCF {
         //println!("debug ov");
         //ovlp.formated_output(10, "full");
 
-        time_mark.count("Overall");
-        if mol.ctrl.print_level>=2 {
-            time_mark.report_all();
-        }
 
 
-        SCF {
+        let mut scf_data = SCF {
             mol,
             ovlp,
             h_core,
@@ -367,11 +400,65 @@ impl SCF {
             nuc_energy,
             scf_energy: 0.0,
             grids,
+        };
+
+        if scf_data.mol.ctrl.initial_guess.eq(&"sad") {
+            scf_data.generate_hf_hamiltonian_for_sad_guess();
+            scf_data.diagonalize_hamiltonian();
+            scf_data.generate_density_matrix();
         }
+
+        time_mark.count("Overall");
+        if scf_data.mol.ctrl.print_level>=2 {
+            time_mark.report_all();
+        }
+
+        scf_data
     }
 
     pub fn generate_occupation(&mut self) {
-        self.generate_occupation_integer()
+        if self.mol.ctrl.atom_sad {
+            self.generate_occupation_sad()
+        } else {
+            self.generate_occupation_integer()
+        }
+    }
+
+    pub fn generate_occupation_sad(&mut self) {
+        let num_state = self.mol.num_state;
+        let spin_channel = self.mol.ctrl.spin_channel;
+        let num_elec = &self.mol.num_elec;
+        let mut occupation:[Vec<f64>;2] = [vec![],vec![]];
+        let mut lumo:[usize;2] = [0,0];
+        let mut homo:[usize;2] = [0,0];
+        //println!("{:?}", num_elec);
+
+        // by default, it should be spin unpolarization with RHF
+        let occ_num = 2.0;
+        let i_spin = 0_usize;
+        occupation[i_spin] = vec![0.0;num_state];
+        let mut left_elec_spin = num_elec[i_spin+1];
+        let mut index_i = 0_usize;
+        while  left_elec_spin > 0.0 && index_i<=num_state {
+            occupation[i_spin][index_i] = (left_elec_spin*occ_num).min(occ_num);
+            index_i += 1;
+            left_elec_spin -= 1.0;
+        }
+        // make sure there is at least one LUMO
+        if index_i > num_state-1 && left_elec_spin>0.0 {
+            panic!("Error:: the number of molecular orbitals is smaller than the number of electrons in the {}-spin channel\n num_state: {}; num_elec_alpha: {}", 
+                   i_spin,num_state, num_elec[i_spin]);
+        } else {
+            lumo[i_spin] = index_i;
+            homo[i_spin] = index_i-1;
+        }; 
+
+        //println!("{:?}", num_elec);
+        //println!("{:?}", &occupation);
+        self.occupation = occupation;
+        self.lumo = lumo;
+        self.homo = homo;
+
     }
 
     pub fn generate_occupation_integer(&mut self) {
@@ -1574,6 +1661,14 @@ impl SCF {
         (exc_total, vxc_total)
 
     }
+
+    pub fn generate_hf_hamiltonian_for_sad_guess(&mut self) {
+        if self.mol.ctrl.eri_type.eq("analytic") {
+            self.generate_hf_hamiltonian_erifold4();
+        } else if  self.mol.ctrl.eri_type.eq("ri_v") {
+            self.generate_hf_hamiltonian_ri_v();
+        }
+    }
     pub fn generate_hf_hamiltonian(&mut self) {
         let num_basis = self.mol.num_basis;
         let num_state = self.mol.num_state;
@@ -1607,7 +1702,7 @@ impl SCF {
         //println!("debug: {}", self.scf_energy);
         // for DFT calculations, we should replace the exchange-correlation (xc) potential by the xc energy
         self.scf_energy = self.scf_energy - vxc_total + exc_total;
-        println!("Exc: {:?}, Vxc: {:?}", exc_total, vxc_total);
+        if self.mol.ctrl.print_level>0 {println!("Exc: {:?}, Vxc: {:?}", exc_total, vxc_total)};
         match self.scftype {
             SCFType::RHF => {
                 // D*(H^{core}+F)
@@ -1784,21 +1879,21 @@ impl SCF {
             //    .map(|c| c.powf(2.0)).sum::<f64>().sqrt()/num_basis;
         }
 
-        if self.mol.ctrl.print_level>=1 {
-            if spin_channel==1 {
-                println!("SCF Change: DM {:10.5e}; eev {:10.5e} Ha; etot {:10.5e} Ha",
-                          dm_err[0],eev_err,diff_energy);
-                flag[0] = diff_energy.abs()<=scf_acc_etot &&
-                          dm_err[0] <=scf_acc_rho &&
-                          eev_err <= scf_acc_eev
-            } else {
-                println!("SCF Change: DM ({:10.5e},{:10.5e}); eev {:10.5e} Ha; etot {:10.5e} Ha",
-                          dm_err[0],dm_err[1],eev_err,diff_energy);
-                flag[0] = diff_energy.abs()<=scf_acc_etot &&
-                          dm_err[0] <=scf_acc_rho &&
-                          dm_err[1] <=scf_acc_rho &&
-                          eev_err <= scf_acc_eev
-            }
+        if spin_channel==1 {
+            if self.mol.ctrl.print_level>0 {
+                println!("SCF Change: DM {:10.5e}; eev {:10.5e} Ha; etot {:10.5e} Ha",dm_err[0],eev_err,diff_energy)
+            };
+            flag[0] = diff_energy.abs()<=scf_acc_etot &&
+                      dm_err[0] <=scf_acc_rho &&
+                      eev_err <= scf_acc_eev
+        } else {
+            if self.mol.ctrl.print_level>0 {
+                println!("SCF Change: DM ({:10.5e},{:10.5e}); eev {:10.5e} Ha; etot {:10.5e} Ha",dm_err[0],dm_err[1],eev_err,diff_energy)
+            };
+            flag[0] = diff_energy.abs()<=scf_acc_etot &&
+                      dm_err[0] <=scf_acc_rho &&
+                      dm_err[1] <=scf_acc_rho &&
+                      eev_err <= scf_acc_eev
         }
 
                   
@@ -2216,9 +2311,10 @@ impl SCF {
         let dm = &mut self.density_matrix;
         let mo = &mut self.eigenvectors;
         let occ = &mut self.occupation;
+        let print_level = self.mol.ctrl.print_level;
         if let Some(grids) = &mut self.grids {
             let dt0 = utilities::init_timing();
-            let (exc,mut vxc_ao) = self.mol.xc_data.xc_exc_vxc(grids, spin_channel,dm, mo, occ);
+            let (exc,mut vxc_ao) = self.mol.xc_data.xc_exc_vxc(grids, spin_channel,dm, mo, occ, print_level);
             let dt1 = utilities::timing(&dt0, Some("Total vxc_ao time"));
             exc_spin = exc;
             if let Some(ao) = &mut grids.ao {
@@ -2299,6 +2395,7 @@ impl SCF {
         let dm = &self.density_matrix;
         let mo = &self.eigenvectors;
         let occ = &self.occupation;
+        //println!("debug: {:?}", &self.occupation);
         if let Some(grids) = &self.grids {
             //println!("debug: {:?}",grids.parallel_balancing);
             let (sender, receiver) = channel();
@@ -2347,11 +2444,13 @@ impl SCF {
         }
         //println!("debug total_exc: {:?}, {:?}, {:?}", exc_spin, vxc_mf[0].size(),vxc_mf[0].data.iter().sum::<f64>());
 
-        if spin_channel==1 {
-            println!("total electron number: {:16.8}", total_elec[0]);
-        } else {
-            println!("electron number in alpha-channel: {:12.8}", total_elec[0]);
-            println!("electron number in beta-channel:  {:12.8}", total_elec[1]);
+        if self.mol.ctrl.print_level>1 {
+            if spin_channel==1 {
+                println!("total electron number: {:16.8}", total_elec[0]);
+            } else {
+                println!("electron number in alpha-channel: {:12.8}", total_elec[0]);
+                println!("electron number in beta-channel:  {:12.8}", total_elec[1]);
+            }
         }
 
 
@@ -2962,10 +3061,9 @@ pub fn generate_diis_error_vector(hamiltonian: &[MatrixUpper<f64>;2],
                 let dd = cur_error[i_spin].data.par_iter().fold(|| 0.0, |acc, x| {
                     acc + x*x
                 }).sum::<f64>();
-                //println!("diis-norm for {}-spin: {:16.8}",i_spin,dd.sqrt());
                 norm += dd
             });
-            println!("diis-norm : {:16.8}",norm.sqrt());
+            //println!("diis-norm : {:16.8}",norm.sqrt());
 
             ([cur_error[0].data.clone(),cur_error[1].data.clone()].concat(),
             cur_target)
@@ -3053,7 +3151,7 @@ pub fn scf(mol:Molecule) -> anyhow::Result<SCF> {
 
     let mut scf_records=ScfTraceRecord::initialize(&scf_data);
 
-    println!("The total energy: {:20.10} Ha by the initial guess",scf_data.scf_energy);
+    if scf_data.mol.ctrl.print_level>0 {println!("The total energy: {:20.10} Ha by the initial guess",scf_data.scf_energy)};
     //let mut scf_continue = true;
     if scf_data.mol.ctrl.noiter {
         println!("Warning: the SCF iteration is skipped!");
@@ -3088,10 +3186,10 @@ pub fn scf(mol:Molecule) -> anyhow::Result<SCF> {
 
         let dt2 = time::Local::now();
         let timecost = (dt2.timestamp_millis()-dt1.timestamp_millis()) as f64 /1000.0;
-        println!("Energy: {:18.10} Ha after {:4} iterations (in {:10.2} seconds).",
+        if scf_data.mol.ctrl.print_level>0 {println!("Energy: {:18.10} Ha after {:4} iterations (in {:10.2} seconds).",
                  scf_records.scf_energy,
                  scf_records.num_iter-1,
-                 timecost);
+                 timecost)};
         if scf_data.mol.ctrl.print_level>1 {
             println!("Detailed timing info in this SCF step:");
             let timecost = (dt1_1.timestamp_millis()-dt1.timestamp_millis()) as f64 /1000.0;
@@ -3107,7 +3205,7 @@ pub fn scf(mol:Molecule) -> anyhow::Result<SCF> {
         }
     }
     if scf_converge[0] {
-        println!("SCF is converged after {:4} iterations.", scf_records.num_iter-1);
+        if scf_data.mol.ctrl.print_level>0 {println!("SCF is converged after {:4} iterations.", scf_records.num_iter-1)};
         if scf_data.mol.ctrl.print_level>1 {
             scf_data.formated_eigenvalues((scf_data.homo.iter().max().unwrap()+4).min(scf_data.mol.num_state));
         }
@@ -3120,7 +3218,9 @@ pub fn scf(mol:Molecule) -> anyhow::Result<SCF> {
         println!("SCF does not converge within {:03} iterations",scf_records.num_iter);
     }
     let dt2 = time::Local::now();
-    println!("the job spends {:16.2} seconds",(dt2.timestamp_millis()-dt0.timestamp_millis()) as f64 /1000.0);
+    if scf_data.mol.ctrl.print_level>0 {
+        println!("the job spends {:16.2} seconds",(dt2.timestamp_millis()-dt0.timestamp_millis()) as f64 /1000.0)
+    };
 
     Ok(scf_data)
 }

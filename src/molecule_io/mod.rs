@@ -103,7 +103,7 @@ impl Molecule {
     pub fn new() -> Molecule {
         Molecule {
             ctrl:InputKeywords::new(),
-            xc_data: DFA4REST::new("hf",1),
+            xc_data: DFA4REST::new("hf",1, 0),
             geom: GeomCell::new(),
             num_elec: vec![0.0,0.0,0.0],
             num_state: 0,
@@ -126,10 +126,15 @@ impl Molecule {
             //cint_data: CINTR2CDATA::new()
         }
     }
+
     pub fn build(ctrl_file: String) -> anyhow::Result<Molecule> {
         //let mut mol = Molecule::new();
         //let (mut ctrl, mut geom) = RawCtrl::parse_ctl_from_jsonfile_v02(ctrl_file)?;
         let (mut ctrl, mut geom) = InputKeywords::parse_ctl(ctrl_file)?;
+        Molecule::build_native(ctrl, geom)
+    }
+
+    pub fn build_native(mut ctrl: InputKeywords, mut geom: GeomCell) -> anyhow::Result<Molecule> {
 
         let cint_type = if ctrl.basis_type.to_lowercase()==String::from("spheric") {
             CintType::Spheric
@@ -146,7 +151,6 @@ impl Molecule {
 
         let natm = cint_atm.len() as i32;
         let nbas = cint_bas.len() as i32;
-        println!("nbas: {}, natm: {} for standard basis sets", nbas, natm);
         
         let spin_channel = ctrl.spin_channel;
 
@@ -165,12 +169,16 @@ impl Molecule {
 
         let basis4elem = bas;
 
-        let xc_data = DFA4REST::new(&ctrl.xc,spin_channel);
-
-        xc_data.xc_version();
+        let xc_data = DFA4REST::new(&ctrl.xc,spin_channel, ctrl.print_level);
 
         // frozen-core pt2 and rpa are not yet implemented.
         let start_mo = count_frozen_core_states(ctrl.frozen_core_postscf, &geom.elem);
+
+        if ctrl.print_level>0 {
+            xc_data.xc_version();
+            println!("nbas: {}, natm: {} for standard basis sets", nbas, natm);
+            println!("First valence state for the frozen-core algorithm: {:5}", start_mo);
+        };
 
         Ok(Molecule {
             ctrl,
@@ -237,7 +245,6 @@ impl Molecule {
 
         let mut env = self.cint_env.clone();
 
-        println!("num_basis: {},num_auxbas: {}", self.num_basis,num_auxbas);
         let off = env.len() as i32;
         let natm_off = self.cint_atm.len() as i32;
         let nbas_off = self.cint_bas.len() as i32;
@@ -260,7 +267,9 @@ impl Molecule {
         self.fdqc_aux_bas.iter_mut().for_each(|i| {i.cint_index0 += nbas_off as usize});
 
         //println!("final nbas: {},final natm: {}", nbas, natm);
-        println!("final nbas: {},final natm: {}", self.cint_bas.len()+self.cint_aux_bas.len(), self.cint_atm.len()+self.cint_aux_atm.len());
+        if self.ctrl.print_level>0 {
+            println!("final nbas: {},final natm: {}", self.cint_bas.len()+self.cint_aux_bas.len(), self.cint_atm.len()+self.cint_aux_atm.len());
+        }
 
     }
 
@@ -638,6 +647,7 @@ impl Molecule {
 
         // determine the electron number in total and in each spin channel.
         num_elec[0]-=ctrl.charge;
+
         let unpair_elec = (ctrl.spin-1.0_f64);
         num_elec[1] = (num_elec[0]-unpair_elec)/2.0 + unpair_elec;
         num_elec[2] = (num_elec[0]-unpair_elec)/2.0;
@@ -1609,8 +1619,6 @@ pub fn count_frozen_core_states(n_frozen_shell: i32, elem: &Vec<String>) -> usiz
             }
         };
     });
-
-    println!("First valence state for the frozen-core algorithm: {:5}", n_low_state);
 
     n_low_state
 

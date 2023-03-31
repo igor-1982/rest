@@ -137,17 +137,6 @@ impl GeomCell {
     pub fn calc_nuc_energy(&mut self) -> f64 {
         let mass_charge = get_mass_charge(&self.elem);
         let mut nuc_energy = 0.0;
-        //(0..self.elem.len()).into_iter().for_each(|i| {
-        //    let i_charge =  mass_charge[i].1;
-        //    let mut i_position = self.position.get_reducing_tensor(i).unwrap();
-        //    (0..i).into_iter().for_each(|j| {
-        //        let j_charge =  mass_charge[j].1;
-        //        let j_position = self.position.get_reducing_tensor(j).unwrap();
-        //        let mut dd = (i_position.clone() - j_position).abs();
-        //        //println!("Debug {}={},{}={},{}",i, i_charge, j, j_charge, dd);
-        //        nuc_energy += i_charge*j_charge/dd;
-        //    });
-        //});
         let tmp_range1 = (0..self.position.size[1]);
         self.position.iter_columns(tmp_range1).enumerate().for_each(|(i,ri)| {
             let i_charge = mass_charge[i].1;
@@ -159,9 +148,6 @@ impl GeomCell {
                 nuc_energy += i_charge*j_charge/dd;
             });
         });
-
-        println!("Nuc_energy: {}",nuc_energy);
-        
         nuc_energy
     }
     //pub fn get_elems_(&mut self,Vec<T>) ->  std::iter::Enumerate<std::slice::Iter<'_, std::string::String>> {

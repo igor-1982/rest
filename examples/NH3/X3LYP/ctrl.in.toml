@@ -1,15 +1,14 @@
 [ctrl]
+     # 设置程序输出的程度，缺省为1
+     print_level =               0
      # 设置Rayon和OpenMP的并行数，缺省为1
-     num_threads =               2
+     num_threads =               1
      # 设置使用的电子结构方法，缺省为HF
      xc =                        "x3lyp" 
-     # 设置程序输出的程度，缺省为1
-     print_level =               1
      # 设置（辅助）基组的路径。如果找不到该路径，则创建该路径，并从BSE下载
      # 注意：计算节点需支持连接外网。
-     basis_path =                "/home/igor/Documents/Package-Pool/rest_workspace/rest/basis-set-pool/6-31G*"
+     basis_path =                "/home/igor/Documents/Package-Pool/rest_workspace/rest/basis-set-pool/cc-pVDZ"
      auxbas_path =               "/home/igor/Documents/Package-Pool/rest_workspace/rest/basis-set-pool/def2-SV(P)-JKFIT" 
-     #auxbas_path =               "/home/igor/Documents/Package-Pool/rest_workspace/rest/basis-set-pool/def2-QZVPPD-RIFIT" 
      # 使用resolution-of-identity (RI)技术处理四中心积分
      eri_type =                  "ri-v"
      mixer =                     "diis"
@@ -22,8 +21,9 @@
      scf_acc_etot =              1.0e-8
      basis_type =                "spheric"
      auxbas_type =               "spheric"
-     initial_guess =             "vsap"
+     initial_guess =             "sad"
      chkfile =                   "none"
+     fchk =                      false
      charge =                    0.0
      spin =                      1.0
      spin_polarization =         false

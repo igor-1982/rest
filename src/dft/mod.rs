@@ -90,7 +90,7 @@ impl DFA4REST {
         println!("Libxc version used in REST: {}.{}.{}", vmajor, vminor, vmicro);
     }
 
-    pub fn new(name: &str, spin_channel: usize) -> DFA4REST {
+    pub fn new(name: &str, spin_channel: usize, print_level: usize) -> DFA4REST {
         let tmp_name = name.to_lowercase();
         let post_dfa = DFA4REST::parse_postscf(&tmp_name, spin_channel);
         match post_dfa {
@@ -116,11 +116,14 @@ impl DFA4REST {
             },
             None => {
                 let dfa = DFA4REST::parse_scf(&tmp_name, spin_channel);
-                println!("the functional of '{}' contains", &name);
-                dfa.dfa_compnt_scf.iter().for_each(|xc_func| {
-                    dfa.init_libxc(xc_func).xc_func_info_printout()
-                });
-                println!("debug {:?}",&dfa.dfa_paramr_scf);
+                if print_level> 0 {
+                    println!("the functional of '{}' contains", &name);
+                    dfa.dfa_compnt_scf.iter().for_each(|xc_func| {
+                        let tmp_dfa = dfa.init_libxc(xc_func);
+                        tmp_dfa.xc_func_info_printout();
+                    });
+                };
+                //println!("debug {:?}",&dfa.dfa_paramr_scf);
                 dfa
             },
         }
@@ -493,7 +496,7 @@ impl DFA4REST {
         is_flag
     }
 
-    pub fn xc_exc_vxc(&self, grids: &Grids, spin_channel: usize, dm: &Vec<MatrixFull<f64>>, mo: &[MatrixFull<f64>;2], occ: &[Vec<f64>;2]) -> (Vec<f64>, Vec<MatrixFull<f64>>) {
+    pub fn xc_exc_vxc(&self, grids: &Grids, spin_channel: usize, dm: &Vec<MatrixFull<f64>>, mo: &[MatrixFull<f64>;2], occ: &[Vec<f64>;2], print_level:usize) -> (Vec<f64>, Vec<MatrixFull<f64>>) {
         let num_grids = grids.coordinates.len();
         let num_basis = dm[0].size[0];
         let mut exc = MatrixFull::new([num_grids,1],0.0);
@@ -700,11 +703,13 @@ impl DFA4REST {
             //exc.data.iter_mut().zip(rho.iter_j(i_spin)).for_each(|(exc,rho)| {
             //    *exc  = *exc* rho
         }
-        if spin_channel==1 {
-            println!("total electron number: {:16.8}", total_elec[0])
-        } else {
-            println!("electron number in alpha-channel: {:12.8}", total_elec[0]);
-            println!("electron number in beta-channel:  {:12.8}", total_elec[1]);
+        if print_level > 0 {
+            if spin_channel==1 {
+                println!("total electron number: {:16.8}", total_elec[0])
+            } else {
+                println!("electron number in alpha-channel: {:12.8}", total_elec[0]);
+                println!("electron number in beta-channel:  {:12.8}", total_elec[1]);
+            }
         }
         let dt6 = utilities::timing(&dt5, Some("evaluate exc and en"));
 
@@ -720,7 +725,14 @@ impl DFA4REST {
         (exc_total,vxc_ao)
     }
 
-    pub fn xc_exc_vxc_slots(&self, range_grids: Range<usize>, grids: &Grids, spin_channel: usize, dm: &Vec<MatrixFull<f64>>, mo: &[MatrixFull<f64>;2], occ: &[Vec<f64>;2]) -> (Vec<f64>, Vec<MatrixFull<f64>>,[f64;2]) {
+    pub fn xc_exc_vxc_slots(&self, 
+        range_grids: Range<usize>, 
+        grids: &Grids, 
+        spin_channel: usize, 
+        dm: &Vec<MatrixFull<f64>>, 
+        mo: &[MatrixFull<f64>;2], 
+        occ: &[Vec<f64>;2]) -> (Vec<f64>, Vec<MatrixFull<f64>>,[f64;2]) 
+        {
         //let num_grids = grids.coordinates.len();
         let num_grids = range_grids.len();
         let num_basis = dm[0].size[0];
@@ -1184,7 +1196,6 @@ impl Grids {
 
             let dt0 = utilities::init_timing();
 
-            println!("Read grids from the external file: {}", &mol.ctrl.external_grids);
 
             let mut weights:Vec<f64> = Vec::new();
             let mut coordinates: Vec<[f64;3]> = Vec::new();
@@ -1215,7 +1226,7 @@ impl Grids {
                 //println!("{:16.8} {:16.8} {:16.8} {:16.8}", x,y,z,w);
             }
 
-            println!("Size of imported grids: {}",weights.len());
+            //println!("Size of imported grids: {}",weights.len());
 
             utilities::timing(&dt0, Some("Importing the grids"));
 
@@ -1280,7 +1291,6 @@ impl Grids {
             weights.extend(ws_atom);
         });
 
-        println!("Size of generated grids: {}",weights.len());
 
         utilities::timing(&dt0, Some("Generating the grids"));
         let parallel_balancing = balancing(coordinates.len(), rayon::current_num_threads());
@@ -1304,7 +1314,7 @@ impl Grids {
         let mut coordinates: Vec<[f64;3]> =vec![];
         let mut weights:Vec<f64> = vec![];
         let mut num_points:usize = 0;
-        println!("{:?}, {:?}",&alpha_min, &alpha_max);
+        //println!("{:?}, {:?}",&alpha_min, &alpha_max);
 
         alpha_min.iter().zip(alpha_max.iter()).enumerate().for_each(|(center_index,value)| {
             let (rs_atom, ws_atom) = gen_grids::atom_grid(
@@ -1686,6 +1696,7 @@ impl Grids {
                     .iter().filter(|occ| **occ>0.0).map(|occ| occ.sqrt()).collect_vec();
                 let num_occ = occ_s.len();
                 // wmo = weigthed mo ('ij,j->ij'): mo_s(ij), occ_s(j) -> wmo(ij)
+                //println!("{:?}.{:?}", &occ, &occ_s);
                 let mut wmo = _einsum_01_serial(&mo_s.to_matrixfullslice(),&occ_s);
 
                 let mut tmo = MatrixFull::new([num_occ,num_grids],0.0);

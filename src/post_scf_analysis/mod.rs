@@ -5,7 +5,9 @@ pub mod cube_build;
 pub mod molden_build;
 
 pub fn post_scf_analysis(scf_data: &SCF) {
-    scf_data.save_fchk_of_gaussian();
+    if scf_data.mol.ctrl.fchk {
+        scf_data.save_fchk_of_gaussian()
+    };
     if scf_data.mol.ctrl.fciqmc_dump {
         fciqmc_dump(&scf_data);
     }
