@@ -1,5 +1,5 @@
 use clap::value_parser;
-use tensors::{ERIFull,MatrixFull, ERIFold4, MatrixUpper, TensorSliceMut, RIFull, MatrixFullSlice, MatrixFullSliceMut, BasicMatrix, MathMatrix, MatrixUpperSlice};
+use tensors::{ERIFull,MatrixFull, ERIFold4, MatrixUpper, TensorSliceMut, RIFull, MatrixFullSlice, MatrixFullSliceMut, BasicMatrix, MathMatrix, MatrixUpperSlice, ParMathMatrix};
 use itertools::{Itertools, iproduct, izip};
 use libc::SCHED_OTHER;
 use core::num;
@@ -310,11 +310,13 @@ impl SCF {
             tmp_scf.generate_density_matrix()
         } else if mol.ctrl.initial_guess.eq(&"sad") {
             let dm = sad_dm(&mol);
+            let dm_av = dm[0].add(&dm[1]).unwrap();
             if ! mol.ctrl.spin_polarization {
-                tmp_scf.density_matrix[0] = dm;
+                tmp_scf.density_matrix[0] = dm_av;
             } else {
-                tmp_scf.density_matrix[0] = dm.clone()*0.5;
-                tmp_scf.density_matrix[1] = dm*0.5;
+                let dm_av = dm_av * 0.5;
+                tmp_scf.density_matrix[0] = dm_av.clone();
+                tmp_scf.density_matrix[1] = dm_av;
             }
         } else {
             let mut init_fock = if mol.ctrl.initial_guess.eq(&"vsap") {
@@ -418,7 +420,8 @@ impl SCF {
 
     pub fn generate_occupation(&mut self) {
         if self.mol.ctrl.atom_sad {
-            self.generate_occupation_sad()
+            //self.generate_occupation_sad()
+            self.generate_occupation_integer()
         } else {
             self.generate_occupation_integer()
         }
@@ -1702,7 +1705,7 @@ impl SCF {
         //println!("debug: {}", self.scf_energy);
         // for DFT calculations, we should replace the exchange-correlation (xc) potential by the xc energy
         self.scf_energy = self.scf_energy - vxc_total + exc_total;
-        if self.mol.ctrl.print_level>0 {println!("Exc: {:?}, Vxc: {:?}", exc_total, vxc_total)};
+        if self.mol.ctrl.print_level>1 {println!("Exc: {:?}, Vxc: {:?}", exc_total, vxc_total)};
         match self.scftype {
             SCFType::RHF => {
                 // D*(H^{core}+F)

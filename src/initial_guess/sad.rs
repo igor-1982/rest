@@ -1,12 +1,13 @@
 use tensors::MatrixFull;
 use crate::molecule_io::Molecule;
 use crate::ctrl_io::InputKeywords;
-use crate::geom_io::GeomCell;
+use crate::geom_io::{GeomCell, formated_element_name};
 use crate::scf_io::scf;
 
-pub fn sad_dm(mol: &Molecule) -> MatrixFull<f64> {
+pub fn sad_dm(mol: &Molecule) -> Vec<MatrixFull<f64>> {
     let mut elem_name: Vec<String> = vec![];
-    let mut dms: Vec<MatrixFull<f64>> = vec![];
+    let mut dms_alpha: Vec<MatrixFull<f64>> = vec![];
+    let mut dms_beta: Vec<MatrixFull<f64>> = vec![];
     mol.geom.elem.iter().for_each(|ielem| {
         let mut index = 0;
 
@@ -36,12 +37,16 @@ pub fn sad_dm(mol: &Molecule) -> MatrixFull<f64> {
             atom_ctrl.num_threads = Some(1);
             atom_ctrl.mixer = "diis".to_string();
             atom_ctrl.initial_guess = "hcore".to_string();
-            atom_ctrl.spin = 1.0_f64;
-            atom_ctrl.charge = 0.0_f64;
+            atom_ctrl.print_level = 1;
             atom_ctrl.atom_sad = true;
+            atom_ctrl.charge = 0.0_f64;
+            //let (spin, spin_channel, spin_polarization) = ctrl_setting_atom_sad(ielem);
+            //atom_ctrl.spin = spin;
+            //atom_ctrl.spin_channel = spin_channel;
+            //atom_ctrl.spin_polarization = spin_polarization;
+            atom_ctrl.spin = 1.0;
             atom_ctrl.spin_channel = 1;
             atom_ctrl.spin_polarization = false;
-            atom_ctrl.print_level = 0;
 
             let mut atom_geom = GeomCell::new();
             atom_geom.name = ielem.to_string();
@@ -52,15 +57,24 @@ pub fn sad_dm(mol: &Molecule) -> MatrixFull<f64> {
 
             let mut atom_scf = scf(atom_mol).unwrap();
 
-            dms.push(atom_scf.density_matrix[0].clone());
+            if atom_scf.mol.spin_channel == 1 {
+                let dm = atom_scf.density_matrix[0].clone()*0.5;
+                dms_alpha.push(dm.clone());
+                dms_beta.push(dm);
+            } else {
+                dms_alpha.push(atom_scf.density_matrix[0].clone());
+                dms_beta.push(atom_scf.density_matrix[1].clone());
+            }
         } else {
-            let dm = dms[index].clone();
-            dms.push(dm);
+            let dm = dms_alpha[index].clone();
+            dms_alpha.push(dm);
+            let dm = dms_beta[index].clone();
+            dms_beta.push(dm);
         }
 
     });
 
-    block_diag(&dms)
+    vec![block_diag(&dms_alpha), block_diag(&dms_beta)]
 
 }
 
@@ -83,4 +97,17 @@ pub fn block_diag(dms: &Vec<MatrixFull<f64>>) -> MatrixFull<f64>{
         ao_index += dm_atom.size[0];
     });
     dm
+}
+
+pub fn ctrl_setting_atom_sad(elem: &String) -> (f64,usize,bool) {
+    match &formated_element_name(elem)[..] {
+        "H" | "Li" | "Na" | "K"  | "Rb" | "Cs" | "Fr" => (2.0, 2, true),
+        "B" | "Al" | "Ga" | "In" | "Tl" | "Nh" => (2.0, 2, true),
+        "C" | "Si" | "Ge" | "Sn" | "Pb" | "Fl" => (3.0, 2, true),
+        "N" | "P"  | "As" | "Sb" | "Bi" | "Mc" => (4.0, 2, true),
+        "O" | "S"  | "Se" | "Te" | "Po" | "Lv" => (3.0, 2, true),
+        "F" | "Cl" | "Br" | "I"  | "At" | "Ts" => (2.0, 2, true),
+        _ => (1.0,1,false)
+    }
+
 }
