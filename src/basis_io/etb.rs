@@ -69,7 +69,7 @@ pub fn get_basis_from_mol(mol: &Molecule, atom: &String) -> anyhow::Result<Basis
 /// # Returns:
 /// An [`InfoV2`] struct containing a hashmap of elements and their corresponding ETBs.
 /// 
-pub fn etb_gen_for_atom_list(mol: &Molecule, beta: &f64, required_elem: &Vec<String>) -> InfoV2 {
+pub fn etb_gen_for_atom_list_contracted(mol: &Molecule, beta: &f64, required_elem: &Vec<String>) -> InfoV2 {
 
     //get elements in the given molecule
     let mut newbasis = InfoV2::new();
@@ -174,20 +174,185 @@ pub fn etb_gen_for_atom_list(mol: &Molecule, beta: &f64, required_elem: &Vec<Str
         ns = ns.iter().map(|v| v.ceil()).filter(|v| *v > 0.0).collect();
 
         let etb_para: Vec<(usize, usize, f64, f64)> = ns.iter().zip(emin_by_l_new).enumerate().map(|(l, (n, min))|(l, *n as usize, min, *beta)).collect();
-        let etb_result = etbs_gen(etb_para);
+        let etb_result = etbs_gen_contracted(etb_para);
 
         newbasis.elements.insert(elem.clone(), etb_result);
 
         index += 1;
     }
     
+    println!("beta = {}", beta);
+    println!("newbasis = {:?}", newbasis);
+    newbasis
+
+}
+
+
+
+//generate even-tempered basis
+//dfbasis: default aux basis. For pyscf, it is weigend, aka. def2-universal-jfit
+//auxbas_path: path to auxbas
+//beta: controls the size of generated auxbas set
+// start_at: determine the first atom number to generate auxbas. Generally, heavy atoms 
+//          use generated auxbas, while light atoms use dfbasis.
+
+
+//give etbs for atom list
+/// Generate even-tempered auxiliary Gaussian basis (ETB) for the given list of atoms. 
+/// # Arguments:
+/// **mol**: Struct [`crate::molecule_io::Molecule`] containing molecule information. <br>
+/// **beta**: Controls the size of generated ETB. <br>
+/// **required_elem**: A vector containing elements of which the ETB to be generated. <br>
+/// # Returns:
+/// An [`InfoV2`] struct containing a hashmap of elements and their corresponding ETBs.
+/// 
+pub fn etb_gen_for_atom_list_primitive(mol: &Molecule, beta: &f64, required_elem: &Vec<String>) -> InfoV2 {
+
+    //get elements in the given molecule
+    let mut newbasis = InfoV2::new();
+    //let nuc_start = elem_indexer(start_at)
+    let required_elem_mass_charge = get_mass_charge(required_elem);
+    let required_elem_charge: Vec<usize> = required_elem_mass_charge.iter().map(|(a, b)| (*b as usize)).collect();
+
+    //println!("test1");
+
+    let mut index = 0;
+    for elem in required_elem {
+        let nuc_charge = required_elem_charge[index];
+        let conf = ATOM_CONFIGURATION[nuc_charge];
+        let mut max_shells = 0;
+        for shell in conf {
+            if shell != 0 {
+                max_shells += 1;
+            }
+        }
+
+        //println!("test2, elem = {}", elem);
+
+        let basis = get_basis_from_mol(&mol, elem).unwrap();
+        let ang_array: Vec<usize> = basis.electron_shells.iter().map(|b| b.angular_momentum[0] as usize).collect();
+        //max shell number, not max angular momentum (4 = 3 + 1)
+        //let max_ang = ang_array.into_iter().max().unwrap() + 1;
+
+        let mut emin_by_l = vec![1.0e99_f64; 8];
+        let mut emax_by_l = vec![0.0_f64; 8];
+        let mut l_max = 0;
+        
+        for b in basis.electron_shells {
+            let l = b.angular_momentum[0] as usize;
+            l_max = max(l, l_max);
+            if l >= (max_shells + 1) {
+                //println!("maxshell = {}, l={}", max_shells, l);
+                continue;
+            }
+            let es = b.exponents;
+            let cs = b.coefficients; 
+            let mut es_new = vec![];    
+
+            //println!("test3, l = {}", l);
+
+            for row_num in 0..cs[0].len() {
+                //let mut max = 0.0;
+                let mut tmp_max = 0.0;
+                //println!("test4, row_num = {}", row_num);
+                //tmp = cs[row_num].iter().map(|v| v.abs()).collect_vec().max();
+                let mut tmp = cs.iter().map(|col| col[row_num].abs()).collect_vec();
+                let tmp_max = tmp.clone().max();
+                //println!("test4.5, tmp = {:?}", tmp);
+                if tmp_max > 1.0e-3*CINTR2CDATA::gto_norm(l as std::os::raw::c_int, es[row_num]) {
+                    es_new.push(es[row_num]);
+                    //println!("test5, es_new = {:?}", es_new);
+                }
+
+            }
+
+            emax_by_l[l] = emax_by_l[l].max(es_new.clone().max());
+            emin_by_l[l] = emin_by_l[l].min(es_new.min());
+            //println!("test6, emax_by_l = {:?}, emin_by_l = {:?}", emax_by_l, emin_by_l);
+
+        }
+
+        let l_max1 = l_max + 1;
+        emax_by_l = emax_by_l[0..l_max1].to_vec();
+        emin_by_l = emin_by_l[0..l_max1].to_vec();
+        //Estimate the exponents ranges by geometric average
+
+        //println!("test7, emax_by_l = {:?}, emin_by_l = {:?}", emax_by_l, emin_by_l);
+
+        let emax_by_l_root: Vec<f64> = emax_by_l.iter().map(|a| a.sqrt()).collect();
+        let emin_by_l_root: Vec<f64> = emin_by_l.iter().map(|a| a.sqrt()).collect();
+
+        //println!("test8, emax_by_l_root = {:?}, emin_by_l_root = {:?}", emax_by_l_root, emin_by_l_root);
+
+        let emax = _einsum_03_forvec(&emax_by_l_root, &emax_by_l_root);
+        let emin = _einsum_03_forvec(&emin_by_l_root, &emin_by_l_root);
+
+        //println!("test9, emax = {:?}, emin = {:?}", emax, emin);
+
+        //l_max1 is max_ang
+        //let liljsum = MatrixFull::<f64>::new_ijsum([l_max1; 2]);
+        let mut emax_by_l_new = vec![];
+        let mut emin_by_l_new = vec![];
+        for i in 0..(l_max1*2-1) {
+            //println!("test10, i = {}", i);
+            emax_by_l_new.push(emax.get_sub_antidiag_terms(i).unwrap().max());
+            emin_by_l_new.push(emin.get_sub_antidiag_terms(i).unwrap().min());
+            //println!("test11, emax_by_l_new = {:?}, emin_by_l_new = {:?}", emax_by_l_new, emin_by_l_new);
+            //println!("test10, i = {}", i);
+        }
+        // Tune emin and emax
+
+        emax_by_l_new = emax_by_l_new.into_iter().map(|v| 2.0*v).collect(); //*2 for alpha+alpha on same center
+        emin_by_l_new = emin_by_l_new.into_iter().map(|v| 2.0*v).collect(); // (numpy.arange(l_max1*2-1)*.5+1)
+        
+        let mut ns: Vec<f64> = emax_by_l_new.iter().zip(&emin_by_l_new).map(|(max,min)| ((max+min)/min).log(E)/beta.log(E)).collect();
+
+        //let etb = ns.iter().enumerate().map(|(i, n)|(i, n, emin_by_l_new[i], beta)).collect()
+        ns = ns.iter().map(|v| v.ceil()).filter(|v| *v > 0.0).collect();
+
+        let etb_para: Vec<(usize, usize, f64, f64)> = ns.iter().zip(emin_by_l_new).enumerate().map(|(l, (n, min))|(l, *n as usize, min, *beta)).collect();
+        let etb_result = etbs_gen_primitive(etb_para);
+
+        newbasis.elements.insert(elem.clone(), etb_result);
+
+        index += 1;
+    }
+    
+    //println!("beta = {}", beta);
     //println!("newbasis = {:?}", newbasis);
     newbasis
 
 }
 
+pub fn etb_gen_for_atom_list(mol: &Molecule, beta: &f64, required_elem: &Vec<String>) -> InfoV2 {
+    etb_gen_for_atom_list_primitive(mol, beta, required_elem)
+}
+
 /// Generate even-tempered auxiliary Gaussian basis for a single atom.
-pub fn etbs_gen(input: Vec<(usize, usize, f64, f64)>) -> Basis4Elem {
+pub fn etbs_gen_primitive(input: Vec<(usize, usize, f64, f64)>) -> Basis4Elem {
+
+    let mut bas = Basis4Elem {
+        electron_shells: vec![],
+        references: None,
+        global_index: (0,0),
+    };
+    
+/* 
+    bas.electron_shells = input.iter()
+    .map(|(l, n, alpha, beta)| (0..*n).rev().map(|i| etb_gen_primitive(l, i, alpha, beta))).collect();
+ */
+    for (l, n, alpha, beta) in input {
+        for i in (0..n).rev() {
+            bas.electron_shells.push(etb_gen_primitive(&l, &i, &alpha, &beta))
+        }
+    }
+
+    bas
+
+}
+
+/// Generate even-tempered auxiliary Gaussian basis for a single atom.
+pub fn etbs_gen_contracted(input: Vec<(usize, usize, f64, f64)>) -> Basis4Elem {
 
     let mut bas = Basis4Elem {
         electron_shells: vec![],
@@ -196,11 +361,13 @@ pub fn etbs_gen(input: Vec<(usize, usize, f64, f64)>) -> Basis4Elem {
     };
     
     bas.electron_shells = input.iter()
-    .map(|(l, n, alpha, beta)| etb_gen(l, n, alpha, beta)).collect();
+    .map(|(l, n, alpha, beta)| etb_gen_contracted(l, n, alpha, beta)).collect();
 
     bas
 
 }
+
+
 
 /// Generate even-tempered auxiliary Gaussian basis for a single electron shell.
 /// # Arguments:
@@ -219,7 +386,7 @@ pub fn etbs_gen(input: Vec<(usize, usize, f64, f64)>) -> Basis4Elem {
 /// \end{align}
 /// $$
 
-pub fn etb_gen(l: &usize, n: &usize, alpha: &f64, beta: &f64) -> BasCell {
+pub fn etb_gen_contracted(l: &usize, n: &usize, alpha: &f64, beta: &f64) -> BasCell {
     let mut shell = BasCell {
         function_type: Some(String::from("gto")),
         region: None,
@@ -238,6 +405,29 @@ pub fn etb_gen(l: &usize, n: &usize, alpha: &f64, beta: &f64) -> BasCell {
     shell
 
 }
+
+pub fn etb_gen_primitive(l: &usize, i: &usize, alpha: &f64, beta: &f64) -> BasCell {
+    let mut shell = BasCell {
+        function_type: Some(String::from("gto")),
+        region: None,
+        angular_momentum: vec![*l as i32],
+        exponents: vec![],
+        coefficients: vec![vec![1.0_f64]],
+    };
+/*
+    for i in (0..n).rev() {
+        shell.exponents.push(alpha*beta*(i as f64));
+        shell.coefficients[0].push(1.0_f64);
+    }
+ */
+    shell.exponents.push(alpha*beta.powf(*i as f64));
+
+    shell
+
+}
+
+
+
 
 /// Get elements of which the ETBs to be generated according to the start atom. Returns a vector of elements.
 pub fn get_etb_elem(mol: &GeomCell, start_atom: &usize) -> Vec<String>{

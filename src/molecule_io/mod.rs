@@ -382,6 +382,7 @@ impl Molecule {
                 }},
             };
            
+            //println!("tmp_auxbasis = {:?}", tmp_basis);
 
             let mut num_basis_per_atm = 0_usize;
             for tmp_bascell in &tmp_basis.electron_shells {
@@ -423,7 +424,8 @@ impl Molecule {
                             elem_index0: atm_index,
                             cint_index0: aux_bas.len(),
                             cint_index1: index0*tmp_bas_num+index1,
-                        })
+                        });
+                        //println!("auxbas_info = {:?}", auxbas_info);
                     });
                 });
                 aux_cint_fdqc.push(vec![tmp_start,tmp_len]);
@@ -431,7 +433,6 @@ impl Molecule {
                 basis_start += num_primitive + num_primitive*num_contracted;
                 num_basis_per_atm += tmp_len 
             }
-
             auxbas_total.push(tmp_basis);
             if atm_index !=0 {
                 auxbas_total[atm_index].global_index.0 = auxbas_total[atm_index-1].global_index.0 + auxbas_total[atm_index-1].global_index.1; 
@@ -444,6 +445,7 @@ impl Molecule {
         // At current stage, we skip the linear-dependence check of the basis sets
         let num_auxbas = auxbas_info.len();
 
+        //println!("auxbas_total = {:?}", auxbas_total);
         (auxbas_total, aux_atm, aux_bas, aux_env,auxbas_info,aux_cint_fdqc,num_auxbas)
     }
 
@@ -1031,6 +1033,7 @@ impl Molecule {
             }
         }
         cint_data.final_c2r();
+        //aux_v.formated_output_e(4, "full");
         aux_v
     }
 
@@ -1117,7 +1120,7 @@ impl Molecule {
         time_records.count("prim ri");
         // then the auxiliary 2-center coulumb matrix: V=(\nu|\mu)
         time_records.count_start("aux_ij");
-        let mut aux_v = self.int_ij_aux_columb();
+        let mut aux_v = self.int_ij_aux_columb();  //issue occurred here
         time_records.count("aux_ij");
 
         time_records.count_start("sqrt_matr");
