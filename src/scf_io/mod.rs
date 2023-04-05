@@ -264,7 +264,7 @@ impl SCF {
         // now prepare initial guess from different methods
         initial_guess(&mut new_scf);
 
-        if ! new_scf.mol.ctrl.atom_sad && new_scf.mol.ctrl.print_level>2 {
+        if ! new_scf.mol.ctrl.atom_sad && new_scf.mol.ctrl.print_level>4 {
             println!("Initial density matrix:");
             new_scf.density_matrix[0].formated_output(5, "full");
             //println!("Occupation: {:?}", tmp_scf.occupation);
