@@ -1326,7 +1326,8 @@ impl SCF {
             SCFType::RHF => -0.5,
             _ => -1.0,
         };
-        let vk = self.generate_vk_with_ri_v(scaling_factor);
+        let use_dm_only = self.mol.ctrl.use_dm_only;
+        let vk = self.generate_vk_with_ri_v(scaling_factor, use_dm_only);
         let dt3 = time::Local::now();
         let timecost1 = (dt2.timestamp_millis()-dt1.timestamp_millis()) as f64 /1000.0;
         let timecost2 = (dt3.timestamp_millis()-dt2.timestamp_millis()) as f64 /1000.0;
@@ -1473,7 +1474,8 @@ impl SCF {
             _ => -1.0,
         }*self.mol.xc_data.dfa_hybrid_scf ;
         if ! scaling_factor.eq(&0.0) {
-            let vk = self.generate_vk_with_ri_v(scaling_factor);
+            let use_dm_only = self.mol.ctrl.use_auxbas;
+            let vk = self.generate_vk_with_ri_v(scaling_factor, use_dm_only);
             for i_spin in (0..spin_channel) {
                 self.hamiltonian[i_spin].data
                     .par_iter_mut()
@@ -1521,7 +1523,40 @@ impl SCF {
         if self.mol.ctrl.eri_type.eq("analytic") {
             self.generate_hf_hamiltonian_erifold4();
         } else if  self.mol.ctrl.eri_type.eq("ri_v") {
-            self.generate_hf_hamiltonian_ri_v();
+            //self.generate_hf_hamiltonian_ri_v();
+            //let num_state = self.mol.num_state;
+            let spin_channel = self.mol.spin_channel;
+            //let homo = &self.homo;
+            //let dt1 = time::Local::now();
+            let vj = self.generate_vj_with_ri_v_sync(1.0);
+            //let dt2 = time::Local::now();
+            let scaling_factor = match self.scftype {
+                SCFType::RHF => -0.5,
+                _ => -1.0,
+            };
+            let vk = self.generate_vk_with_ri_v(scaling_factor, true);
+            let dt3 = time::Local::now();
+            for i_spin in (0..spin_channel) {
+                self.hamiltonian[i_spin] = self.h_core.clone();
+                self.hamiltonian[i_spin].data
+                                .par_iter_mut()
+                                .zip(vj[0].data.par_iter())
+                                .for_each(|(h_ij,vj_ij)| {
+                                    *h_ij += vj_ij
+                                });
+                self.hamiltonian[i_spin].data
+                                .par_iter_mut()
+                                .zip(vj[1].data.par_iter())
+                                .for_each(|(h_ij,vj_ij)| {
+                                    *h_ij += vj_ij
+                                });
+                self.hamiltonian[i_spin].data
+                                .par_iter_mut()
+                                .zip(vk[i_spin].data.par_iter())
+                                .for_each(|(h_ij,vk_ij)| {
+                                    *h_ij += vk_ij
+                                });
+            };
         }
     }
 
@@ -1658,7 +1693,8 @@ impl SCF {
 
     pub fn evaluate_exact_exchange_ri_v(&mut self) -> f64 {
         let mut x_energy = 0.0;
-        let mut vk = self.generate_vk_with_ri_v(1.0);
+        let use_dm_only = self.mol.ctrl.use_dm_only;
+        let mut vk = self.generate_vk_with_ri_v(1.0, use_dm_only);
         let spin_channel = self.mol.spin_channel;
         for i_spin in 0..spin_channel {
             let dm_s = &self.density_matrix[i_spin];
@@ -1801,7 +1837,7 @@ impl SCF {
         flag
     }
 
-    pub fn formated_eigenvalues(&mut self,num_state_to_print:usize) {
+    pub fn formated_eigenvalues(&self,num_state_to_print:usize) {
         let spin_channel = self.mol.spin_channel;
         if spin_channel==1 {
             println!("{:>8}{:>14}{:>18}",String::from("State"),
@@ -2178,14 +2214,14 @@ impl SCF {
         }
     }
 
-    pub fn generate_vk_with_ri_v(&mut self, scaling_factor: f64) -> Vec<MatrixUpper<f64>> {
+    pub fn generate_vk_with_ri_v(&mut self, scaling_factor: f64, use_dm_only: bool) -> Vec<MatrixUpper<f64>> {
         //let num_basis = self.mol.num_basis;
         //let num_state = self.mol.num_state;
         //let num_auxbas = self.mol.num_auxbas;
         //let npair = num_basis*(num_basis+1)/2;
         let spin_channel = self.mol.spin_channel;
 
-        if self.mol.ctrl.use_dm_only {
+        if use_dm_only {
             let dm = &self.density_matrix;
             vk_upper_with_ri_v_use_dm_only_sync(&mut self.ri3fn, dm, spin_channel, scaling_factor)
         } else {

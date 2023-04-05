@@ -37,7 +37,7 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
             atom_ctrl.num_threads = Some(1);
             atom_ctrl.mixer = "diis".to_string();
             atom_ctrl.initial_guess = "hcore".to_string();
-            atom_ctrl.print_level = 1;
+            atom_ctrl.print_level = 0;
             atom_ctrl.atom_sad = true;
             atom_ctrl.charge = 0.0_f64;
             let (spin, spin_channel, spin_polarization) = ctrl_setting_atom_sad(ielem);
