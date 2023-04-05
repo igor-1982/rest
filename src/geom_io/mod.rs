@@ -131,10 +131,10 @@ impl GeomCell {
     pub fn get_elem(&self, index_a:usize) -> anyhow::Result<String> {
         Ok(self.elem[index_a].to_owned())
     }
-    pub fn get_elems_iter(&mut self) ->  std::slice::Iter<'_, std::string::String> {
+    pub fn get_elems_iter(&self) ->  std::slice::Iter<'_, std::string::String> {
         self.elem.iter()
     }
-    pub fn calc_nuc_energy(&mut self) -> f64 {
+    pub fn calc_nuc_energy(&self) -> f64 {
         let mass_charge = get_mass_charge(&self.elem);
         let mut nuc_energy = 0.0;
         let tmp_range1 = (0..self.position.size[1]);

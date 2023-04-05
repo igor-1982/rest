@@ -313,7 +313,7 @@ pub fn fourcenter_after_isdf(k_mu: usize, mol: &Molecule, grids: &dft::Grids) ->
     zeta_mu.lapack_dgemm(&mut c1, &mut c2, 'N', 'N', 1.0, 0.0); //ISDF auxiliary wavefunction
 
     //<Z|V|P><P|V|P><P|V|Z>
-    let mut cint_data = mol.initialize_cint();
+    let mut cint_data = mol.initialize_cint(true);
     let n_basis_shell = mol.cint_bas.len();
     let n_auxbas_shell = mol.cint_aux_bas.len();
     let mut ri3fn = RIFull::new([nao,nao,nri],0.0);
@@ -398,7 +398,7 @@ pub fn error_isdf(k_mu: Range<usize>, scf_data: &SCF) -> (Vec<usize>,Vec<f64>, V
     let mol = &scf_data.mol;
     let grids = scf_data.grids.as_ref().unwrap();
     // int2e
-    let mut cint_data = mol.initialize_cint();
+    let mut cint_data = mol.initialize_cint(true);
         let nbas = mol.num_basis;
         let mut mat_full = 
             ERIFull::new([nbas,nbas,nbas,nbas],0.0);

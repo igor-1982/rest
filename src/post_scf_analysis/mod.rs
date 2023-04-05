@@ -5,25 +5,25 @@ pub mod cube_build;
 pub mod molden_build;
 
 pub fn post_scf_analysis(scf_data: &SCF) {
-    if scf_data.mol.ctrl.fchk {
+    if scf_data.mol.ctrl.output_fchk {
         scf_data.save_fchk_of_gaussian()
     };
     if scf_data.mol.ctrl.fciqmc_dump {
         fciqmc_dump(&scf_data);
     }
-    if scf_data.mol.ctrl.wfn_in_real_space>0 {
-        let np = scf_data.mol.ctrl.wfn_in_real_space;
+    if scf_data.mol.ctrl.output_wfn_in_real_space>0 {
+        let np = scf_data.mol.ctrl.output_wfn_in_real_space;
         let slater_determinant = rand_wf_real_space::slater_determinant(&scf_data, np);
         let output = serde_json::to_string(&slater_determinant).unwrap();
         let mut file = std::fs::File::create("./wf_in_real_space.txt").unwrap();
         std::io::Write::write(&mut file, output.as_bytes());
     }
 
-    if scf_data.mol.ctrl.cube == true {
+    if scf_data.mol.ctrl.output_cube == true {
         let cube_file = cube_build::get_cube(&scf_data,80);
     }
 
-    if scf_data.mol.ctrl.molden == true {
+    if scf_data.mol.ctrl.output_molden == true {
         let molden_file = molden_build::gen_molden(&scf_data);
     }
 }

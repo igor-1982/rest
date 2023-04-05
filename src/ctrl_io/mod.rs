@@ -64,20 +64,23 @@ pub struct InputKeywords {
     pub scf_acc_rho: f64,
     pub scf_acc_eev: f64,
     pub scf_acc_etot:f64,
-    pub chkfile: String,
     pub restart: bool,
+    pub chkfile: String,
+    pub chkfile_type: String,
     pub guessfile: String,
+    pub guessfile_type: String,
     pub external_init_guess: bool,
     pub initial_guess: String,
     pub noiter: bool,
     pub check_stab: bool,
+    pub use_dm_only: bool,
     // Keywords for fciqmc dump
     pub fciqmc_dump: bool,
     // Kyewords for post scf analysis
-    pub wfn_in_real_space: usize,
-    pub cube: bool,
-    pub molden: bool,
-    pub fchk: bool,
+    pub output_wfn_in_real_space: usize,
+    pub output_cube: bool,
+    pub output_molden: bool,
+    pub output_fchk: bool,
     // Keywords for sad initial guess
     pub atom_sad: bool,
     // Keywords for parallism
@@ -125,7 +128,9 @@ impl InputKeywords {
             etb_beta: 2.0,
             // Keywords for the scf procedures
             chkfile: String::from("none"),
+            chkfile_type: String::from("none"),
             guessfile: String::from("none"),
+            guessfile_type: String::from("hdf5"),
             mixer: String::from("direct"),
             mix_param: 1.0,
             num_max_diis: 2,
@@ -136,16 +141,17 @@ impl InputKeywords {
             scf_acc_etot:1.0e-8,
             restart: false,
             external_init_guess: false,
-            initial_guess: String::from("hcore"),
+            initial_guess: String::from("sad"),
             noiter: false,
             check_stab: false,
+            use_dm_only: false,
             // Keywords for the fciqmc dump
             fciqmc_dump: false,
             // Kyewords for post scf
-            wfn_in_real_space: 0,
-            cube: false,
-            molden: false,
-            fchk: false,
+            output_wfn_in_real_space: 0,
+            output_cube: false,
+            output_molden: false,
+            output_fchk: false,
             // Keyword to turn on atom calculations for the SAD initial guess
             atom_sad: false,
             // Derived keywords of identifying the method used
@@ -458,7 +464,12 @@ impl InputKeywords {
                     other => {2_usize}
                 };
 
+                // Initial guess relevant keywords
                 tmp_input.guessfile = match tmp_ctrl.get("guessfile").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_guess) => tmp_guess.clone(),
+                    other => String::from("none"),
+                };
+                tmp_input.guessfile_type = match tmp_ctrl.get("guessfile_type").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_guess) => tmp_guess.to_lowercase().clone(),
                     other => String::from("none"),
                 };
@@ -466,6 +477,10 @@ impl InputKeywords {
                             std::path::Path::new(&tmp_input.guessfile).exists();
 
                 tmp_input.chkfile = match tmp_ctrl.get("chkfile").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_chk) => tmp_chk.clone(),
+                    other => String::from("none"),
+                };
+                tmp_input.chkfile_type = match tmp_ctrl.get("chkfile_type").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_chk) => tmp_chk.to_lowercase().clone(),
                     other => String::from("none"),
                 };
@@ -476,6 +491,8 @@ impl InputKeywords {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase()},
                     other => {String::from("vsap")},
                 };
+
+
                 tmp_input.noiter = match tmp_ctrl.get("noiter").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
                     serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
@@ -486,28 +503,33 @@ impl InputKeywords {
                     serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
                     other => false,
                 };
+                tmp_input.use_dm_only = match tmp_ctrl.get("use_dm_only").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
+                    serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
+                    other => false,
+                };
                 // ================================================
                 //  Keywords associated with the post-SCF analyais
                 // ================================================
-                tmp_input.wfn_in_real_space = match tmp_ctrl.get("wfn_in_real_space").unwrap_or(&serde_json::Value::Null) {
+                tmp_input.output_wfn_in_real_space = match tmp_ctrl.get("output_wfn_in_real_space").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_wfn) => {tmp_wfn.to_lowercase().parse().unwrap_or(0)},
                     serde_json::Value::Number(tmp_wfn) => {tmp_wfn.as_i64().unwrap_or(0) as usize},
                     other => {0_usize},
                 };
 
-                tmp_input.cube = match tmp_ctrl.get("cube").unwrap_or(&serde_json::Value::Null) {
+                tmp_input.output_cube = match tmp_ctrl.get("output_cube").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
                     serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
                     other => false,
                 }; 
 
-                tmp_input.molden = match tmp_ctrl.get("molden").unwrap_or(&serde_json::Value::Null) {
+                tmp_input.output_molden = match tmp_ctrl.get("output_molden").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
                     serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
                     other => false,
                 }; 
 
-                tmp_input.fchk = match tmp_ctrl.get("fchk").unwrap_or(&serde_json::Value::Null) {
+                tmp_input.output_fchk = match tmp_ctrl.get("output_fchk").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
                     serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
                     other => false,
@@ -555,7 +577,7 @@ impl InputKeywords {
                     } else if tmp_input.restart && ! tmp_input.external_init_guess {
                         println!("The initial guess will be obtained from the existing checkfile \n({})",&tmp_input.chkfile)
                     } else {
-                        println!("The specified checkfile exists but is not loaded because of 'external_init_guess");
+                        println!("The specified checkfile exists but is not loaded because the keyword 'external_init_guess' is specified");
                         println!("It will be updated after the SCF procedure \n({})",&tmp_input.chkfile)
                         //println!("No existing checkfile for restart\n")
                     };

@@ -127,6 +127,16 @@ impl Molecule {
         }
     }
 
+    pub fn print_auxbas(&self) {
+        println!("cint_aux_bas: {:?}", self.cint_aux_bas);
+        println!("cint_aux_fdqc: {:?}", self.cint_aux_fdqc);
+        println!("cint_aux_atm: {:?}", self.cint_aux_atm);
+        println!("cint_aux_env: {:?}", self.cint_aux_env);
+        println!("cint_type: {:}", match self.cint_type {
+            CintType::Spheric => "Spheric",
+            CintType::Cartesian => "Cartesian"})
+    }
+
     pub fn build(ctrl_file: String) -> anyhow::Result<Molecule> {
         //let mut mol = Molecule::new();
         //let (mut ctrl, mut geom) = RawCtrl::parse_ctl_from_jsonfile_v02(ctrl_file)?;
@@ -159,9 +169,9 @@ impl Molecule {
             =(bas.clone(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),0);
 
 
-        let mut cint_data = CINTR2CDATA::new();
-        cint_data.set_cint_type(&cint_type);
-        cint_data.initial_r2c(&cint_atm, natm, &cint_bas, nbas, &env);
+        //let mut cint_data = CINTR2CDATA::new();
+        //cint_data.set_cint_type(&cint_type);
+        //cint_data.initial_r2c(&cint_atm, natm, &cint_bas, nbas, &env);
 
         //fdqc_aux_bas.iter().for_each(|i| {
         //    println!("{}", i.formated_name());
@@ -179,8 +189,7 @@ impl Molecule {
             println!("nbas: {}, natm: {} for standard basis sets", nbas, natm);
             println!("First valence state for the frozen-core algorithm: {:5}", start_mo);
         };
-
-        Ok(Molecule {
+        let mut mol = Molecule {
             ctrl,
             geom,
             xc_data,
@@ -202,7 +211,17 @@ impl Molecule {
             cint_aux_bas,
             cint_aux_env,
             cint_type
-        })
+        };
+        // check and prepare the auxiliary basis sets
+        if mol.ctrl.use_auxbas {mol.initialize_auxbas()};
+        if mol.ctrl.print_level>0 {
+            println!("numbasis: {:2}, num_auxbas: {:2}", mol.num_basis,mol.num_auxbas)
+        };
+
+        if mol.ctrl.print_level>4 {mol.print_auxbas()};
+
+        Ok(mol)
+
     }
     pub fn initialize_auxbas(&mut self) {
         let cint_type = if self.ctrl.basis_type.to_lowercase()==String::from("spheric") {
@@ -273,13 +292,16 @@ impl Molecule {
 
     }
 
-    pub fn initialize_cint(&self) -> CINTR2CDATA {
+    pub fn initialize_cint(&self, for_ri: bool) -> CINTR2CDATA {
         let mut final_cint_atm = self.cint_atm.clone();
-        final_cint_atm.extend(self.cint_aux_atm.clone());
         let mut final_cint_bas = self.cint_bas.clone();
-        final_cint_bas.extend(self.cint_aux_bas.clone());
         let mut final_cint_env = self.cint_env.clone();
-        final_cint_env.extend(self.cint_aux_env.clone());
+
+        if for_ri {
+            final_cint_atm.extend(self.cint_aux_atm.clone());
+            final_cint_bas.extend(self.cint_aux_bas.clone());
+            final_cint_env.extend(self.cint_aux_env.clone());
+        }
 
         let natm = final_cint_atm.len() as i32;
         let nbas = final_cint_bas.len() as i32;
@@ -662,7 +684,7 @@ impl Molecule {
     #[inline]
     pub fn int_ij_matrixupper(&mut self,op_name: String) -> MatrixUpper<f64> {
         let mut cur_op = op_name.clone();
-        let mut cint_data = self.initialize_cint();
+        let mut cint_data = self.initialize_cint(false);
         if op_name == String::from("ovlp") {
             cint_data.cint1e_ovlp_optimizer_rust();
         } else if op_name == String::from("kinetic") {
@@ -774,10 +796,10 @@ impl Molecule {
         mat_global
     }
     #[inline]
-    pub fn int_ijkl_erifull(&mut self) -> ERIFull<f64> {
+    pub fn int_ijkl_erifull(&self) -> ERIFull<f64> {
         //let mut dt_cint = 0.0_f64;
         //let dt1 = time::Local::now();
-        let mut cint_data = self.initialize_cint();
+        let mut cint_data = self.initialize_cint(false);
         let nbas = self.num_basis;
         let mut mat_full = 
             ERIFull::new([nbas,nbas,nbas,nbas],0.0);
@@ -832,8 +854,8 @@ impl Molecule {
         mat_full
     }
     #[inline]
-    pub fn int_ijkl_erifold4(&mut self) -> ERIFold4<f64> {
-        let mut cint_data = self.initialize_cint();
+    pub fn int_ijkl_erifold4(&self) -> ERIFold4<f64> {
+        let mut cint_data = self.initialize_cint(false);
         //let mut dt_cint = 0.0_f64;
         //let dt1 = time::Local::now();
         let nbas = self.num_basis;
@@ -868,7 +890,7 @@ impl Molecule {
         cint_data.final_c2r();
         mat_full
     }
-    pub fn int_ijkl_from_r3fn(&mut self, r3fn: &RIFull<f64>) -> ERIFold4<f64> {
+    pub fn int_ijkl_from_r3fn(&self, r3fn: &RIFull<f64>) -> ERIFold4<f64> {
         let nbas = self.num_basis;
         let npair = nbas*(nbas+1)/2;
 
@@ -886,8 +908,8 @@ impl Molecule {
 
     }
 
-    pub fn int_ijk_rifull(&mut self) -> RIFull<f64> {
-        let mut cint_data = self.initialize_cint();
+    pub fn int_ijk_rifull(&self) -> RIFull<f64> {
+        let mut cint_data = self.initialize_cint(true);
         // It is O_V = (ij|\nu)
         let n_basis = self.num_basis;
         let n_auxbas = self.num_auxbas;
@@ -929,7 +951,7 @@ impl Molecule {
     }
 
 
-    pub fn int_ijk_rifull_rayon(&mut self) -> RIFull<f64> {
+    pub fn int_ijk_rifull_rayon(&self) -> RIFull<f64> {
         // It is O_V = (ij|\nu)
         let n_basis = self.num_basis;
         let n_auxbas = self.num_auxbas;
@@ -949,7 +971,7 @@ impl Molecule {
         self.cint_aux_fdqc.par_iter().enumerate().for_each_with(sender,|s,(k,bas_info)| {
 
             // first, initialize rust_cint for each rayon threads
-            let mut cint_data = self.initialize_cint();
+            let mut cint_data = self.initialize_cint(true);
 
             let basis_start_k = bas_info[0];
             let basis_len_k = bas_info[1];
@@ -998,8 +1020,8 @@ impl Molecule {
         ri3fn
     }
 
-    pub fn int_ij_aux_columb(&mut self) -> MatrixFull<f64> {
-        let mut cint_data = self.initialize_cint();
+    pub fn int_ij_aux_columb(&self) -> MatrixFull<f64> {
+        let mut cint_data = self.initialize_cint(true);
         let n_auxbas = self.num_auxbas;
         let n_basis_shell = self.cint_bas.len();
         let n_auxbas_shell = self.cint_aux_bas.len();
@@ -1027,7 +1049,7 @@ impl Molecule {
         aux_v
     }
 
-    pub fn prepare_ri3fn_for_ri_v(&mut self) -> RIFull<f64> {
+    pub fn prepare_ri3fn_for_ri_v(&self) -> RIFull<f64> {
         // prepare O_V * V^{-1/2}
 
         let mut time_records = utilities::TimeRecords::new();
@@ -1197,7 +1219,7 @@ impl Molecule {
         ri3fn
     }
 
-    pub fn prepare_ri3fn_for_ri_v_full_rayon(&mut self) -> RIFull<f64> {
+    pub fn prepare_ri3fn_for_ri_v_full_rayon(&self) -> RIFull<f64> {
         // prepare O_V * V^{-1/2}
 
         let mut time_records = utilities::TimeRecords::new();
@@ -1244,7 +1266,7 @@ impl Molecule {
             let basis_len_j = bas_info_j[1];
 
             // first, initialize rust_cint for each rayon threads
-            let mut cint_data = self.initialize_cint();
+            let mut cint_data = self.initialize_cint(true);
             let mut ri_rayon = RIFull::new([n_basis,basis_len_j,n_auxbas],0.0);
 
             self.cint_aux_fdqc.iter().enumerate().for_each(|(k,bas_info_k)| {
@@ -1321,7 +1343,7 @@ impl Molecule {
     }
 
     // generate the 3-center RI integrals and the basis pair symmetry is used to save the memory
-    pub fn prepare_rimatr_for_ri_v_rayon(&mut self) -> (MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>) {
+    pub fn prepare_rimatr_for_ri_v_rayon(&self) -> (MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>) {
 
         let mut time_records = utilities::TimeRecords::new();
         time_records.new_item("all ri", "for the total evaluations of ri3fn");
@@ -1367,7 +1389,7 @@ impl Molecule {
         let (sender, receiver) = channel();
         par_shellpair.par_iter().for_each_with(sender, |s, shell_index| {
             // first, initialize rust_cint for each rayon threads
-            let mut cint_data = self.initialize_cint();
+            let mut cint_data = self.initialize_cint(true);
 
             let i = shell_index[0];
             let j = shell_index[1];

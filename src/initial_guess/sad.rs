@@ -4,7 +4,7 @@ use crate::ctrl_io::InputKeywords;
 use crate::geom_io::{GeomCell, formated_element_name};
 use crate::scf_io::scf;
 
-pub fn sad_dm(mol: &Molecule) -> Vec<MatrixFull<f64>> {
+pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
     let mut elem_name: Vec<String> = vec![];
     let mut dms_alpha: Vec<MatrixFull<f64>> = vec![];
     let mut dms_beta: Vec<MatrixFull<f64>> = vec![];
@@ -40,13 +40,13 @@ pub fn sad_dm(mol: &Molecule) -> Vec<MatrixFull<f64>> {
             atom_ctrl.print_level = 1;
             atom_ctrl.atom_sad = true;
             atom_ctrl.charge = 0.0_f64;
-            //let (spin, spin_channel, spin_polarization) = ctrl_setting_atom_sad(ielem);
-            //atom_ctrl.spin = spin;
-            //atom_ctrl.spin_channel = spin_channel;
-            //atom_ctrl.spin_polarization = spin_polarization;
-            atom_ctrl.spin = 1.0;
-            atom_ctrl.spin_channel = 1;
-            atom_ctrl.spin_polarization = false;
+            let (spin, spin_channel, spin_polarization) = ctrl_setting_atom_sad(ielem);
+            atom_ctrl.spin = spin;
+            atom_ctrl.spin_channel = spin_channel;
+            atom_ctrl.spin_polarization = spin_polarization;
+            //atom_ctrl.spin = 1.0;
+            //atom_ctrl.spin_channel = 1;
+            //atom_ctrl.spin_polarization = false;
 
             let mut atom_geom = GeomCell::new();
             atom_geom.name = ielem.to_string();
@@ -74,7 +74,12 @@ pub fn sad_dm(mol: &Molecule) -> Vec<MatrixFull<f64>> {
 
     });
 
-    vec![block_diag(&dms_alpha), block_diag(&dms_beta)]
+    if mol.spin_channel == 1{
+        vec![block_diag(&dms_alpha)+block_diag(&dms_beta), MatrixFull::empty()]
+    } else {
+        vec![block_diag(&dms_alpha), block_diag(&dms_beta)]
+    }
+
 
 }
 
