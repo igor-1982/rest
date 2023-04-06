@@ -21,7 +21,6 @@ pub enum SCFType {
     UHF
 }
 
-
 #[derive(Debug,Clone)]
 pub struct InputKeywords {
     pub print_level: usize,

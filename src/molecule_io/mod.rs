@@ -1137,9 +1137,9 @@ impl Molecule {
 
         time_records.count_start("sqrt_matr");
         //// we calculate the square roote of the inversion matrix: V^{-1/2}
-        ////aux_v = aux_v.lapack_power(-0.5, 1.0E-6).unwrap();
+        aux_v = aux_v.lapack_power(-0.5, 1.0E-6).unwrap();
         // we calculate the Cholesky decomposition L of the inversion matrix: L*L^{T}=V^{-1}
-        aux_v = aux_v.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
+        //aux_v = aux_v.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
         time_records.count("sqrt_matr");
 
         // println!("Print out {} 2-center auxiliary coulomb integral elements", tmp_num);
@@ -1240,8 +1240,8 @@ impl Molecule {
         // First the Cholesky decomposition `L` of the inverse of the auxiliary 2-center coulumb matrix: V=(\nu|\mu)
         time_records.count_start("aux_ij");
         let mut aux_v = self.int_ij_aux_columb();
-        //aux_v = aux_v.lapack_power(-0.5, 1.0E-6).unwrap();
-        aux_v = aux_v.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
+        aux_v = aux_v.lapack_power(-0.5, 1.0E-6).unwrap();
+        //aux_v = aux_v.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
         time_records.count("aux_ij");
 
 
