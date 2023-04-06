@@ -415,7 +415,7 @@ impl InputKeywords {
 
                 tmp_input.etb_beta = match tmp_ctrl.get("etb_beta").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(2.0_f64)},
-                    serde_json::Value::Number(tmp_num) => {tmp_num.as_i64().unwrap_or(2) as f64},
+                    serde_json::Value::Number(tmp_num) => {tmp_num.as_f64().unwrap_or(2.0_f64)},
                     other => {2.0_f64},
                 };
 

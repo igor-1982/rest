@@ -68,7 +68,7 @@ pub struct BasCell {
 ///   self.elem_index0: The index of atom where the GTOs are located
 ///   self.cint_index0: The global start index of this basis function group 
 ///   self.cint_index1: The number of basis functions in this group
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct BasInfo {
     pub bas_name: String,
     pub bas_type: String,
