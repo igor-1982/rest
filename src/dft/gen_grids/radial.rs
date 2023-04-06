@@ -1,14 +1,25 @@
 //! This mod is used to generate radial grids for DFT calculation.<br>
 //! Currently supported methods: 
-//! * Krack-Koster radial grid[^1]
-//! * Lindh-Malmqvist-Gagliardi radial grid[^2]
-//! * Treutler-Ahlrichs radial grid[^3]
+//! * Krack-Koster radial grid([`radial_grid_kk`])[^1]
+//! * Lindh-Malmqvist-Gagliardi radial grid([`radial_grid_lmg`])[^2]
+//! * Treutler-Ahlrichs radial grid([`radial_grid_treutler`])[^3]
+//! * Becke radial grid([`radial_grid_becke`])[^4]
+//! * Delley radial grid([`radial_grid_delley`])[^5]
+//! * Mura-Knowles radial grid([`radial_grid_mura_knowles`])[^6]
+//! 
 //! 
 //! [^1]: [M. Krack, A. M. Köster. The Journal of Chemical Physics 108, 3226-3234 (1998)](https://doi.org/10.1063/1.475719).
 //! 
 //! [^2]: [R. Lindh, P.-Å. Malmqvist, L. Gagliardi. Theoretical Chemistry Accounts 106, 178-187 (2001)](https://dx.doi.org/10.1007/s002140100263).
 //! 
 //! [^3]: [O. Treutler, R. Ahlrichs. The Journal of Chemical Physics 102, 346-354 (1995)](https://doi.org/10.1063/1.469408).
+//! 
+//! [^4]: [A. D. Becke. The Journal of Chemical Physics 88, 2547-2553 (1988)](https://doi.org/10.1063/1.454033).
+//! 
+//! [^5]: [J. Baker, J. Andzelm, A. Scheiner, B. Delley. The Journal of Chemical Physics 101, 8894-8902 (1994)](https://doi.org/10.1063/1.468081).
+//! 
+//! [^6]: [M. E. Mura, P. J. Knowles. The Journal of Chemical Physics 104, 9848-9858 (1996)](https://doi.org/10.1063/1.471749).
+//! 
 //! 
 
 use std::collections::HashMap;
@@ -17,6 +28,7 @@ use std::f64::consts::PI;
 use super::bragg;
 use super::bse;
 use super::parameters;
+use super::parameters::{BOHR, BRAGG0};
 use statrs::function::gamma;
 
 /// Krack-Koster radial grid according to _M. Krack, A. M. Köster. The Journal of Chemical Physics 108, 3226-3234 (1998)_, eqs. 9-13.<br>
@@ -309,20 +321,195 @@ fn get_h(max_error: f64, l: usize, guess: f64) -> f64 {
     h
 }
 
-
-pub fn radial_grid_murray(){
-
-}
-
-pub fn radial_grid_becke(){
-
-}
-
-pub fn radial_grid_delley(){
-
-}
-
-pub fn radial_grid_mura_knowles(){
+/* 
+/// Murray radial grid according to __.<br>
+/// Reference can be found [here]().  
+/// 
+/// Arguments:<br>
+/// n: Number of radial grids to be generated.<br>
+/// 
+/// Returns:<br>
+/// A tuple of two vectors, radial grid coordinates and weights respectively.<br>
+/// 
+/// # Math:
+/// $$
+/// \begin{aligned}
+/// &
+/// &
+/// \end{aligned}
+//  Murray, N.C. Handy, G.J. Laming,  Mol. Phys. 78, 997(1993)
+pub fn radial_grid_murray(n: usize, charge: usize) -> (Vec<f64>, Vec<f64>) {
+    let mut r: Vec<f64> = vec![];
+    let mut w: Vec<f64> = vec![];
+    let step = PI / ((n+1) as f64);
+    let rm = 1.0 / BOHR * BRAGG0[charge];
+    for i in 0..n {
+        let q = f64::cos((i as f64)*step);
+        r.push(rm*q.powf(2.0)/(1.0-q).powf(2.0));
+        w.push(rm);
+    }
     
+    (r,w)
+
+}
+ */
+ 
+/// Generate Chebyshev–Gauss quadrature of the first kind, referencing NumPy function
+/// [numpy.polynomial.chebyshev.chebgauss](https://numpy.org/doc/1.14/reference/generated/numpy.polynomial.chebyshev.chebgauss.html).
+/// 
+/// # Math
+/// $$
+/// begin{aligned}
+/// &x_i = \cos\left(\pi\frac{2i-1}{2n}\right) \newline
+/// &w_i = \frac{\pi}{n} \newline
+/// end{aligned}
+/// $$
+pub fn chebgauss_polynomial(n: usize) -> (Vec<f64>, Vec<f64>) {
+    let mut r: Vec<f64> = vec![];
+    let mut w: Vec<f64> = vec![];
+    let n_f64 = n as f64;
+    for i in 1..n+1 {
+        r.push(f64::cos(PI*(2.0*(i as f64) - 1.0) / (2.0*n_f64)));
+        w.push(PI / n_f64);
+    }
+    //println!("r = {:?}, w = {:?}", &r, &w);
+    (r,w)
 }
 
+/// Becke radial grid according to _A. D. Becke. The Journal of Chemical Physics 88, 2547-2553 (1988)_.<br>
+/// Reference can be found [here](https://doi.org/10.1063/1.454033).  
+/// 
+/// Arguments:<br>
+/// n: Number of radial grids to be generated.<br>
+/// charge: The proton charge of the atom.<br>
+/// 
+/// Returns:<br>
+/// A tuple of two vectors, radial grid coordinates and weights respectively.<br>
+/// 
+/// # Math:
+/// $$
+/// \begin{aligned}
+/// &\text{Chebyshev-Gauss quadrature}\newline
+/// &x_i = \cos\left(\pi\frac{2i-1}{2n}\right) \newline
+/// &w_i = \frac{\pi}{n} \newline
+/// &\text{Coordinate transformation to interval }[0,\infty)\newline
+/// &r_i = r_m\frac{1+x_i}{1-x_i}\newline
+/// &w_i' = r_mw_i\frac{2}{(1-x_i)^2}\newline
+/// &\text{where }r_m = 
+/// \left\\{ \begin{array}{l}
+///      R_b \text{ (H atom)} \newline
+///      0.5R_b \text{ (other atoms)}
+/// \end{array} \right., R_b \text{ is Bragg radii.}
+/// \end{aligned}
+/// $$
+pub fn radial_grid_becke(n: usize, charge: usize) -> (Vec<f64>, Vec<f64>) {
+    let rm = if charge == 1 {
+        1.0 / BOHR * BRAGG0[charge]
+    } else {
+        0.5 / BOHR * BRAGG0[charge]
+    };
+
+    let (mut t, mut w) = chebgauss_polynomial(n);
+    
+    let r = t.iter().map(|item| (1.0+item)/(1.0-item)*rm).collect();
+    w.iter_mut().zip(t.iter()).for_each(|(w,t)| *w *= 2.0/(1.0-t).powf(2.0)*rm);
+    //println!("r = {:?}, w = {:?}", &r, &w);
+    (r,w)
+
+}
+
+/// Delley radial grid according to _J. Baker, J. Andzelm, A. Scheiner, B. Delley. The Journal of Chemical Physics 101, 8894-8902 (1994)_.<br>
+/// Reference can be found [here](https://doi.org/10.1063/1.468081).  
+/// 
+/// Arguments:<br>
+/// n: Number of radial grids to be generated.<br>
+/// 
+/// Returns:<br>
+/// A tuple of two vectors, radial grid coordinates and weights respectively.<br>
+/// 
+/// # Math:
+/// $$
+/// \begin{aligned}
+/// &r_i = RFac\cdot\ln\left[1-\left(\frac{i}{1+n}\right)^2\right] \newline
+/// &w_i = RFac\cdot\frac{-2i\left(\frac{1}{1+n}\right)^2}{1-\left(\frac{i}{1+n}\right)^2}\newline
+/// &RFac = \frac{12}{\ln\left[1-\left(\frac{n}{1+n}\right)^2\right]} \newline
+/// \end{aligned}
+/// $$
+pub fn radial_grid_delley(n: usize) -> (Vec<f64>, Vec<f64>) {
+    let mut r: Vec<f64> = vec![];
+    let mut w: Vec<f64> = vec![];
+    let r_outer = 12.0_f64;
+    let n_f64 = n as f64;
+    let step = 1.0 / (n_f64 + 1.0);
+    let rfac = r_outer / (1.0 - (n_f64*step).powf(2.0)).ln();
+    for i in (1..n+1) {
+        r.push(rfac * (1.0 - ((i as f64)*step).powf(2.0)).ln());
+        w.push(rfac * (-2.0*(i as f64)*step.powf(2.0) / (1.0 - ((i as f64)*step).powf(2.0)))); 
+    }
+    //println!("r = {:?}, w = {:?}", &r, &w);
+    (r,w)
+}
+
+/// Mura-Knowles radial grid according to _M. E. Mura, P. J. Knowles. The Journal of Chemical Physics 104, 9848-9858 (1996)_.<br>
+/// Reference can be found [here](https://doi.org/10.1063/1.471749).  
+/// 
+/// Arguments:<br>
+/// n: Number of radial grids to be generated.<br>
+/// charge: The proton charge of the atom.<br>
+/// 
+/// Returns:<br>
+/// A tuple of two vectors, radial grid coordinates and weights respectively.<br>
+/// 
+/// # Math:
+/// $$
+/// \begin{aligned}
+/// &r_i = -\alpha\ln(1-x^3) \newline
+/// &w_i = \alpha\frac{3x^2}{n(1-x^3)} \newline
+/// &\text{where }\alpha = 
+/// \left\\{ \begin{array}{l}
+///      7.0 \text{ (Li, Be, Na, Mg, K, Ca atoms)} \newline
+///      5.2 \text{ (other atoms)}
+/// \end{array} \right.
+/// \end{aligned}
+/// $$
+pub fn radial_grid_mura_knowles(n: usize, charge: usize) -> (Vec<f64>, Vec<f64>) {
+    let mut r: Vec<f64> = vec![];
+    let mut w: Vec<f64> = vec![];
+    let n_f64 = n as f64;
+    let sequence:[usize; 6] = [3, 4, 11, 12, 19, 20];   // 7 for Li, Be, Na, Mg, K, Ca, otherwise 5
+    let far = if sequence.contains(&charge) {
+        7.0
+    } else {
+        5.2
+    };
+    for i in 0..n {
+        let x = (i as f64 + 0.5) / n_f64;
+        r.push(-far * (1.0 - x.powf(3.0)).ln());
+        w.push(far * 3.0*x*x / ((1.0 - x.powf(3.0))*n_f64));
+    }
+    //println!("r = {:?}, w = {:?}", &r, &w);
+    (r,w)
+}
+
+#[test]
+fn becke() {
+    radial_grid_becke(10, 1);
+    radial_grid_becke(10, 5);
+    
+    //complete
+}
+
+
+#[test]
+fn delley() {
+    radial_grid_delley(10);
+    //complete
+}
+
+
+#[test]
+fn mura() {
+    radial_grid_mura_knowles(10,1);
+    radial_grid_mura_knowles(10,11);
+    //complete
+}

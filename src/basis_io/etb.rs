@@ -61,14 +61,15 @@ pub fn get_basis_from_mol(mol: &Molecule, atom: &String) -> anyhow::Result<Basis
 
 
 //give etbs for atom list
-/// Generate even-tempered auxiliary Gaussian basis (ETB) for the given list of atoms. 
+/// Generate contracted even-tempered auxiliary Gaussian basis (ETB) for the given list of atoms. 
 /// # Arguments:
 /// **mol**: Struct [`crate::molecule_io::Molecule`] containing molecule information. <br>
 /// **beta**: Controls the size of generated ETB. <br>
 /// **required_elem**: A vector containing elements of which the ETB to be generated. <br>
 /// # Returns:
 /// An [`InfoV2`] struct containing a hashmap of elements and their corresponding ETBs.
-/// 
+#[allow(deprecated)]
+#[deprecated(note = "Deprecated for RI requires primitive ETB.")]
 pub fn etb_gen_for_atom_list_contracted(mol: &Molecule, beta: &f64, required_elem: &Vec<String>) -> InfoV2 {
 
     //get elements in the given molecule
@@ -198,7 +199,7 @@ pub fn etb_gen_for_atom_list_contracted(mol: &Molecule, beta: &f64, required_ele
 
 
 //give etbs for atom list
-/// Generate even-tempered auxiliary Gaussian basis (ETB) for the given list of atoms. 
+/// Generate primitive even-tempered auxiliary Gaussian basis (ETB) for the given list of atoms. 
 /// # Arguments:
 /// **mol**: Struct [`crate::molecule_io::Molecule`] containing molecule information. <br>
 /// **beta**: Controls the size of generated ETB. <br>
@@ -324,11 +325,12 @@ pub fn etb_gen_for_atom_list_primitive(mol: &Molecule, beta: &f64, required_elem
 
 }
 
+/// Select generated ETB type. [`etb_gen_for_atom_list_primitive`] in use.
 pub fn etb_gen_for_atom_list(mol: &Molecule, beta: &f64, required_elem: &Vec<String>) -> InfoV2 {
     etb_gen_for_atom_list_primitive(mol, beta, required_elem)
 }
 
-/// Generate even-tempered auxiliary Gaussian basis for a single atom.
+/// Generate primitive even-tempered auxiliary Gaussian basis for a single atom.
 pub fn etbs_gen_primitive(input: Vec<(usize, usize, f64, f64)>) -> Basis4Elem {
 
     let mut bas = Basis4Elem {
@@ -351,7 +353,9 @@ pub fn etbs_gen_primitive(input: Vec<(usize, usize, f64, f64)>) -> Basis4Elem {
 
 }
 
-/// Generate even-tempered auxiliary Gaussian basis for a single atom.
+/// Generate contracted even-tempered auxiliary Gaussian basis for a single atom.
+#[allow(deprecated)]
+#[deprecated(note = "Deprecated for RI requires primitive ETB.")]
 pub fn etbs_gen_contracted(input: Vec<(usize, usize, f64, f64)>) -> Basis4Elem {
 
     let mut bas = Basis4Elem {
@@ -359,7 +363,7 @@ pub fn etbs_gen_contracted(input: Vec<(usize, usize, f64, f64)>) -> Basis4Elem {
         references: None,
         global_index: (0,0),
     };
-    
+
     bas.electron_shells = input.iter()
     .map(|(l, n, alpha, beta)| etb_gen_contracted(l, n, alpha, beta)).collect();
 
@@ -367,9 +371,7 @@ pub fn etbs_gen_contracted(input: Vec<(usize, usize, f64, f64)>) -> Basis4Elem {
 
 }
 
-
-
-/// Generate even-tempered auxiliary Gaussian basis for a single electron shell.
+/// Generate contracted even-tempered auxiliary Gaussian basis for a single electron shell.
 /// # Arguments:
 /// **l**: Angular momentum of the shell. <br>
 /// **n**: Number of GTOs to be generated. <br>
@@ -378,14 +380,14 @@ pub fn etbs_gen_contracted(input: Vec<(usize, usize, f64, f64)>) -> Basis4Elem {
 /// 
 /// # Math:
 /// $$
-/// \begin{align}
+/// \begin{aligned}
 /// &\text{Exponents:}\newline
 /// &E = e^{-\alpha\beta^{i-1}}, i = 1, 2, ..., n\newline
 /// &\text{Coefficients:}\newline
 /// &C = 1.0\newline
-/// \end{align}
+/// \end{aligned}
 /// $$
-
+#[deprecated(note = "Deprecated for RI requires primitive ETB.")]
 pub fn etb_gen_contracted(l: &usize, n: &usize, alpha: &f64, beta: &f64) -> BasCell {
     let mut shell = BasCell {
         function_type: Some(String::from("gto")),
@@ -406,6 +408,22 @@ pub fn etb_gen_contracted(l: &usize, n: &usize, alpha: &f64, beta: &f64) -> BasC
 
 }
 
+/// Generate primitive even-tempered auxiliary Gaussian basis for a single electron shell.
+/// # Arguments:
+/// **l**: Angular momentum of the shell. <br>
+/// **n**: Number of GTOs to be generated. <br>
+/// **alpha**: Related to the minimum of basis set exponent. <br>
+/// **beta**: Controls the size of generated ETB. <br>
+/// 
+/// # Math:
+/// $$
+/// \begin{aligned}
+/// &\text{Exponents:}\newline
+/// &E = e^{-\alpha\beta^{i-1}}, i = 1, 2, ..., n\newline
+/// &\text{Coefficients:}\newline
+/// &C = 1.0\newline
+/// \end{aligned}
+/// $$
 pub fn etb_gen_primitive(l: &usize, i: &usize, alpha: &f64, beta: &f64) -> BasCell {
     let mut shell = BasCell {
         function_type: Some(String::from("gto")),
@@ -425,9 +443,6 @@ pub fn etb_gen_primitive(l: &usize, i: &usize, alpha: &f64, beta: &f64) -> BasCe
     shell
 
 }
-
-
-
 
 /// Get elements of which the ETBs to be generated according to the start atom. Returns a vector of elements.
 pub fn get_etb_elem(mol: &GeomCell, start_atom: &usize) -> Vec<String>{

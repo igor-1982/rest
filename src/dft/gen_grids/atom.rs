@@ -88,13 +88,23 @@ pub fn atom_grid(
     );
 */
     //Generate radial grid through treutler method
+    let proton_usize = proton_charges[center_index] as usize;
 
     let (rs, weights_radial) = 
         if rad_grid_method == String::from("treutler") {
-            radial::radial_grid_treutler(default_radial_num(proton_charges[center_index] as usize, level))
+            radial::radial_grid_treutler(default_radial_num(proton_usize, level))
         }
-        else if rad_grid_method == String::from("gc2nd") {
-            radial::radial_grid_gc2nd(default_radial_num(proton_charges[center_index] as usize, level))
+        else if rad_grid_method == String::from("gc2nd") || rad_grid_method == String::from("kk") {
+            radial::radial_grid_gc2nd(default_radial_num(proton_usize, level))
+        }
+        else if rad_grid_method == String::from("delley") {
+            radial::radial_grid_delley(default_radial_num(proton_usize, level))
+        }
+        else if rad_grid_method == String::from("becke") {
+            radial::radial_grid_becke(default_radial_num(proton_usize, level),proton_usize)
+        }
+        else if rad_grid_method == String::from("mura_knowles") {
+            radial::radial_grid_mura_knowles(default_radial_num(proton_usize, level),proton_usize)
         }
         else {
             radial::radial_grid_lmg(
