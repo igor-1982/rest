@@ -281,7 +281,6 @@ impl XcFuncType {
         }
         (exc,vrho)
     }
-
     pub fn gga_exc_vxc(&self, rho: &[f64], sigma: &[f64]) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
         let length = rho.len()/&self.spin_channel;
         let mut exc = vec![0.0; length];

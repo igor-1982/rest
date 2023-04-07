@@ -21,6 +21,18 @@ pub enum SCFType {
     UHF
 }
 
+/// **InputKeywords** for a specific calculation
+///  ### System dependent keywords
+///  - `print_level`:  default (1). `0` dose not print anything. larger number with more output information  
+/// 
+///  ### Basis set keywords
+///  - `basis_path`:   `String`. The path where you can find the basis-set file in json format. If the basis-set file is missing, REST will try to download it from BasisSetExchange
+///  - `basis_type`:   `String`. It can be `spheric` or `cartesian`
+///  - `auxbas_path`:  `String`. The path where you can find the auxiliary basis-set file in json format. If the basis-set file is missing, REST will try to download it from BasisSetExchange
+///  - `auxbas_type`:  `String`. It can be `spheric` or `cartesian`
+///  - `even_tempered-basis`: `Bool`. True: turn on ETB to generate the auxiliary basis set
+///  - `etb_start_atom_number`: `Usize`. Use ETB, for the element with atomic index larger than this value  
+///  - `etb_beta`: `f64`. Relevant to the ETB basis set size. Smaller value indicates larger ETB basis set. NOTE: etb_beta should be larger than 1.0
 #[derive(Debug,Clone)]
 pub struct InputKeywords {
     pub print_level: usize,
@@ -542,6 +554,10 @@ impl InputKeywords {
                     println!("Grid generation level: {}", tmp_input.grid_gen_level);
                     println!("Even tempered basis generation: {}", tmp_input.even_tempered_basis);
                     if tmp_input.even_tempered_basis == true {
+                        if tmp_input.etb_beta<=1.0f64 {
+                            println!("WARNING: etb_beta cannot be below 1.0. REST will use etb_beta=2.0 instead in this calculation");
+                            tmp_input.etb_beta=2.0f64;
+                        }
                         println!("Even tempered basis generation starts at: {}", tmp_input.etb_start_atom_number);
                         println!("Even tempered basis beta is: {}", tmp_input.etb_beta);
                     }

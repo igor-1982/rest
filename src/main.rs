@@ -15,8 +15,9 @@
 //!   5-1) cargo build (--release) 
 //! 
 //! ### Usage
-//!   Some examples are provided in the folder of `rest/examples/`.  
-//!   Detailed user manual is in preparation.
+//!   - Some examples are provided in the folder of `rest/examples/`.  
+//!   - Detailed user manual is in preparation.  
+//!   - Basic usage of varying keywords can be found on the page of [`InputKeywords`](crate::ctrl_io::InputKeywords).
 //! 
 //! ### Features
 //!   1) Use Gaussian Type Orbital (GTO) basis sets  

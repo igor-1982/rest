@@ -18,10 +18,13 @@ mol = gto.Mole(
          H       -2.5388400276      2.7556271745     -0.4338224694 ''',
         basis='cc-pvdz',verbose=4
     ).build()
+auxb = df.addons.aug_etb_for_dfbasis(mol, beta=2.0, start_at=0)
+method = dft.RKS(mol).density_fit(auxbasis=auxb)
 #method = dft.RKS(mol).density_fit(auxbasis="def2-SVP-JKFIT")
-#method.xc = 'x3lypg'
-method = scf.RHF(mol).density_fit(auxbasis="def2-SVP-JKFIT")
-method.init_guess = 'atom'
+#method = dft.RKS(mol)
+method.xc = 'x3lypg'
+#method = scf.RHF(mol).density_fit(auxbasis="def2-SVP-JKFIT")
+method.init_guess = 'vsap'
 #auxbasis = df.addons.aug_etb_for_dfbasis(mol, beta=2.0, start_at=1)
 #method.grids.becke_scheme = dft.original_becke
 #method.grids.level = 3
