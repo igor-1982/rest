@@ -7,7 +7,7 @@ use rayon::prelude::IntoParallelRefIterator;
 use rayon::prelude::IntoParallelRefMutIterator;
 use rayon::prelude::ParallelIterator;
 //use crate::scf::io;
-use rest_tensors::{MatrixFull, matrix_blas_lapack::_einsum_01,matrix_blas_lapack::_dgemm_nn};
+use rest_tensors::{MatrixFull, matrix_blas_lapack::_einsum_01_rayon,matrix_blas_lapack::_dgemm_nn};
 use crate::constants::ARR;
 
     
@@ -41,7 +41,7 @@ pub struct SimpleAtomInfo<'a> {
     pub z_a: f64,
 }
 
-pub fn get_vsap(mol: &molecule_io::Molecule, grids: &dft::Grids) -> MatrixFull<f64> {
+pub fn get_vsap(mol: &molecule_io::Molecule, grids: &dft::Grids, print_level: usize) -> MatrixFull<f64> {
     let dt1 = time::Local::now();
     
     let num_grids = grids.weights.len();
@@ -51,7 +51,7 @@ pub fn get_vsap(mol: &molecule_io::Molecule, grids: &dft::Grids) -> MatrixFull<f
 
     //get V
     let atom_info = &mol.geom;
-    println!("{}",atom_info.name);
+    //println!("{}",atom_info.name);
     let atom_pos = &atom_info.position; //atom_pos : matrixfull
     let num_atoms = atom_info.elem.len();
     let atom_mass_charge = geom_io::get_mass_charge(&atom_info.elem).clone();
@@ -80,7 +80,7 @@ pub fn get_vsap(mol: &molecule_io::Molecule, grids: &dft::Grids) -> MatrixFull<f
     });
     //println!("v_grid:{:?}",&v_diag_grid);
 
-    let mut int_mat = _einsum_01(&a_matrix.unwrap().to_matrixfullslice(),&v_diag_grid);
+    let mut int_mat = _einsum_01_rayon(&a_matrix.unwrap().to_matrixfullslice(),&v_diag_grid);
     //&int_mat.formated_output(5, "full");
 
     let mut f_mat = MatrixFull::new([a_matrix.unwrap().size[0],int_mat.size[0]],0.0);
@@ -89,7 +89,7 @@ pub fn get_vsap(mol: &molecule_io::Molecule, grids: &dft::Grids) -> MatrixFull<f
 
     let dt2 = time::Local::now();
     let timecost = (dt2.timestamp_millis()-dt1.timestamp_millis()) as f64 /1000.0;
-    println!("The evaluation of vmat costs {:16.2} seconds",timecost);
+    if print_level>0 {println!("The evaluation of vmat costs {:16.2} seconds",timecost)};
     f_mat
 
 }

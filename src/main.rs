@@ -1,5 +1,50 @@
 //! # Rust-based Electronic-Structure Tool (REST)
 //! 
+//! ### Installation
+//!   At present, REST can be compiled in Linux only  
+//! 
+//!   0) Prerequisites:  
+//!     - libopenblas.so  
+//!     - libcint.so  
+//!     - libhdf5.so  
+//!     - libxc.so  
+//!   1) git clone git@github.com:igor-1982/rest_workspace.git rest_workspace  
+//!   2) cd rest_workspace; cp Config.templet Config
+//!   3) edit `Config` to make the prerequeisite libraries aformationed accessable via some global variables heading with `REST`.  
+//!   4) bash Config; source $HOME/.bash_profile
+//!   5-1) cargo build (--release) 
+//! 
+//! ### Usage
+//!   Some examples are provided in the folder of `rest/examples/`.  
+//!   Detailed user manual is in preparation.
+//! 
+//! ### Features
+//!   1) Use Gaussian Type Orbital (GTO) basis sets  
+//!   2) Provide Density Functional Approximations (DFAs) at varying levels from LDA, GGA, Hybrid, to Fifth-rungs, including doubly hybrid approximations, like XYG3, XYGJ-OS, and random-phase approximation (RPA).  
+//!   3) Provide some Wave Function Methods (WFMs), like Hartree-Fock approximation (HF) and Moller-Plesset Second-order perturbation (MP2)
+//!   4) Provide analytic electronic-repulsive integrals (ERI)s as well as the Resolution-of-idensity (RI) approximation. The RI algorithm is the recommended choice.  
+//!   5) High Share Memory Parallelism (SMP) efficiency
+//! 
+//! 
+//! ### Development
+//!   1) Provide a tensor library, namely [`rest_tensors`](https://igor-1982.github.io/rest_tensors/rest_tensors/). `rest_tensors` is developed to manipulate
+//!    different kinds multi-rank arrays in REST. Thanks to the sophisticated generic, type, and trait systems, `rest_tensors` can be used as easy as `Numpy` and `Scipy` without losing the computation efficiency. 
+//!   2) It is very easy and save to develop a parallel program using the Rust language. Please refer to [`rayon`](rayon) for more details.
+//!   3) However, attention should pay if you want to use (Sca)Lapcke functions together in the rayon-spawn threads. 
+//!    It is because the (Sca)Lapack functions, like `dgemm`, were compiled with OpenMP by default.  The competetion between OpenMP and Rayon threads 
+//!    could dramatically deteriorate the final performance.  
+//!    Please use [`utilities::omp_set_num_threads_wrapper`] to set the OpenMP treads number in the runtime.
+//! 
+//! 
+//! 
+//! ### Presentation
+//! ![image](/home/igor/Documents/Package-Pool/rest_workspace/rest/figures/REST电子结构程序1.png) 
+//! ![image](/home/igor/Documents/Package-Pool/rest_workspace/rest/figures/REST电子结构程序2.png) 
+//! ![image](/home/igor/Documents/Package-Pool/rest_workspace/rest/figures/REST电子结构程序3.png) 
+//! ![image](/home/igor/Documents/Package-Pool/rest_workspace/rest/figures/REST电子结构程序4.png) 
+//! ![image](/home/igor/Documents/Package-Pool/rest_workspace/rest/figures/REST电子结构程序5-2.png) 
+//! ![image](/home/igor/Documents/Package-Pool/rest_workspace/rest/figures/REST电子结构程序6-2.png) 
+//! 
 #![allow(unused)]
 extern crate rest_tensors as tensors;
 extern crate chrono as time;
@@ -64,24 +109,7 @@ fn main() -> anyhow::Result<()> {
     //====================================
     // Now for post-SCF analysis
     //====================================
-    if scf_data.mol.ctrl.fciqmc_dump {
-        fciqmc_dump(&scf_data);
-    }
-    if scf_data.mol.ctrl.wfn_in_real_space>0 {
-        let np = scf_data.mol.ctrl.wfn_in_real_space;
-        let slater_determinant = rand_wf_real_space::slater_determinant(&scf_data, np);
-        let output = serde_json::to_string(&slater_determinant).unwrap();
-        let mut file = File::create("./wf_in_real_space.txt")?;
-        file.write(output.as_bytes());
-    }
-
-    if scf_data.mol.ctrl.cube == true {
-        let cube_file = cube_build::get_cube(&scf_data,80);
-    }
-
-    if scf_data.mol.ctrl.molden == true {
-        let molden_file = molden_build::gen_molden(&scf_data);
-    }
+    post_scf_analysis::post_scf_analysis(&scf_data);
 
     /* let error_isdf = error_isdf(3..4, &scf_data);
     println!("k_mu:{:?}, abs_error: {:?}, rel_error: {:?}", error_isdf.0, error_isdf.1, error_isdf.2); */
@@ -112,6 +140,10 @@ fn main() -> anyhow::Result<()> {
     println!("              REST: Mission accomplished");
     println!("====================================================");
 
+    println!("The SCF ({}) energy: {:16.8} Ha", 
+        scf_data.mol.ctrl.xc.to_uppercase(),
+        scf_data.scf_energy);
+
     time_mark.report_all();
 
     Ok(())
@@ -130,30 +162,4 @@ fn parse_input() -> ArgMatches {
              .help("Input file including \"ctrl\" and \"geom\" block, in the format of either \"json\" or \"toml\"")
              .takes_value(true))
         .get_matches()
-}
-
-fn fciqmc_dump(scf_data: &scf_io::SCF) {
-    if let Some(ri3fn) = &scf_data.ri3fn {
-        // prepare RI-V three-center coefficients for HF orbitals
-        for i_spin in 0..scf_data.mol.spin_channel {
-            let ri3mo = ri3fn.ao2mo_v01(&scf_data.eigenvectors[i_spin]).unwrap();
-            for i in 0.. scf_data.mol.num_state {
-                let ri3mo_i = ri3mo.get_reducing_matrix(i).unwrap();
-                for j in 0.. scf_data.mol.num_state {
-                    let ri3mo_ij = ri3mo_i.get_slice_x(j);
-                    for k in 0.. scf_data.mol.num_state {
-                        let ri3mo_k = ri3mo.get_reducing_matrix(k).unwrap();
-                        for l in 0.. scf_data.mol.num_state {
-                            let ri3mo_kl = ri3mo_k.get_slice_x(l);
-                            let ijkl = ri3mo_ij.iter().zip(ri3mo_kl.iter())
-                                .fold(0.0, |acc, (val1, val2)| acc + val1*val2);
-                            if ijkl.abs() > 1.0E-8 {
-                                println! ("{:16.8} {:5} {:5} {:5} {:5}",ijkl, i,j,k,l);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 }

@@ -2,7 +2,7 @@ mod libxc;
 mod gen_grids;
 
 use rest_tensors::{MatrixFull, MatrixFullSliceMut, TensorSliceMut, RIFull, MatrixFullSlice};
-use rest_tensors::matrix_blas_lapack::{_dgemm_nn,_dgemm_tn, _einsum_01, _einsum_02};
+use rest_tensors::matrix_blas_lapack::{_dgemm_nn,_dgemm_tn, _einsum_01_serial, _einsum_02_serial, _einsum_01_rayon, _einsum_02_rayon};
 use itertools::{Itertools, izip};
 use libc::access;
 use tensors::{BasicMatrix, MathMatrix, ParMathMatrix};
@@ -90,7 +90,7 @@ impl DFA4REST {
         println!("Libxc version used in REST: {}.{}.{}", vmajor, vminor, vmicro);
     }
 
-    pub fn new(name: &str, spin_channel: usize) -> DFA4REST {
+    pub fn new(name: &str, spin_channel: usize, print_level: usize) -> DFA4REST {
         let tmp_name = name.to_lowercase();
         let post_dfa = DFA4REST::parse_postscf(&tmp_name, spin_channel);
         match post_dfa {
@@ -116,11 +116,14 @@ impl DFA4REST {
             },
             None => {
                 let dfa = DFA4REST::parse_scf(&tmp_name, spin_channel);
-                println!("the functional of '{}' contains", &name);
-                dfa.dfa_compnt_scf.iter().for_each(|xc_func| {
-                    dfa.init_libxc(xc_func).xc_func_info_printout()
-                });
-                println!("debug {:?}",&dfa.dfa_paramr_scf);
+                if print_level> 0 {
+                    println!("the functional of '{}' contains", &name);
+                    dfa.dfa_compnt_scf.iter().for_each(|xc_func| {
+                        let tmp_dfa = dfa.init_libxc(xc_func);
+                        tmp_dfa.xc_func_info_printout();
+                    });
+                };
+                //println!("debug {:?}",&dfa.dfa_paramr_scf);
                 dfa
             },
         }
@@ -493,7 +496,7 @@ impl DFA4REST {
         is_flag
     }
 
-    pub fn xc_exc_vxc(&self, grids: &Grids, spin_channel: usize, dm: &Vec<MatrixFull<f64>>, mo: &[MatrixFull<f64>;2], occ: &[Vec<f64>;2]) -> (Vec<f64>, Vec<MatrixFull<f64>>) {
+    pub fn xc_exc_vxc(&self, grids: &Grids, spin_channel: usize, dm: &Vec<MatrixFull<f64>>, mo: &[MatrixFull<f64>;2], occ: &[Vec<f64>;2], print_level:usize) -> (Vec<f64>, Vec<MatrixFull<f64>>) {
         let num_grids = grids.coordinates.len();
         let num_basis = dm[0].size[0];
         let mut exc = MatrixFull::new([num_grids,1],0.0);
@@ -700,11 +703,13 @@ impl DFA4REST {
             //exc.data.iter_mut().zip(rho.iter_j(i_spin)).for_each(|(exc,rho)| {
             //    *exc  = *exc* rho
         }
-        if spin_channel==1 {
-            println!("total electron number: {:16.8}", total_elec[0])
-        } else {
-            println!("electron number in alpha-channel: {:12.8}", total_elec[0]);
-            println!("electron number in beta-channel:  {:12.8}", total_elec[1]);
+        if print_level > 0 {
+            if spin_channel==1 {
+                println!("total electron number: {:16.8}", total_elec[0])
+            } else {
+                println!("electron number in alpha-channel: {:12.8}", total_elec[0]);
+                println!("electron number in beta-channel:  {:12.8}", total_elec[1]);
+            }
         }
         let dt6 = utilities::timing(&dt5, Some("evaluate exc and en"));
 
@@ -720,7 +725,14 @@ impl DFA4REST {
         (exc_total,vxc_ao)
     }
 
-    pub fn xc_exc_vxc_slots(&self, range_grids: Range<usize>, grids: &Grids, spin_channel: usize, dm: &Vec<MatrixFull<f64>>, mo: &[MatrixFull<f64>;2], occ: &[Vec<f64>;2]) -> (Vec<f64>, Vec<MatrixFull<f64>>,[f64;2]) {
+    pub fn xc_exc_vxc_slots(&self, 
+        range_grids: Range<usize>, 
+        grids: &Grids, 
+        spin_channel: usize, 
+        dm: &Vec<MatrixFull<f64>>, 
+        mo: &[MatrixFull<f64>;2], 
+        occ: &[Vec<f64>;2]) -> (Vec<f64>, Vec<MatrixFull<f64>>,[f64;2]) 
+        {
         //let num_grids = grids.coordinates.len();
         let num_grids = range_grids.len();
         let num_basis = dm[0].size[0];
@@ -728,6 +740,8 @@ impl DFA4REST {
         let loc_coordinates = &grids.coordinates[range_grids.clone()];
         let loc_weights = &grids.weights[range_grids.clone()];
 
+        //println!("thread_id: {:?}, rayon_threads_number: {:?}, omp_threads_number: {:?}",
+        //    rayon::current_thread_index().unwrap(), rayon::current_num_threads(), utilities::omp_get_num_threads_wrapper());
 
         let mut loc_exc = MatrixFull::new([num_grids,1],0.0);
         let mut loc_exc_total = vec![0.0;spin_channel];
@@ -1182,7 +1196,6 @@ impl Grids {
 
             let dt0 = utilities::init_timing();
 
-            println!("Read grids from the external file: {}", &mol.ctrl.external_grids);
 
             let mut weights:Vec<f64> = Vec::new();
             let mut coordinates: Vec<[f64;3]> = Vec::new();
@@ -1213,7 +1226,7 @@ impl Grids {
                 //println!("{:16.8} {:16.8} {:16.8} {:16.8}", x,y,z,w);
             }
 
-            println!("Size of imported grids: {}",weights.len());
+            //println!("Size of imported grids: {}",weights.len());
 
             utilities::timing(&dt0, Some("Importing the grids"));
 
@@ -1278,7 +1291,6 @@ impl Grids {
             weights.extend(ws_atom);
         });
 
-        println!("Size of generated grids: {}",weights.len());
 
         utilities::timing(&dt0, Some("Generating the grids"));
         let parallel_balancing = balancing(coordinates.len(), rayon::current_num_threads());
@@ -1302,7 +1314,7 @@ impl Grids {
         let mut coordinates: Vec<[f64;3]> =vec![];
         let mut weights:Vec<f64> = vec![];
         let mut num_points:usize = 0;
-        println!("{:?}, {:?}",&alpha_min, &alpha_max);
+        //println!("{:?}, {:?}",&alpha_min, &alpha_max);
 
         alpha_min.iter().zip(alpha_max.iter()).enumerate().for_each(|(center_index,value)| {
             let (rs_atom, ws_atom) = gen_grids::atom_grid(
@@ -1351,9 +1363,9 @@ impl Grids {
     pub fn prepare_tabulated_ao_rayon_v02(&mut self, mol: &Molecule) {
         //In this subroutine, we call the lapack dgemm in a rayon parallel environment.
         //In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
-        let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
-        //println!("debug: default_omp_num_threads: {}", default_omp_num_threads);
-        unsafe{utilities::openblas_set_num_threads(1)};
+        //let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
+        let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
+        utilities::omp_set_num_threads_wrapper(1);
 
         let num_grids = self.coordinates.len();
         let num_basis = mol.num_basis;
@@ -1416,15 +1428,16 @@ impl Grids {
         self.ao = Some(ao);
         self.aop = aop;
 
-        unsafe{utilities::openblas_set_num_threads(default_omp_num_threads)};
+        utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
     }
 
     pub fn prepare_tabulated_ao_rayon(&mut self, mol: &Molecule) {
         //In this subroutine, we call the lapack dgemm in a rayon parallel environment.
         //In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
-        let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
-        println!("debug: default_omp_num_threads: {}", default_omp_num_threads);
-        unsafe{utilities::openblas_set_num_threads(1)};
+        //let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
+        let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
+        //println!("debug: default_omp_num_threads: {}", default_omp_num_threads);
+        utilities::omp_set_num_threads_wrapper(1);
 
         let num_grids = self.coordinates.len();
 
@@ -1478,7 +1491,7 @@ impl Grids {
         self.ao = Some(ao.transpose_and_drop());
         self.aop = aop;
 
-        unsafe{utilities::openblas_set_num_threads(default_omp_num_threads)};
+        utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
 
     }
 
@@ -1486,7 +1499,6 @@ impl Grids {
         // In this subroutine, we call the lapack dgemm in a rayon parallel environment.
         // In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
         // let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
-        // unsafe{utilities::openblas_set_num_threads(1)};
         //let dt_1 = time::Local::now();
         let num_grids = self.coordinates.len();
         // first for density
@@ -1563,7 +1575,6 @@ impl Grids {
 
         time_records.count("TabAO");
         time_records.report_all();
-        //unsafe{utilities::openblas_set_num_threads(default_omp_num_threads)};
 
         // to implement kinetic density
     }
@@ -1588,8 +1599,8 @@ impl Grids {
         cur_rho
     }
     pub fn prepare_tabulated_density(&mut self, dm: &mut Vec<MatrixFull<f64>>, spin_channel: usize) -> MatrixFull<f64> {
-        let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
-        unsafe{utilities::openblas_set_num_threads(1)};
+        let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
+        utilities::omp_set_num_threads_wrapper(1);
         let num_grids = self.coordinates.len();
         let mut cur_rho = MatrixFull::new([num_grids,spin_channel],0.0);
         for i_spin in 0..spin_channel {
@@ -1597,9 +1608,7 @@ impl Grids {
                 let dt0 = utilities::init_timing();
                 let dm_s = dm.get_mut(i_spin).unwrap();
                 let mut wao = MatrixFull::new(ao.size.clone(),0.0);
-                //unsafe{utilities::openblas_set_num_threads(6)};
                 wao.lapack_dgemm(dm_s, ao, 'N', 'N', 1.0, 0.0);
-                //unsafe{utilities::openblas_set_num_threads(1)};
                 //let wao = _degemm_nn_(&dm_s.to_matrixfullslice(), &ao.to_matrixfullslice());
                 let dt1 = utilities::timing(&dt0, Some("Evalute weighted ao (wao)"));
                 ao.par_iter_columns_full().zip(wao.par_iter_columns_full()).map(|(ao_r,wao_r)| (ao_r,wao_r))
@@ -1613,12 +1622,11 @@ impl Grids {
                 let dt2 = utilities::timing(&dt1, Some("Contracting ao*wao"));
             };
         };
-        unsafe{utilities::openblas_set_num_threads(default_omp_num_threads)};
+        utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
         cur_rho
     }
 
     pub fn prepare_tabulated_density_2(&self, mo: &[MatrixFull<f64>;2], occ: &[Vec<f64>;2], spin_channel: usize) -> (MatrixFull<f64>,RIFull<f64>) {
-        //unsafe{utilities::openblas_set_num_threads(1)};
         let mut cur_rho = MatrixFull::new([self.coordinates.len(),spin_channel],0.0);
         let num_grids = self.coordinates.len();
         let num_basis = mo[0].size.get(0).unwrap();
@@ -1632,18 +1640,18 @@ impl Grids {
                     .iter().filter(|occ| **occ>0.0).map(|occ| occ.sqrt()).collect_vec();
                 let num_occ = occ_s.len();
                 // wmo = weigthed mo ('ij,j->ij'): mo_s(ij), occ_s(j) -> wmo(ij)
-                let mut wmo = _einsum_01(&mo_s.to_matrixfullslice(),&occ_s);
+                let mut wmo = _einsum_01_rayon(&mo_s.to_matrixfullslice(),&occ_s);
 
                 let mut tmo = MatrixFull::new([num_occ,num_grids],0.0);
                 tmo.to_matrixfullslicemut().lapack_dgemm(&wmo.to_matrixfullslice(), &ao.to_matrixfullslice(), 'T', 'N', 1.0, 0.0);
-                let rho_s = _einsum_02(&tmo.to_matrixfullslice(), &tmo.to_matrixfullslice());
+                let rho_s = _einsum_02_rayon(&tmo.to_matrixfullslice(), &tmo.to_matrixfullslice());
                 cur_rho.par_iter_column_mut(i_spin).zip(rho_s.par_iter()).for_each(|(to, from)| {*to = *from});
                 
                 for i in (0..3) {
                     let mut tmop = MatrixFull::new([num_occ,num_grids],0.0);
                     tmop.to_matrixfullslicemut()
                         .lapack_dgemm(&wmo.to_matrixfullslice(), &aop.get_reducing_matrix(i).unwrap(), 'T','N',1.0,0.0);
-                    let rhopi_s = _einsum_02(&tmop.to_matrixfullslice(), &tmo.to_matrixfullslice());
+                    let rhopi_s = _einsum_02_rayon(&tmop.to_matrixfullslice(), &tmo.to_matrixfullslice());
                     cur_rhop.get_reducing_matrix_mut(i_spin).unwrap().par_iter_mut_j(i)
                     .zip(rhopi_s.par_iter()).for_each(|(to, from)| {*to = *from*2.0});
                 }
@@ -1658,24 +1666,22 @@ impl Grids {
                     .iter().filter(|occ| **occ>0.0).map(|occ| occ.sqrt()).collect_vec();
                 let num_occu = occ_s.len();
                 // wmo = weigthed mo ('ij,j->ij'): mo_s(ij), occ_s(j) -> wmo(ij)
-                let mut wmo = _einsum_01(&mo_s.to_matrixfullslice(),&occ_s);
+                let mut wmo = _einsum_01_rayon(&mo_s.to_matrixfullslice(),&occ_s);
 
                 let mut tmo = MatrixFull::new([wmo.size[1],ao.size[1]],0.0);
                 tmo.to_matrixfullslicemut().lapack_dgemm(&wmo.to_matrixfullslice(), &ao.to_matrixfullslice(), 'T', 'N', 1.0, 0.0);
-                let rho_s = _einsum_02(&tmo.to_matrixfullslice(), &tmo.to_matrixfullslice());
+                let rho_s = _einsum_02_rayon(&tmo.to_matrixfullslice(), &tmo.to_matrixfullslice());
                 cur_rho.par_iter_column_mut(i_spin).zip(rho_s.par_iter()).for_each(|(to, from)| {*to = *from});
 
             };
             let mut cur_rhop = RIFull::empty();
             return (cur_rho, cur_rhop)
         }
-        //unsafe{utilities::openblas_set_num_threads(6)};
         let cur_rhop = RIFull::empty();
         (cur_rho, cur_rhop)
     }
 
     pub fn prepare_tabulated_density_slots(&self, mo: &[MatrixFull<f64>;2], occ: &[Vec<f64>;2], spin_channel: usize, range_grids: Range<usize>) -> (MatrixFull<f64>,RIFull<f64>) {
-        //unsafe{utilities::openblas_set_num_threads(1)};
         let num_grids = range_grids.len();
         let num_basis = mo[0].size.get(0).unwrap();
         let num_state = mo[0].size.get(1).unwrap();
@@ -1690,7 +1696,8 @@ impl Grids {
                     .iter().filter(|occ| **occ>0.0).map(|occ| occ.sqrt()).collect_vec();
                 let num_occ = occ_s.len();
                 // wmo = weigthed mo ('ij,j->ij'): mo_s(ij), occ_s(j) -> wmo(ij)
-                let mut wmo = _einsum_01(&mo_s.to_matrixfullslice(),&occ_s);
+                //println!("{:?}.{:?}", &occ, &occ_s);
+                let mut wmo = _einsum_01_serial(&mo_s.to_matrixfullslice(),&occ_s);
 
                 let mut tmo = MatrixFull::new([num_occ,num_grids],0.0);
                 _dgemm(&wmo, (0..wmo.size[0], 0..wmo.size[1]), 'T',
@@ -1699,8 +1706,8 @@ impl Grids {
                        1.0,0.0
                 );
                 //tmo.to_matrixfullslicemut().lapack_dgemm(&wmo.to_matrixfullslice(), &ao.to_matrixfullslice(), 'T', 'N', 1.0, 0.0);
-                let rho_s = _einsum_02(&tmo.to_matrixfullslice(), &tmo.to_matrixfullslice());
-                cur_rho.par_iter_column_mut(i_spin).zip(rho_s.par_iter()).for_each(|(to, from)| {*to = *from});
+                let rho_s = _einsum_02_serial(&tmo.to_matrixfullslice(), &tmo.to_matrixfullslice());
+                cur_rho.iter_column_mut(i_spin).zip(rho_s.iter()).for_each(|(to, from)| {*to = *from});
                 
                 for i in (0..3) {
                     let mut tmop = MatrixFull::new([num_occ,num_grids],0.0);
@@ -1712,9 +1719,9 @@ impl Grids {
                     );
                     //tmop.to_matrixfullslicemut()
                     //    .lapack_dgemm(&wmo.to_matrixfullslice(), &aop.get_reducing_matrix(i).unwrap(), 'T','N',1.0,0.0);
-                    let rhopi_s = _einsum_02(&tmop.to_matrixfullslice(), &tmo.to_matrixfullslice());
-                    cur_rhop.get_reducing_matrix_mut(i_spin).unwrap().par_iter_mut_j(i)
-                    .zip(rhopi_s.par_iter()).for_each(|(to, from)| {*to = *from*2.0});
+                    let rhopi_s = _einsum_02_serial(&tmop.to_matrixfullslice(), &tmo.to_matrixfullslice());
+                    cur_rhop.get_reducing_matrix_mut(i_spin).unwrap().iter_mut_j(i)
+                    .zip(rhopi_s.iter()).for_each(|(to, from)| {*to = *from*2.0});
                 }
             };
             return (cur_rho, cur_rhop)
@@ -1727,7 +1734,7 @@ impl Grids {
                     .iter().filter(|occ| **occ>0.0).map(|occ| occ.sqrt()).collect_vec();
                 let num_occu = occ_s.len();
                 // wmo = weigthed mo ('ij,j->ij'): mo_s(ij), occ_s(j) -> wmo(ij)
-                let mut wmo = _einsum_01(&mo_s.to_matrixfullslice(),&occ_s);
+                let mut wmo = _einsum_01_serial(&mo_s.to_matrixfullslice(),&occ_s);
 
                 let mut tmo = MatrixFull::new([wmo.size[1],num_grids],0.0);
                 _dgemm(&wmo, (0..wmo.size[0], 0..wmo.size[1]), 'T',
@@ -1736,14 +1743,13 @@ impl Grids {
                        1.0,0.0
                 );
                 //tmo.to_matrixfullslicemut().lapack_dgemm(&wmo.to_matrixfullslice(), &ao.to_matrixfullslice(), 'T', 'N', 1.0, 0.0);
-                let rho_s = _einsum_02(&tmo.to_matrixfullslice(), &tmo.to_matrixfullslice());
-                cur_rho.par_iter_column_mut(i_spin).zip(rho_s.par_iter()).for_each(|(to, from)| {*to = *from});
+                let rho_s = _einsum_02_serial(&tmo.to_matrixfullslice(), &tmo.to_matrixfullslice());
+                cur_rho.iter_column_mut(i_spin).zip(rho_s.iter()).for_each(|(to, from)| {*to = *from});
 
             };
             let mut cur_rhop = RIFull::empty();
             return (cur_rho, cur_rhop)
         }
-        //unsafe{utilities::openblas_set_num_threads(6)};
         let cur_rhop = RIFull::empty();
         (cur_rho, cur_rhop)
     }
@@ -1760,9 +1766,7 @@ impl Grids {
                 for i in (0..3) {
                     let mut aop_i = aop.get_reducing_matrix(i).unwrap();
                     let mut wao = MatrixFull::new([num_basis,num_grids],0.0);
-                    //unsafe{utilities::openblas_set_num_threads(6)};
                     wao.to_matrixfullslicemut().lapack_dgemm(&dm.to_matrixfullslice(),&aop_i, 'N','N', 1.0, 0.0);
-                    //unsafe{utilities::openblas_set_num_threads(1)};
 
                     // ====== native dgemm coded by rust
                     //let mut aop_i = aop.get_reducing_matrix(i).unwrap();
@@ -1781,7 +1785,6 @@ impl Grids {
                 };
             }
         };
-        //unsafe{utilities::openblas_set_num_threads(6)};
         cur_rhop
     }
     pub fn evaluate_density(&self, dm: &mut Vec<MatrixFull<f64>>) -> [f64;2] {
@@ -1837,9 +1840,9 @@ pub fn par_numerical_density(grid: &Grids, mol: &Molecule, dm: &mut [MatrixFull<
     //let mut count:usize = 0;
     // In this subroutine, we call the lapack dgemm in a rayon parallel environment.
     // In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
-    let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
+    let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
     //println!("debug: default omp_num_threads: {}", default_omp_num_threads);
-    unsafe{utilities::openblas_set_num_threads(1)};
+    utilities::omp_set_num_threads_wrapper(1);
 
     let local_basis4elem = mol.basis4elem.clone();
     let local_position = mol.geom.position.clone();
@@ -1880,7 +1883,7 @@ pub fn par_numerical_density(grid: &Grids, mol: &Molecule, dm: &mut [MatrixFull<
     });
 
     // reuse the default omp_num_threads setting
-    unsafe{utilities::openblas_set_num_threads(default_omp_num_threads)};
+    utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
     
     total_density
 }

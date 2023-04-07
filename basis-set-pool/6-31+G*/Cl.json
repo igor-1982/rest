@@ -1,0 +1,167 @@
+{
+    "electron_shells": [
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.2518010000E+05",
+                "0.3780350000E+04",
+                "0.8604740000E+03",
+                "0.2421450000E+03",
+                "0.7733490000E+02",
+                "0.2624700000E+02"
+            ],
+            "coefficients": [
+                [
+                    "0.1832959848E-02",
+                    "0.1403419883E-01",
+                    "0.6909739426E-01",
+                    "0.2374519803E+00",
+                    "0.4830339599E+00",
+                    "0.3398559718E+00"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0,
+                1
+            ],
+            "exponents": [
+                "0.4917650000E+03",
+                "0.1169840000E+03",
+                "0.3741530000E+02",
+                "0.1378340000E+02",
+                "0.5452150000E+01",
+                "0.2225880000E+01"
+            ],
+            "coefficients": [
+                [
+                    "-0.2297391417E-02",
+                    "-0.3071371894E-01",
+                    "-0.1125280694E+00",
+                    "0.4501632776E-01",
+                    "0.5893533634E+00",
+                    "0.4652062868E+00"
+                ],
+                [
+                    "0.3989400879E-02",
+                    "0.3031770668E-01",
+                    "0.1298800286E+00",
+                    "0.3279510723E+00",
+                    "0.4535271000E+00",
+                    "0.2521540556E+00"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0,
+                1
+            ],
+            "exponents": [
+                "0.3186490000E+01",
+                "0.1144270000E+01",
+                "0.4203770000E+00"
+            ],
+            "coefficients": [
+                [
+                    "-0.2518280280E+00",
+                    "0.6158925141E-01",
+                    "0.1060184328E+01"
+                ],
+                [
+                    "-0.1429931472E-01",
+                    "0.3235723331E+00",
+                    "0.7435077653E+00"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0,
+                1
+            ],
+            "exponents": [
+                "0.1426570000E+00"
+            ],
+            "coefficients": [
+                [
+                    "0.1000000000E+01"
+                ],
+                [
+                    "0.1000000000E+01"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_cartesian",
+            "region": "valence",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.7500000000E+00"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0,
+                1
+            ],
+            "exponents": [
+                "0.4830000000E-01"
+            ],
+            "coefficients": [
+                [
+                    "0.1000000000E+01"
+                ],
+                [
+                    "0.1000000000E+01"
+                ]
+            ]
+        }
+    ],
+    "references": [
+        {
+            "reference_description": "6-21G Split-valence basis set",
+            "reference_keys": [
+                "gordon1982a"
+            ]
+        },
+        {
+            "reference_description": "31G Split-valence part",
+            "reference_keys": [
+                "francl1982a"
+            ]
+        },
+        {
+            "reference_description": "Polarization for 6-31G split-valence basis set",
+            "reference_keys": [
+                "francl1982a"
+            ]
+        },
+        {
+            "reference_description": "Diffuse functions for 6-31G split-valence basis set",
+            "reference_keys": [
+                "spitznagel1987a"
+            ]
+        }
+    ]
+}

@@ -99,7 +99,7 @@ fn elem_indexer(elem: &String) -> usize {
 pub fn bse_basis_getter(basis_set: &String, cell: &GeomCell, path: &String) {
 
     //check if path exists
-    create_dir_all(path);
+    //create_dir_all(path);
     //element checker
     let ctrl_elem = ctrl_element_checker(cell);
     let local_elem = local_element_checker(path);
@@ -169,7 +169,7 @@ pub fn bse_basis_getter(basis_set: &String, cell: &GeomCell, path: &String) {
 pub fn bse_basis_getter_v2(basis_set: &String, cell: &GeomCell, path: &String, required_elem: &Vec<String>) {
 
     //check if path exists
-    create_dir_all(path);
+    //create_dir_all(path);
 /*     
     //element checker
     let ctrl_elem = ctrl_element_checker(cell);
@@ -240,7 +240,7 @@ pub fn bse_basis_getter_v2(basis_set: &String, cell: &GeomCell, path: &String, r
 pub fn bse_auxbas_getter(basis_set: &String, cell: &GeomCell, path: &String) {
 
     //check if path exists
-    create_dir_all(path);
+    //create_dir_all(path);
     //element checker
     let ctrl_elem = ctrl_element_checker(cell);
     let local_elem = local_element_checker(path);
@@ -309,7 +309,7 @@ pub fn bse_auxbas_getter(basis_set: &String, cell: &GeomCell, path: &String) {
 pub fn bse_auxbas_getter_v2(basis_set: &String, cell: &GeomCell, path: &String, required_elem: &Vec<String>) {
 
     //check if path exists
-    create_dir_all(path);
+    //create_dir_all(path);
 
 /*     
     //element checker
@@ -427,6 +427,7 @@ pub fn basis_modifier(basis_path: &String) {
 
 /// Checks elements information (.json) of a certain basis set in a given path. Returning a vector of element names.
 pub fn local_element_checker(path: &String) -> Vec<String> {
+    create_dir_all(&path);
     let elem_pattern = format!("{}/*.json", path);
     let mut elem_set = vec![];
     let re = Regex::new(r".*\.json$").unwrap();

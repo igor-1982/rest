@@ -1,0 +1,243 @@
+{
+    "electron_shells": [
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "153976.1832500",
+                "23082.4976720",
+                "5253.2344745",
+                "1486.9550133",
+                "484.06333726",
+                "173.56653980",
+                "67.116381464",
+                "26.339502054"
+            ],
+            "coefficients": [
+                [
+                    "0.23662636107E-03",
+                    "0.18342929137E-02",
+                    "0.95310527769E-02",
+                    "0.38638406980E-01",
+                    "0.12480768502",
+                    "0.29278861009",
+                    "0.40633425860",
+                    "0.20077215860"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "172.87693567",
+                "53.058649063",
+                "7.9212753964",
+                "3.2108880472"
+            ],
+            "coefficients": [
+                [
+                    "-0.24200960936E-01",
+                    "-0.11553095040",
+                    "0.57455545175",
+                    "0.57023185107"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "4.5662070895",
+                "0.70209907282"
+            ],
+            "coefficients": [
+                [
+                    "-0.22615763466",
+                    "0.75528392045"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.28258942635"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.35805824617E-01"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.15819213245E-01"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "728.18449873",
+                "172.13265061",
+                "54.829847075",
+                "20.166266494",
+                "7.8610728806",
+                "3.1105213132"
+            ],
+            "coefficients": [
+                [
+                    "0.26150689792E-02",
+                    "0.20673630835E-01",
+                    "0.93205603870E-01",
+                    "0.25436518210",
+                    "0.39131132810",
+                    "0.22481345943"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "11.757337492",
+                "1.5139617411",
+                "0.58328591795"
+            ],
+            "coefficients": [
+                [
+                    "-0.25777289217E-01",
+                    "0.57359428604",
+                    "1.0798320002"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.21570478076"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.0417370"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.9300000"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.1800000"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.0540000"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        }
+    ],
+    "references": [
+        {
+            "reference_description": "Common base shells for def2-TZV*",
+            "reference_keys": [
+                "weigend2005a"
+            ]
+        }
+    ]
+}

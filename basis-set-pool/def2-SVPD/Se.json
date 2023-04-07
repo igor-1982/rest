@@ -1,0 +1,279 @@
+{
+    "electron_shells": [
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "106612.2002700",
+                "16007.6047010",
+                "3642.1699707",
+                "1028.5912993",
+                "335.30298888",
+                "115.80129154"
+            ],
+            "coefficients": [
+                [
+                    "0.14274889113E-02",
+                    "0.10943525114E-01",
+                    "0.54374171596E-01",
+                    "0.19018092947",
+                    "0.38913021696",
+                    "0.30620207088"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "222.93325020",
+                "26.726257934",
+                "11.124501923"
+            ],
+            "coefficients": [
+                [
+                    "-0.11198808009",
+                    "0.64752124207",
+                    "0.44241976651"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "19.888520061",
+                "3.3668473803",
+                "1.5249277839"
+            ],
+            "coefficients": [
+                [
+                    "-0.22857227762",
+                    "0.73591359951",
+                    "0.44330199577"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.29630037912"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.11009288974"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "1455.9068120",
+                "343.75101831",
+                "109.29554964",
+                "39.707711022",
+                "14.950185232"
+            ],
+            "coefficients": [
+                [
+                    "0.88203597043E-02",
+                    "0.66875851967E-01",
+                    "0.26640578080",
+                    "0.53834928422",
+                    "0.36303281993"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "8.0208962094",
+                "3.2934649756",
+                "1.4058602438"
+            ],
+            "coefficients": [
+                [
+                    "0.34153807025",
+                    "0.57257906583",
+                    "0.25549813222"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.45076123226"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.13353413325"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "94.494024044",
+                "27.188185260",
+                "9.5091567352",
+                "3.4170516853"
+            ],
+            "coefficients": [
+                [
+                    "0.23490101098E-01",
+                    "0.13747735767E+00",
+                    "0.36649929124E+00",
+                    "0.48750989884E+00"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "1.1479590083"
+            ],
+            "coefficients": [
+                [
+                    ".27657943383E+00"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.3380000"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.42167294728E-01"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.34396697938E-01"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.82767380906E-01"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        }
+    ],
+    "references": [
+        {
+            "reference_description": "Common base shells for def2-SV* basis sets",
+            "reference_keys": [
+                "weigend2005a"
+            ]
+        },
+        {
+            "reference_description": "Additional functions to form def2-SVPD",
+            "reference_keys": [
+                "rappoport2010a"
+            ]
+        }
+    ]
+}

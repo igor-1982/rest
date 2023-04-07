@@ -1,0 +1,330 @@
+{
+    "electron_shells": [
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "377518.7992300",
+                "56589.9843110",
+                "12878.7117060",
+                "3645.3752143",
+                "1187.0072945",
+                "426.46421902",
+                "165.70660164",
+                "65.598942707"
+            ],
+            "coefficients": [
+                [
+                    "0.22811766128E-03",
+                    "0.17688035931E-02",
+                    "0.91993460227E-02",
+                    "0.37411016434E-01",
+                    "0.12189873737",
+                    "0.28983900714",
+                    "0.41531872174",
+                    "0.21905799287"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "414.41265811",
+                "128.32056039",
+                "20.622089750",
+                "8.7821226045"
+            ],
+            "coefficients": [
+                [
+                    "-0.24682525053E-01",
+                    "-0.11716827406",
+                    "0.55301315941",
+                    "0.52242718609"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "13.741372006",
+                "2.2431246833"
+            ],
+            "coefficients": [
+                [
+                    "-0.22736061821",
+                    "0.71761210873"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.89370549079"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.10836699534"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.38806178058E-01"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "2034.7596692",
+                "481.90468106",
+                "154.67482963",
+                "57.740576969",
+                "23.099052811",
+                "9.3882478591"
+            ],
+            "coefficients": [
+                [
+                    "0.23524822298E-02",
+                    "0.19134070751E-01",
+                    "0.90171105278E-01",
+                    "0.26063284735",
+                    "0.42093485770",
+                    "0.24344615121"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "37.596171210",
+                "5.1240690810",
+                "2.0119996085"
+            ],
+            "coefficients": [
+                [
+                    "-0.28991094530E-01",
+                    "0.54919083831",
+                    "0.93793330488"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.73860686002"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "74.129460637",
+                "21.359842587",
+                "7.4995240537",
+                "2.7601394169"
+            ],
+            "coefficients": [
+                [
+                    "0.14363216676E-01",
+                    "0.86628177096E-01",
+                    "0.25631430541",
+                    "0.40374062368"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.95362061236"
+            ],
+            "coefficients": [
+                [
+                    ".39427042447"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.28420862520"
+            ],
+            "coefficients": [
+                [
+                    ".23091146816"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.0850000"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.2711000"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.0995400"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                3
+            ],
+            "exponents": [
+                "1.2090000"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                3
+            ],
+            "exponents": [
+                "4.9360000"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                4
+            ],
+            "exponents": [
+                "3.2450000"
+            ],
+            "coefficients": [
+                [
+                    "1.0000000"
+                ]
+            ]
+        }
+    ],
+    "references": [
+        {
+            "reference_description": "Common base shells for def2-TZV*",
+            "reference_keys": [
+                "weigend2005a"
+            ]
+        },
+        {
+            "reference_description": "Additional functions to form def2-TZVPP",
+            "reference_keys": [
+                "weigend2005a"
+            ]
+        }
+    ]
+}

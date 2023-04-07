@@ -1,5 +1,6 @@
 use time::{DateTime,Local};
 use std::{time::Instant, collections::HashMap, ops::Range};
+use regex::Regex;
 enum DebugTiming {
    Yes,
    Not,
@@ -99,14 +100,30 @@ pub fn debug_print_slices(s: &[f64]) {
 extern "C" {
     pub fn openblas_get_num_threads() -> ::std::os::raw::c_int;
     pub fn openblas_set_num_threads(n: ::std::os::raw::c_int);
+    pub fn goto_get_num_threads() -> ::std::os::raw::c_int;
+    pub fn goto_set_num_threads(n: ::std::os::raw::c_int);
 }
+//extern "C" {
+//    pub fn omp_get_num_threads() -> ::std::os::raw::c_int;
+//    pub fn omp_set_num_threads(n: ::std::os::raw::c_int);
+//}
 
-pub fn omp_get_num_threads() -> usize {
+pub fn omp_get_num_threads_wrapper() -> usize {
     let num_threads = unsafe{openblas_get_num_threads()} as usize;
     num_threads
 }
-pub fn omp_set_num_threads(n:usize)  {
-    unsafe{openblas_set_num_threads(n as std::os::raw::c_int)} 
+/// NOTE: the current OpenBLAS only supports at most 32 threads. Otherwise, it panics with an error:  
+/// "BLAS : Program is Terminated. Because you tried to allocate too many memory regions."
+pub fn omp_set_num_threads_wrapper(n:usize)  {
+    unsafe{if n<=256 {
+        openblas_set_num_threads(n as std::os::raw::c_int);
+        goto_set_num_threads(n as std::os::raw::c_int);
+        //omp_set_num_threads(n  as std::os::raw::c_int);
+    } else {
+        openblas_set_num_threads(256);
+        goto_set_num_threads(256);
+        //omp_set_num_threads(32);
+    } } 
 }
 
 //#[test]
@@ -134,4 +151,42 @@ pub fn balancing(num_tasks:usize, num_threads: usize) -> Vec<Range<usize>> {
     });
 
     distribute_vec
+}
+
+pub fn convert_scientific_notation_to_fortran_format(n: &String) -> String {
+    let re = Regex::new(r"(?P<num> *-?\d.\d*)[E|e](?P<exp>-?\d{1,2})").unwrap();
+    let o_len = n.len();
+
+    if let Some(cap) = re.captures(n) {
+        let main_part = cap["num"].to_string();
+        let exp_part = cap["exp"].to_string();
+        let exp: i32 = exp_part.parse().unwrap();
+        let out_str = if exp>=0 {
+            format!("{}E+{:0>2}",main_part,exp)
+        } else {
+            format!("{}E-{:0>2}",main_part,exp.abs())
+        };
+        let n_len = out_str.len();
+        return out_str[n_len-o_len..n_len].to_string()
+    } else {
+        panic!("Error: the input string is not a standard scientific notation")
+    }
+
+}
+
+#[test]
+fn test_scientific_number() {
+    let dd = -0.0003356;
+    let sdd = format!("{:16.8E}",dd);
+    println!("{}", &sdd);
+    println!("{}", convert_scientific_notation_to_fortran_format(&sdd));
+    let dd = 1.563E-16;
+    let sdd = format!("{:16.8E}",dd);
+    println!("{}", &sdd);
+    println!("{}", convert_scientific_notation_to_fortran_format(&sdd));
+    let dd = 1.563E16;
+    let sdd = format!("{:16.8E}",dd);
+    println!("{}", &sdd);
+    println!("{}", convert_scientific_notation_to_fortran_format(&sdd));
+
 }
