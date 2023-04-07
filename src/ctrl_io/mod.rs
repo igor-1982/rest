@@ -46,6 +46,9 @@ pub struct InputKeywords {
     pub even_tempered_basis: bool,
     pub etb_start_atom_number: usize,
     pub etb_beta: f64,
+    // Keywords for IDSF
+    pub use_isdf: bool,
+    pub isdf_k_mu: usize,
     // Keywords for systems
     pub eri_type: String,
     pub xc: String,
@@ -111,6 +114,8 @@ impl InputKeywords {
             auxbas_type: String::from("spheric"),
             use_auxbas: true,
             use_auxbas_symm: false,
+            use_isdf: false,
+            isdf_k_mu: 8,
             // Keywords associated with the method employed
             xc: String::from("x3lyp"),
             eri_type: String::from("ri-v"),
@@ -257,9 +262,14 @@ impl InputKeywords {
                 };
                 if tmp_input.eri_type.eq(&String::from("ri_v"))
                 {
-                    tmp_input.use_auxbas = true
+                    tmp_input.use_auxbas = true;
+                    tmp_input.use_isdf = false;
+                } else if tmp_input.eri_type.eq(&String::from("isdf_full")) {
+                    tmp_input.use_auxbas = true;
+                    tmp_input.use_isdf = true;
                 } else {
-                    tmp_input.use_auxbas = false
+                    tmp_input.use_auxbas = false;
+                    tmp_input.use_isdf = false;
                 };
                 if tmp_input.print_level>0 {println!("ERI Type: {}", tmp_input.eri_type)};
 
@@ -274,6 +284,11 @@ impl InputKeywords {
                         println!("Turn off the basis pair symmetry for RI 3D-tensors")
                     };
                 }
+                tmp_input.isdf_k_mu = match tmp_ctrl.get("isdf_k_mu").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(8_usize)},
+                    serde_json::Value::Number(tmp_num) => {tmp_num.as_i64().unwrap_or(8) as usize},
+                    other => {8_usize},
+                };
                 
 
 

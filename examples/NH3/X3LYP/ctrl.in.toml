@@ -14,7 +14,7 @@
      etb_start_atom_number =     1
      etb_beta =                  1.0
      # 使用resolution-of-identity (RI)技术处理四中心积分（缺省）
-     eri_type =                  "ri-v"
+     eri_type =                  "isdf_full"
      charge =                    0.0
      spin =                      1.0
      spin_polarization =         false

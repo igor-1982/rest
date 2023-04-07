@@ -12,6 +12,7 @@ use std::{vec, fs};
 use rest_libcint::{CINTR2CDATA, CintType};
 use crate::geom_io::{GeomCell,MOrC, GeomUnit};
 use crate::basis_io::{Basis4Elem,BasInfo};
+use crate::isdf::prepare_for_ri_isdf;
 //use crate::initial_guess::sad::sad_dm;
 use crate::molecule_io::{Molecule, generate_ri3fn_from_rimatr};
 use crate::tensors::{TensorOpt,TensorOptMut,TensorSlice};
@@ -158,25 +159,6 @@ impl SCF {
         //new_scf.mol.print_auxbas();
 
 
-
-        new_scf.ri3fn = if new_scf.mol.ctrl.use_auxbas && !new_scf.mol.ctrl.use_auxbas_symm {
-            //Some(new_scf.mol.prepare_ri3fn_for_ri_v_rayon())
-            Some(new_scf.mol.prepare_ri3fn_for_ri_v_full_rayon())
-            //println!("generate ri3fn from rimatr");
-            //let (rimatr, basbas2baspar, baspar2basbas) = new_scf.mol.prepare_rimatr_for_ri_v_rayon();
-            //Some(generate_ri3fn_from_rimatr(&rimatr, &basbas2baspar, &baspar2basbas))
-        } else {
-            None
-        };
-
-        new_scf.rimatr = if new_scf.mol.ctrl.use_auxbas && new_scf.mol.ctrl.use_auxbas_symm {
-            //println!("generate ri3fn from rimatr");
-            let (rimatr, basbas2baspar, baspar2basbas) = new_scf.mol.prepare_rimatr_for_ri_v_rayon();
-            Some((rimatr, basbas2baspar, baspar2basbas))
-        } else {
-            None
-        };
-
         new_scf.ijkl = if new_scf.mol.ctrl.use_auxbas {
             if let Some(tmp_r3fn) = &new_scf.ri3fn {
                 None
@@ -260,6 +242,33 @@ impl SCF {
         }
         time_mark.count("Grids AO");
         
+        // determine what kind of ri3fn is generated.
+        let isdf_full = new_scf.mol.ctrl.eri_type.eq("isdf_full");
+        let ri3fn_full = new_scf.mol.ctrl.use_auxbas && !new_scf.mol.ctrl.use_auxbas_symm;
+        new_scf.ri3fn = if ri3fn_full && !isdf_full {
+            //Some(new_scf.mol.prepare_ri3fn_for_ri_v_rayon())
+            Some(new_scf.mol.prepare_ri3fn_for_ri_v_full_rayon())
+            //println!("generate ri3fn from rimatr");
+            //let (rimatr, basbas2baspar, baspar2basbas) = new_scf.mol.prepare_rimatr_for_ri_v_rayon();
+            //Some(generate_ri3fn_from_rimatr(&rimatr, &basbas2baspar, &baspar2basbas))
+        } else if ri3fn_full && isdf_full {
+            if let Some(grids) = &new_scf.grids {
+                Some(prepare_for_ri_isdf(new_scf.mol.ctrl.isdf_k_mu, &new_scf.mol, &grids))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        new_scf.rimatr = if new_scf.mol.ctrl.use_auxbas && new_scf.mol.ctrl.use_auxbas_symm {
+            //println!("generate ri3fn from rimatr");
+            let (rimatr, basbas2baspar, baspar2basbas) = new_scf.mol.prepare_rimatr_for_ri_v_rayon();
+            Some((rimatr, basbas2baspar, baspar2basbas))
+        } else {
+            None
+        };
+
         
         // now prepare initial guess from different methods
         initial_guess(&mut new_scf);

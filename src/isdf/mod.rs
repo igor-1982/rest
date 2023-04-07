@@ -8,6 +8,7 @@ use crate::molecule_io::Molecule;
 use rand::Rng;
 use rayon::prelude::{IntoParallelRefMutIterator, IntoParallelRefIterator, IndexedParallelIterator, ParallelIterator};
 use rest_tensors::{MatrixFull, RIFull, ERIFull};
+use tensors::external_libs::matr_copy_from_ri;
 use tensors::{TensorSlice, TensorSliceMut};
 use std::cmp::Ordering;
 use rand::distributions::normal::StandardNormal;
@@ -587,7 +588,7 @@ pub fn tabulated_ao (mol: &Molecule, rand_p: &Vec<[f64; 3]>) -> MatrixFull<f64>{
     ao // [num_basis,num_grids]
 }
 
-pub fn prepare_for_ri_isdf(k_mu: usize, mol: &Molecule, grids: &dft::Grids) -> MatrixFull<f64> {
+pub fn prepare_for_ri_isdf(k_mu: usize, mol: &Molecule, grids: &dft::Grids) -> RIFull<f64> {
     let nao = mol.num_basis;
     let nri = mol.num_auxbas;
 
@@ -633,6 +634,8 @@ pub fn prepare_for_ri_isdf(k_mu: usize, mol: &Molecule, grids: &dft::Grids) -> M
     //&lambda_varphi.formated_output_e(5, "full");
     //C1 = (lambda_phi.T \cdot lambda_varphi) \times (phi.T \cdot varphi.T)  \times: Hadmard
     //C2 = (lambda_varphi.T \cdot lambda_varphi) \times (varphi.T \cdot varphi)
+
+    // c1就是(C^{+}Z)_{K,r}，见公式19
     let mut c11 = MatrixFull::new([ngrids, ind_mu.len()], 0.0);
     c11.lapack_dgemm(&mut lambda_phi, &mut lambda_varphi, 'T', 'N', 1.0, 0.0);
     let mut c12 = MatrixFull::new([ngrids, ind_mu.len()], 0.0);
@@ -646,6 +649,7 @@ pub fn prepare_for_ri_isdf(k_mu: usize, mol: &Molecule, grids: &dft::Grids) -> M
         });
     //&c1.formated_output_e(5, "full");
 
+    // c2就是S_{KL}，见公式17
     let mut c21 = MatrixFull::new([ind_mu.len(), ind_mu.len()], 0.0);
     let mut lambda_varphi_mid = lambda_varphi.clone();
     c21.lapack_dgemm(&mut lambda_varphi, &mut lambda_varphi_mid, 'T', 'N', 1.0, 0.0);
@@ -716,10 +720,13 @@ pub fn prepare_for_ri_isdf(k_mu: usize, mol: &Molecule, grids: &dft::Grids) -> M
             }
         }
     }
-        cint_data.final_c2r();
+    cint_data.final_c2r();
 
+    // ri_v_ao_t是公式22里面的三中心积分(P|\mu\nu)
+    // ri_v_ri是公式22里面的(Q|P)
     let mut ri_v_ao_t = MatrixFull::from_vec([nao*nao, nri],ri3fn.data).unwrap();
     println!("int2c2e,int3c2e finished");
+    // c就是C_{\mu\nu}^{L}*\lambda(r_L)， 见公式22,24
     let mut c = prod_states_gw(&lambda_varphi.transpose(), &varphi.transpose());
     //&c.formated_output_e(5, "full");
     println!("C prepared");
@@ -731,21 +738,42 @@ pub fn prepare_for_ri_isdf(k_mu: usize, mol: &Molecule, grids: &dft::Grids) -> M
     let mut tmp0 = MatrixFull::new([nri,ind_mu.len()],0.0);
     let mut inv_cctrans = c2.pinv(1.0e-6);
 
+    //tmp0是公式22里面除去(Q|P)^{-1/2}部分的矩阵
     tmp0.lapack_dgemm(&mut tmp1, &mut inv_cctrans, 'N', 'N', 1.0, 0.0);
     println!("prepared for dgesv");
-    //&tmp0.formated_output_e(5, "full");
-    //lapack_dgesv
     println!("dgesv finished");
     let mut tmp01 = tmp0.clone();
     let mut tmp = ri_v_ri.lapack_dgesv(&mut tmp01, nri as i32);
-    //println!("tmp:{:?}", &tmp);
+    // kernel_part就是M_{KL}，见公式23 
     let mut kernel_part = MatrixFull::new([ind_mu.len(),ind_mu.len()], 0.0);
     kernel_part.lapack_dgemm(&mut tmp0, &mut tmp, 'T', 'N', 1.0, 0.0);
-    //&kernel_part.formated_output_e(5, "full");
     // generate result
-    let mut mid = kernel_part.lapack_power(-0.5, 1.0E-6).unwrap();
-    let mut half = MatrixFull::new([ind_mu.len(),nao*nao],0.0);
-    half.lapack_dgemm(&mut mid, &mut c, 'N', 'N', 1.0, 0.0);
+    // mid就是M_{KL}^{1/2}
+    let mut aux_v = kernel_part.lapack_power(0.5, 1.0E-6).unwrap();
+    // c3就是\omega_\lambda(r_L)\omega_\sigma(r_L)， 见公式6
+    let mut c3 = prod_states_gw(&varphi.transpose(), &varphi.transpose()).transpose_and_drop();
+    let mut ri3fn = RIFull::from_vec([nao,nao,n_mu], c3.data).unwrap();
+    let mut tmp_ovlp_matr = MatrixFull::new([nao,n_mu],0.0);
+    let mut aux_ovlp_matr = MatrixFull::new([nao,n_mu],0.0);
+    let n_basis = nao;
+    let n_auxbas = n_mu;
+    let size = [nao,n_mu];
+    for j in 0..nao {
+        matr_copy_from_ri(&ri3fn.data, &ri3fn.size,0..n_basis, 0..n_auxbas, j, 1,
+            &mut tmp_ovlp_matr.data, &size, 0..n_basis, 0..n_auxbas);
+
+        aux_ovlp_matr.to_matrixfullslicemut().lapack_dgemm(
+            &tmp_ovlp_matr.to_matrixfullslice(), &aux_v.to_matrixfullslice(), 
+            'N', 'N', 1.0,0.0);
+
+        //ri3fn.get_slices_mut(0..n_basis,j..j+1,0..n_auxbas).zip(aux_ovlp_matr.data.iter())
+        //    .for_each(|value| {*value.0 = *value.1});
+        ri3fn.copy_from_matr(0..n_basis, 0..n_auxbas, j, 1, 
+            &aux_ovlp_matr, 0..n_basis, 0..n_auxbas)
+    }
+    //let mut half = MatrixFull::new([ind_mu.len(),nao*nao],0.0);
+    //half.lapack_dgemm(&mut c3, &mut mid, 'N', 'N', 1.0, 0.0);
     //&fourcenter_after_isdf.formated_output_e(5, "full");
-    half
+    //half
+    ri3fn
 }
