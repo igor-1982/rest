@@ -2,6 +2,7 @@
 use std::collections::binary_heap::Iter;
 use std::fs::File;
 use std::io::{Write,BufRead, BufReader};
+use pyo3::{pyclass, pymethods};
 use rest_tensors::MatrixFull;
 use rayon::str::Chars;
 use regex::Regex;
@@ -13,6 +14,7 @@ use serde_json::Value;
 //use tensors::Tensors;
 
 use crate::constants::{SPECIES_NAME,MASS_CHARGE,ANG,SPECIES_INFO};
+mod pyrest_geom_io;
 
 
 
@@ -22,18 +24,42 @@ use crate::constants::{SPECIES_NAME,MASS_CHARGE,ANG,SPECIES_INFO};
 
 
 #[derive(Clone)]
+#[pyclass]
 pub struct GeomCell {
+    #[pyo3(get,set)]
     pub name: String,
+    #[pyo3(get,set)]
     pub elem: Vec<String>,
+    #[pyo3(get,set)]
     pub fix:  Vec<bool>,
     pub unit: GeomUnit,
     //pub position: MatrixXx3<f64>, 
     pub position: MatrixFull<f64>, 
     pub lattice: MatrixFull<f64>,
+    #[pyo3(get,set)]
     pub nfree: usize,
     pub pbc: MOrC,
+    #[pyo3(get,set)]
     pub rest : Vec<(usize,String)>,
 }
+
+//impl GeomCell {
+//    pub fn new() -> GeomCell {
+//        GeomCell{
+//            name            : String::from("a molecule"),
+//            nfree           : 0,
+//            elem            : vec![], 
+//            fix             : vec![],
+//            unit            : GeomUnit::Angstrom,
+//            //position        : Tensors::new('F',vec![3,1],0.0f64),
+//            //lattice         : Tensors::new('F',vec![3,1],0.0f64),
+//            position        : MatrixFull::empty(),
+//            lattice         : MatrixFull::empty(),
+//            pbc             : MOrC::Molecule,
+//            rest            : vec![],
+//        }
+//    }
+//}
 
 #[derive(Clone,Copy)]
 pub enum MOrC {
@@ -92,7 +118,7 @@ pub fn get_mass_charge(elem_list: &Vec<String>) -> Vec<(f64,f64)> {
 }
 
 impl GeomCell {
-    pub fn new() -> GeomCell {
+    pub fn init_geom() -> GeomCell {
         GeomCell{
             name            : String::from("a molecule"),
             nfree           : 0,
@@ -108,7 +134,7 @@ impl GeomCell {
         }
     }
     pub fn copy(&mut self, name:String) -> GeomCell {
-        let mut new_mol = GeomCell::new();
+        let mut new_mol = GeomCell::init_geom();
         new_mol.name = name;
         new_mol.nfree = self.nfree;
         new_mol.unit = self.unit;
@@ -275,4 +301,72 @@ impl GeomCell {
         });
         tmp_vec
     }
+
+    pub fn parse_position_from_string_vec(position:&Vec<String>,unit:&GeomUnit) -> anyhow::Result<(Vec<String>,Vec<bool>,MatrixFull<f64>,usize)> {
+        // re0: the standard Cartesian position format with or without ',' as seperator
+        //      no fix atom information
+        let re0 = Regex::new(r"(?x)\s*
+                            (?P<elem>\w{1,2})\s*,?    # the element
+                            \s+
+                            (?P<x>[\+-]?\d+.\d+)\s*,? # the 'x' position
+                            \s+
+                            (?P<y>[\+-]?\d+.\d+)\s*,? # the 'y' position
+                            \s+
+                            (?P<z>[\+-]?\d+.\d+)\s*,? # the 'z' position
+                            \s*").unwrap();
+        // re1: the standard Cartesian position format with or without ',' as seperator
+        //      info. of fix atom is specified following the element name
+        let re1 = Regex::new(r"(?x)\s*
+                            (?P<elem>\w{1,2})\s*,?    # the element
+                            \s+
+                            (?P<fix>\d)\s*,? # 1 for geometry relazation; 0 for fix
+                            \s+
+                            (?P<x>[\+-]?\d+.\d+)\s*,? # the 'x' position
+                            \s+
+                            (?P<y>[\+-]?\d+.\d+)\s*,? # the 'y' position
+                            \s+
+                            (?P<z>[\+-]?\d+.\d+)\s*,? # the 'z' position
+                            \s*").unwrap();
+        let mut tmp_nfree:usize = 0;
+        let mut tmp_ele: Vec<String> = vec![];
+        let mut tmp_fix: Vec<bool> = vec![];
+        let mut tmp_pos: Vec<f64> = vec![];
+        for line in position {
+            let tmpp = line.clone();
+            //let tmpp = match line {
+            //    Value::String(tmp_str)=>{tmp_str.clone()},
+            //    other => {String::from("none")}
+            //};
+            if let Some(cap) = re0.captures(&tmpp) {
+                tmp_ele.push(cap[1].to_string());
+                tmp_pos.push(cap[2].parse().unwrap());
+                tmp_pos.push(cap[3].parse().unwrap());
+                tmp_pos.push(cap[4].parse().unwrap());
+                tmp_fix.push(false);
+                tmp_nfree += 1;
+            } else if let Some(cap) = re1.captures(&tmpp) {
+                tmp_ele.push(cap[1].to_string());
+                tmp_pos.push(cap[3].parse().unwrap());
+                tmp_pos.push(cap[4].parse().unwrap());
+                tmp_pos.push(cap[5].parse().unwrap());
+                let tmp_num: i32 = cap[2].parse().unwrap();
+                if tmp_num==0 {
+                    tmp_fix.push(true);
+                } else {
+                    tmp_fix.push(false);
+                    tmp_nfree += 1;
+                }
+            } else {
+                panic!("Error: unknown geometry format: {}", &tmpp);
+            }
+        }
+        let tmp_size: [usize;2] = [3,tmp_pos.len()/3];
+        let mut tmp_pos_tensor = MatrixFull::from_vec(tmp_size, tmp_pos).unwrap();
+        if let GeomUnit::Angstrom = unit {
+            // To store the geometry position in "Bohr" according to the convention of quantum chemistry. 
+            tmp_pos_tensor.self_multiple(ANG.powf(-1.0));
+        };
+        Ok((tmp_ele, tmp_fix, tmp_pos_tensor, tmp_nfree))
+    }
+
 }

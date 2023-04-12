@@ -27,7 +27,8 @@ use std::os::raw::c_int;
 use std::path::Iter;
 use std::sync::mpsc::channel;
 
-use self::libxc::{XcFuncType, LibXCFamily};
+//extern crate rest_libxc  as libxc;
+use libxc::{XcFuncType, LibXCFamily};
 //use std::intrinsics::expf64;
 
 #[derive(Clone,Debug)]

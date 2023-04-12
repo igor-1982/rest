@@ -1,6 +1,8 @@
 use tensors::{MatrixFull, MatrixUpper};
 
-use crate::{molecule_io::Molecule, scf_io::SCF, dft::Grids, get_vsap};
+use crate::{molecule_io::Molecule, scf_io::SCF, dft::Grids};
+
+use crate::initial_guess::sap::get_vsap;
 
 use self::sad::initial_guess_from_sad;
 

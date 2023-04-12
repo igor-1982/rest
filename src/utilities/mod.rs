@@ -1,3 +1,4 @@
+use clap::{Command, Arg, ArgMatches};
 use time::{DateTime,Local};
 use std::{time::Instant, collections::HashMap, ops::Range};
 use regex::Regex;
@@ -6,6 +7,20 @@ enum DebugTiming {
    Not,
 }
 const DEBUG_PRINT: DebugTiming = DebugTiming::Not;
+
+pub fn parse_input() -> ArgMatches {
+    Command::new("fdqc")
+        .version("0.1")
+        .author("Igor Ying Zhang <igor_zhangying@fudan.edu.cn>")
+        .about("Rust-based Electronic-Structure Tool (REST)")
+        .arg(Arg::new("input_file")
+             .short('i')
+             .long("input-file")
+             .value_name("input_file")
+             .help("Input file including \"ctrl\" and \"geom\" block, in the format of either \"json\" or \"toml\"")
+             .takes_value(true))
+        .get_matches()
+}
 
 pub struct TimeRecords {
     items: HashMap<String, (Instant,f64,bool,String)>

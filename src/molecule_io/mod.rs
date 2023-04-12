@@ -1,4 +1,8 @@
+extern crate rest_tensors as tensors;
+
+mod pyrest_molecule_io;
 use array_tool::vec::Intersect;
+use pyo3::{pyclass, pymethods};
 use rayon::prelude::{IntoParallelRefIterator, IndexedParallelIterator, ParallelIterator};
 use rest_tensors::{ERIFull,RIFull,ERIFold4,TensorSlice,TensorSliceMut,TensorOptMut,TensorOpt, MatrixUpper, MatrixFull};
 use libc::regerror;
@@ -48,6 +52,7 @@ pub fn get_basis_name(ang: usize, ctype: &CintType, index: usize) -> String {
 }
 
 #[derive(Clone)]
+#[pyclass]
 /// # Molecule
 /// `Molecule` contains all basic information of the molecule in the calculation task
 /// self.ctrl:         include the input keywords and many derived keywors to control the calculation task
@@ -64,18 +69,26 @@ pub fn get_basis_name(ang: usize, ctype: &CintType, index: usize) -> String {
 /// self.cint_*:       all these fields are the interface to ```libcint```
 /// self.cint_type:    CintType::Spheric or CintType::Cartesian
 pub struct Molecule {
+    #[pyo3(get, set)]
     pub ctrl: InputKeywords,
     //pub bas : Vec<Basis4Elem>,
     //pub auxbas : Vec<Basis4Elem>,
+    #[pyo3(get, set)]
     pub geom : GeomCell,
+    #[pyo3(get, set)]
     pub spin_channel: usize,
     // exchange-correlation functionals
     pub xc_data: DFA4REST,
+    #[pyo3(get, set)]
     pub num_state: usize,
+    #[pyo3(get, set)]
     pub num_basis: usize,
+    #[pyo3(get, set)]
     pub num_auxbas: usize,
+    #[pyo3(get, set)]
     pub num_elec : Vec<f64>,
     // for frozen-core pt2, rpa and so forth
+    #[pyo3(get, set)]
     pub start_mo : usize,
     pub basis4elem: Vec<Basis4Elem>,
     // fdqc_bas: store information of each basis functions
@@ -100,11 +113,11 @@ pub struct Molecule {
 }
 
 impl Molecule {
-    pub fn new() -> Molecule {
+    pub fn init_mol() -> Molecule {
         Molecule {
-            ctrl:InputKeywords::new(),
+            ctrl:InputKeywords::init_ctrl(),
             xc_data: DFA4REST::new("hf",1, 0),
-            geom: GeomCell::new(),
+            geom: GeomCell::init_geom(),
             num_elec: vec![0.0,0.0,0.0],
             num_state: 0,
             num_basis: 0,
@@ -684,7 +697,7 @@ impl Molecule {
     }
 
     #[inline]
-    pub fn int_ij_matrixupper(&mut self,op_name: String) -> MatrixUpper<f64> {
+    pub fn int_ij_matrixupper(&self,op_name: String) -> MatrixUpper<f64> {
         let mut cur_op = op_name.clone();
         let mut cint_data = self.initialize_cint(false);
         if op_name == String::from("ovlp") {

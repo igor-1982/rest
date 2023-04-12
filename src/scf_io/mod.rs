@@ -1,4 +1,5 @@
 use clap::value_parser;
+use pyo3::{pyclass, pymethods, pyfunction};
 use tensors::matrix_blas_lapack::_dgemm;
 use tensors::{ERIFull,MatrixFull, ERIFold4, MatrixUpper, TensorSliceMut, RIFull, MatrixFullSlice, MatrixFullSliceMut, BasicMatrix, MathMatrix, MatrixUpperSlice, ParMathMatrix};
 use itertools::{Itertools, iproduct, izip};
@@ -17,7 +18,7 @@ use crate::isdf::prepare_for_ri_isdf;
 use crate::molecule_io::{Molecule, generate_ri3fn_from_rimatr};
 use crate::tensors::{TensorOpt,TensorOptMut,TensorSlice};
 use crate::dft::{Grids, numerical_density, par_numerical_density};
-use crate::{utilities, parse_input, initial_guess};
+use crate::{utilities, initial_guess};
 //use crate::initial_guess::sap::get_vsap;
 use crate::initial_guess::initial_guess;
 use rayon::prelude::*;
@@ -29,13 +30,16 @@ use crossbeam::{channel::{unbounded,bounded},thread::{Scope,scope}};
 use std::sync::mpsc::{channel, Receiver};
 //use blas_src::openblas::dgemm;
 mod addons;
+mod pyrest_scf_io;
 
 use crate::constants::SPECIES_INFO;
 
 
 
 
+#[pyclass]
 pub struct SCF {
+    #[pyo3(get,set)]
     pub mol: Molecule,
     pub ovlp: MatrixUpper<f64>,
     pub h_core: MatrixUpper<f64>,
@@ -44,6 +48,7 @@ pub struct SCF {
     pub ijkl: Option<ERIFold4<f64>>,
     pub ri3fn: Option<RIFull<f64>>,
     pub rimatr: Option<(MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>)>,
+    #[pyo3(get,set)]
     pub eigenvalues: [Vec<f64>;2],
     //pub eigenvectors: Vec<Tensors<f64>>,
     pub eigenvectors: [MatrixFull<f64>;2],
@@ -53,10 +58,15 @@ pub struct SCF {
     //pub hamiltonian: Vec<Tensors<f64>>,
     pub hamiltonian: [MatrixUpper<f64>;2],
     pub scftype: SCFType,
+    #[pyo3(get,set)]
     pub occupation: [Vec<f64>;2],
+    #[pyo3(get,set)]
     pub homo: [usize;2],
+    #[pyo3(get,set)]
     pub lumo: [usize;2],
+    #[pyo3(get,set)]
     pub nuc_energy: f64,
+    #[pyo3(get,set)]
     pub scf_energy: f64,
     pub grids: Option<Grids>,
 }
@@ -68,8 +78,10 @@ pub enum SCFType {
     UHF
 }
 
+
+
 impl SCF {
-    pub fn new(mol: &Molecule) -> SCF {
+    pub fn init_scf(mol: &Molecule) -> SCF {
         let mut scf_data = SCF {
             mol: mol.clone(),
             ovlp: MatrixUpper::new(1,0.0),
@@ -125,9 +137,10 @@ impl SCF {
 
         scf_data
     }
+
     pub fn build(mol: Molecule) -> SCF {
 
-        let mut new_scf = SCF::new(&mol);
+        let mut new_scf = SCF::init_scf(&mol);
         //new_scf.generate_occupation();
 
         let mut time_mark = utilities::TimeRecords::new();
@@ -3107,6 +3120,7 @@ pub fn diis_solver(em: &Vec<Vec<f64>>,
             //sum_inv_norm_rdm += inv_norm_rdm;
         })
     });
+    //println!("debug");
     inv_opta = opta.lapack_inverse().unwrap();
     sum_inv_norm_rdm = inv_opta.data.iter().sum::<f64>().powf(-1.0f64);
     //(0..*spin_channel).into_iter().for_each(|i_spin| {

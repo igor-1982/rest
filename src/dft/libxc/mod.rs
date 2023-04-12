@@ -1,20 +1,22 @@
 #![allow(unused)]
+pub mod ffi_xc;
 use std::convert::TryInto;
 use std::os::raw::c_int;
 use std::os::raw::c_double;
 use std::ffi::CStr;
 use std::mem::ManuallyDrop;
 
-use rest_tensors::MatrixFull;
+use tensors::MatrixFull;
 
-use self::ffi_xc::xc_func_info_type;
+//use self::ffi_xc::xc_func_info_type;
+use crate::dft::libxc::ffi_xc::xc_func_info_type;
 
 use super::Grids;
 
 //use self::libxc::xc_func_type;
 //use self::libxc::func_params_type;
 
-pub(crate) mod ffi_xc;
+//pub(crate) mod ffi_xc;
 
 #[derive(Clone,Debug)]
 pub enum LibXCFamily {

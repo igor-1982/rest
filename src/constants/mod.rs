@@ -4,6 +4,8 @@ mod cartesian_gto;
 
 use std::collections::HashMap;
 
+use lazy_static::lazy_static;
+
 pub use crate::constants::vsap::*;
 pub use crate::constants::c2s::*;
 pub use crate::constants::cartesian_gto::*;

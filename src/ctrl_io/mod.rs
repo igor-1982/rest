@@ -1,3 +1,5 @@
+
+use pyo3::pyclass;
 use serde::{Deserialize,Serialize};
 //use std::{fs, str::pattern::StrSearcher};
 use std::fs;
@@ -15,6 +17,9 @@ use toml;
 //    pub geom: Option<RawGeomCell>
 //}
 
+mod pyrest_ctrl_io;
+
+#[pyclass]
 pub enum SCFType {
     RHF,
     ROHF,
@@ -34,79 +39,135 @@ pub enum SCFType {
 ///  - `etb_start_atom_number`: `Usize`. Use ETB, for the element with atomic index larger than this value  
 ///  - `etb_beta`: `f64`. Relevant to the ETB basis set size. Smaller value indicates larger ETB basis set. NOTE: etb_beta should be larger than 1.0
 #[derive(Debug,Clone)]
+#[pyclass]
 pub struct InputKeywords {
+    #[pyo3(get, set)]
     pub print_level: usize,
     // Keywords for the (aux) basis sets
+    #[pyo3(get, set)]
     pub basis_path: String,
+    #[pyo3(get, set)]
     pub basis_type: String,
+    #[pyo3(get, set)]
     pub auxbas_path: String,
+    #[pyo3(get, set)]
     pub auxbas_type: String,
+    #[pyo3(get, set)]
     pub use_auxbas: bool,
+    #[pyo3(get, set)]
     pub use_auxbas_symm: bool,
+    #[pyo3(get, set)]
     pub even_tempered_basis: bool,
+    #[pyo3(get, set)]
     pub etb_start_atom_number: usize,
+    #[pyo3(get, set)]
     pub etb_beta: f64,
     // Keywords for IDSF
+    #[pyo3(get, set)]
     pub use_isdf: bool,
+    #[pyo3(get, set)]
     pub isdf_k_mu: usize,
     // Keywords for systems
+    #[pyo3(get, set)]
     pub eri_type: String,
+    #[pyo3(get, set)]
     pub xc: String,
+    #[pyo3(get, set)]
     pub charge: f64,
+    #[pyo3(get, set)]
     pub spin: f64,
+    #[pyo3(get, set)]
     pub spin_channel: usize,
+    #[pyo3(get, set)]
     pub spin_polarization: bool,
+    #[pyo3(get, set)]
     pub frozen_core_postscf: i32,
+    #[pyo3(get, set)]
     pub frequency_points: usize,
+    #[pyo3(get, set)]
     pub freq_grid_type: usize,
+    #[pyo3(get, set)]
     pub freq_cut_off: f64,
     // Keywords for DFT numerical integration
+    #[pyo3(get, set)]
     pub radial_precision: f64,
+    #[pyo3(get, set)]
     pub min_num_angular_points: usize,
+    #[pyo3(get, set)]
     pub max_num_angular_points: usize,
+    #[pyo3(get, set)]
     pub grid_gen_level: usize,
+    #[pyo3(get, set)]
     pub hardness: usize,
+    #[pyo3(get, set)]
     pub pruning: String,
+    #[pyo3(get, set)]
     pub rad_grid_method: String,
+    #[pyo3(get, set)]
     pub external_grids: String,
     // Keywords for the scf procedures
+    #[pyo3(get, set)]
     pub mixer: String,
+    #[pyo3(get, set)]
     pub mix_param: f64,
+    #[pyo3(get, set)]
     pub num_max_diis: usize,
+    #[pyo3(get, set)]
     pub start_diis_cycle: usize,
+    #[pyo3(get, set)]
     pub max_scf_cycle: usize,
+    #[pyo3(get, set)]
     pub scf_acc_rho: f64,
+    #[pyo3(get, set)]
     pub scf_acc_eev: f64,
+    #[pyo3(get, set)]
     pub scf_acc_etot:f64,
+    #[pyo3(get, set)]
     pub restart: bool,
+    #[pyo3(get, set)]
     pub chkfile: String,
+    #[pyo3(get, set)]
     pub chkfile_type: String,
+    #[pyo3(get, set)]
     pub guessfile: String,
+    #[pyo3(get, set)]
     pub guessfile_type: String,
+    #[pyo3(get, set)]
     pub external_init_guess: bool,
+    #[pyo3(get, set)]
     pub initial_guess: String,
+    #[pyo3(get, set)]
     pub noiter: bool,
+    #[pyo3(get, set)]
     pub check_stab: bool,
+    #[pyo3(get, set)]
     pub use_dm_only: bool,
     // Keywords for fciqmc dump
+    #[pyo3(get, set)]
     pub fciqmc_dump: bool,
     // Kyewords for post scf analysis
+    #[pyo3(get, set)]
     pub output_wfn_in_real_space: usize,
+    #[pyo3(get, set)]
     pub output_cube: bool,
+    #[pyo3(get, set)]
     pub output_molden: bool,
+    #[pyo3(get, set)]
     pub output_fchk: bool,
     // Keywords for sad initial guess
+    #[pyo3(get, set)]
     pub atom_sad: bool,
     // Keywords for parallism
+    #[pyo3(get, set)]
     pub num_threads: Option<usize>
 }
 
 impl InputKeywords {
-    pub fn new() -> InputKeywords {
+    pub fn init_ctrl() -> InputKeywords {
         InputKeywords{
             // keywords for machine and debug info
             print_level: 0,
-            num_threads: None,
+            num_threads: Some(1),
             // Keywords for (aux)-basis sets
             basis_path: String::from("./STO-3G"),
             basis_type: String::from("spheric"),
@@ -181,8 +242,8 @@ impl InputKeywords {
     pub fn parse_ctl_from_json(tmp_keys: &serde_json::Value) -> anyhow::Result<(InputKeywords,GeomCell)> {
         //let tmp_cont = fs::read_to_string(&filename[..])?;
         //let tmp_keys: serde_json::Value = serde_json::from_str(&tmp_cont[..])?;
-        let mut tmp_input = InputKeywords::new();
-        let mut tmp_geomcell = GeomCell::new();
+        let mut tmp_input = InputKeywords::init_ctrl();
+        let mut tmp_geomcell = GeomCell::init_geom();
 
         //==================================================================
         //

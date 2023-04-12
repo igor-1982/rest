@@ -27,7 +27,7 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
 
             elem_name.push(ielem.to_string());
 
-            let mut atom_ctrl = InputKeywords::new();
+            let mut atom_ctrl = InputKeywords::init_ctrl();
             atom_ctrl.xc = String::from("hf");
             atom_ctrl.basis_path = mol.ctrl.basis_path.clone();
             atom_ctrl.basis_type = mol.ctrl.basis_type.clone();
@@ -48,7 +48,7 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
             //atom_ctrl.spin_channel = 1;
             //atom_ctrl.spin_polarization = false;
 
-            let mut atom_geom = GeomCell::new();
+            let mut atom_geom = GeomCell::init_geom();
             atom_geom.name = ielem.to_string();
             atom_geom.position = MatrixFull::from_vec([3,1], vec![0.000,0.000,0.000]).unwrap();
             atom_geom.elem = vec![ielem.to_string()];

@@ -1,6 +1,6 @@
 [ctrl]
      # 设置程序输出的程度，缺省为1
-     print_level =               3
+     print_level =               1
      # 设置Rayon和OpenMP的并行数，缺省为1
      num_threads =               1
      # 设置使用的电子结构方法，缺省为HF
@@ -14,7 +14,7 @@
      etb_start_atom_number =     1
      etb_beta =                  1.0
      # 使用resolution-of-identity (RI)技术处理四中心积分（缺省）
-     eri_type =                  "isdf_full"
+     eri_type =                  "ri_v"
      charge =                    0.0
      spin =                      1.0
      spin_polarization =         false
@@ -26,7 +26,7 @@
      scf_acc_rho =               1.0e-5
      scf_acc_eev =               1.0e-5
      scf_acc_etot =              1.0e-8
-     initial_guess =             "vsap"
+     initial_guess =             "sad"
      chkfile =                   "none"
      fchk =                      false
      pruning =                   "nwchem"
