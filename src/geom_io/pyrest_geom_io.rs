@@ -31,6 +31,14 @@ impl GeomCell {
             self.unit=GeomUnit::Angstrom;
         };
     }
+    pub fn py_set_position_from_string(&mut self, pos: String) {
+        let (elem, fix, pos,n_free) = GeomCell::parse_position_from_string(pos, &self.unit).unwrap();
+        self.elem = elem;
+        self.fix = fix;
+        self.position = pos;
+        self.nfree = n_free;
+
+    }
     pub fn py_set_position(&mut self, pos: Vec<String>) {
         let (elem, fix, pos,n_free) = GeomCell::parse_position_from_string_vec(&pos, &self.unit).unwrap();
         self.elem = elem;
