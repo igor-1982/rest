@@ -1,0 +1,14 @@
+on: [push, pull_request]
+
+jobs:
+  linux-build:
+    env:
+      img: docker://rust:latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install
+        run: |
+            cd ..
+            curl -L "https://github.com/igor-1982/rest_workspace/blob/master/Cargo.toml"
+            curl -L "https://github.com/pyscf/pyscf-build-deps/blob/master/pyscf-2.2.1-deps.tar.gz?raw=true" | tar xzf -
+            cargo build
