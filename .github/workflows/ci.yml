@@ -20,11 +20,11 @@ jobs:
             ls -l deps/lib
             ls -l deps/lib64
             export REST_FORTRAN_COMPILER="gfortran"
-            export REST_CINT_DIR=`pwd`/deps
-            export REST_EXT_DIR=`pwd`/deps
-            export REST_BLAS_DIR=`pwd`/deps
+            export REST_CINT_DIR=`pwd`/deps/lib
+            export REST_EXT_DIR=`pwd`/deps/lib
+            export REST_BLAS_DIR=/usr/lib
             export REST_HDF5_DIR=/usr/lib
-            export REST_XC_DIR=`pwd`/deps
-            git clone git@github.com:igor-1982/rest_tensors.git
-            git clone git@github.com:igor-1982/rest_libcint.git
+            export REST_XC_DIR=`pwd`/deps/lib
+            git clone https://github.com/igor-1982/rest_tensors.git
+            git clone https://github.com/igor-1982/rest_libcint.git
             cargo build
