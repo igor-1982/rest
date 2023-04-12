@@ -9,7 +9,17 @@ jobs:
         run: |
             cd ..
             curl -o rustup-init https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init
-            ./rustup-init -y
+            chmod +x rustup-init
+            rustup-init -y
             curl -o Cargo.toml "https://github.com/igor-1982/rest_workspace/blob/master/Cargo.toml"
             curl -L "https://github.com/pyscf/pyscf-build-deps/blob/master/pyscf-2.2.1-deps.tar.gz?raw=true" | tar xzf -
+            pwd
+            ls -l
+            apt update -y && apt install hdf5-devel -y
+            export REST_FORTRAN_COMPILER="gfortran"
+            export REST_CINT_DIR=/root
+            export REST_EXT_DIR=/root
+            export REST_BLAS_DIR=/root
+            export REST_HDF5_DIR=/usr/lib
+            export REST_XC_DIR=/root
             cargo build
