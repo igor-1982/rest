@@ -15,11 +15,12 @@ jobs:
             curl -L "https://github.com/pyscf/pyscf-build-deps/blob/master/pyscf-2.2.1-deps.tar.gz?raw=true" | tar xzf -
             pwd
             ls -l
-            apt update -y && apt install hdf5-devel -y
+            sudo apt-get update -qy 
+            sudo apt-get install libhdf5-dev libopenblas-dev gcc gfortran -qy
             export REST_FORTRAN_COMPILER="gfortran"
-            export REST_CINT_DIR=/root
-            export REST_EXT_DIR=/root
-            export REST_BLAS_DIR=/root
+            export REST_CINT_DIR=`pwd`/deps
+            export REST_EXT_DIR=`pwd`/deps
+            export REST_BLAS_DIR=`pwd`/deps
             export REST_HDF5_DIR=/usr/lib
-            export REST_XC_DIR=/root
+            export REST_XC_DIR=`pwd`/deps
             cargo build
