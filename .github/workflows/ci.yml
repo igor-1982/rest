@@ -16,14 +16,15 @@ jobs:
             curl -L "https://github.com/pyscf/pyscf-build-deps/blob/master/pyscf-2.2.1-deps.tar.gz?raw=true" | tar xzf -
             sudo apt-get update -qy 
             sudo apt-get install libhdf5-dev libopenblas-dev gcc gfortran -qy
-            ls /usr/lib/x86_64-linux-gnu
-            ls -l deps
+            #ls /usr/lib/x86_64-linux-gnu
+            ls -l deps/lib
+            ls -l deps/lib64
             export REST_FORTRAN_COMPILER="gfortran"
             export REST_CINT_DIR=`pwd`/deps
             export REST_EXT_DIR=`pwd`/deps
             export REST_BLAS_DIR=`pwd`/deps
             export REST_HDF5_DIR=/usr/lib
             export REST_XC_DIR=`pwd`/deps
-            git@github.com:igor-1982/rest_tensors.git
-            git@github.com:igor-1982/rest_libcint.git
+            git clone git@github.com:igor-1982/rest_tensors.git
+            git clone git@github.com:igor-1982/rest_libcint.git
             cargo build
