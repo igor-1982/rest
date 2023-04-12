@@ -10,7 +10,7 @@ jobs:
             cd ..
             curl -o rustup-init https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init
             chmod +x rustup-init
-            rustup-init -y
+            ./rustup-init -y
             curl -o Cargo.toml "https://github.com/igor-1982/rest_workspace/blob/master/Cargo.toml"
             curl -L "https://github.com/pyscf/pyscf-build-deps/blob/master/pyscf-2.2.1-deps.tar.gz?raw=true" | tar xzf -
             pwd
