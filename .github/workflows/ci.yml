@@ -12,6 +12,7 @@ jobs:
             chmod +x rustup-init
             ./rustup-init -y
             curl -o Cargo.toml "https://github.com/igor-1982/rest_workspace/blob/master/Cargo.toml"
+            cat Cargo.toml
             curl -L "https://github.com/pyscf/pyscf-build-deps/blob/master/pyscf-2.2.1-deps.tar.gz?raw=true" | tar xzf -
             pwd
             ls -l
