@@ -714,6 +714,17 @@ impl InputKeywords {
                         tmp_geomcell.position = tmp3;
                         tmp_geomcell.nfree = tmp4;
                     },
+                    serde_json::Value::String(tmp_geom) => {
+                        let tmp_unit = tmp_geomcell.unit.clone();
+                        
+                        let (tmp1,tmp2,tmp3,tmp4) = GeomCell::parse_position_from_string(tmp_geom, &tmp_unit)?;
+
+                        tmp_geomcell.elem = tmp1;
+                        tmp_geomcell.fix = tmp2;
+                        tmp_geomcell.position = tmp3;
+                        tmp_geomcell.nfree = tmp4;
+
+                    }
                     other => {
                         panic!("Error in reading the geometry position")
                     }

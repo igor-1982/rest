@@ -32,7 +32,7 @@ impl GeomCell {
         };
     }
     pub fn py_set_position_from_string(&mut self, pos: String) {
-        let (elem, fix, pos,n_free) = GeomCell::parse_position_from_string(pos, &self.unit).unwrap();
+        let (elem, fix, pos,n_free) = GeomCell::parse_position_from_string(&pos, &self.unit).unwrap();
         self.elem = elem;
         self.fix = fix;
         self.position = pos;

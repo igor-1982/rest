@@ -39,7 +39,7 @@ impl InputKeywords {
         self.spin_polarization = flag;
     }
     pub fn py_set_num_threads(&mut self, num_threads: usize) {
-        //rayon::ThreadPoolBuilder::new().num_threads(num_threads).build_global().unwrap();
+        rayon::ThreadPoolBuilder::new().num_threads(num_threads).build_global().unwrap();
         self.num_threads = Some(num_threads);
     }
 }

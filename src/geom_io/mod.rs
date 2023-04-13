@@ -369,7 +369,8 @@ impl GeomCell {
         Ok((tmp_ele, tmp_fix, tmp_pos_tensor, tmp_nfree))
     }
 
-    pub fn parse_position_from_string(position: String, unit: &GeomUnit) -> anyhow::Result<(Vec<String>,Vec<bool>,MatrixFull<f64>,usize)> {
+
+    pub fn parse_position_from_string(position: &String, unit: &GeomUnit) -> anyhow::Result<(Vec<String>,Vec<bool>,MatrixFull<f64>,usize)> {
         // re0: the standard Cartesian position format with or without ',' as seperator
         //      no fix atom information
         let re0 = Regex::new(r"(?x)\s*
@@ -428,7 +429,6 @@ impl GeomCell {
         Ok((tmp_ele, tmp_fix, tmp_pos_tensor, tmp_nfree))
 
     }
-
 }
 
 #[test]
@@ -460,7 +460,7 @@ fn test_string_parse() {
         H   -4.9430735200 -2.4988605526  0.0000000000
         H   -2.4690554105 -2.4968374995  0.0000000000
         H    0.0000000000 -2.4973235097  0.0000000000
-        H  0  2.4690554105 -2.4968374995  0.0000000000
+        H    2.4690554105 -2.4968374995  0.0000000000
         H    4.9430735200 -2.4988605526  0.0000000000
         H    7.0692917090 -1.2490690741  0.0000000000
         H    7.0692917090  1.2490690741  0.0000000000

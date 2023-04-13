@@ -1,6 +1,6 @@
 use clap::value_parser;
 use pyo3::{pyclass, pymethods, pyfunction};
-use tensors::matrix_blas_lapack::_dgemm;
+use tensors::matrix_blas_lapack::{_dgemm, _dinverse};
 use tensors::{ERIFull,MatrixFull, ERIFold4, MatrixUpper, TensorSliceMut, RIFull, MatrixFullSlice, MatrixFullSliceMut, BasicMatrix, MathMatrix, MatrixUpperSlice, ParMathMatrix};
 use itertools::{Itertools, iproduct, izip};
 use libc::SCHED_OTHER;
@@ -32,7 +32,7 @@ use std::sync::mpsc::{channel, Receiver};
 mod addons;
 mod pyrest_scf_io;
 
-use crate::constants::SPECIES_INFO;
+use crate::constants::{SPECIES_INFO, INVERSE_THRESHOLD};
 
 
 
@@ -2970,16 +2970,6 @@ impl ScfTraceRecord {
             // 
             // Reference: P. Pulay, Improved SCF Convergence Acceleration, JCC, 1982, 3:556-560.
             // 
-            //let num_diis_vec = if self.num_iter >= self.num_max_records + self.start_diis_cycle - 1 {
-            //    self.num_max_records
-            //} else {
-            //    self.num_iter - self.start_diis_cycle + 1
-            //};
-            //let start_dim = if (self.target_vector.len()>=num_diis_vec) {
-            //    self.target_vector.len()-num_diis_vec
-            //} else {
-            //    0
-            //};
             let start_dim = 0usize;
             //
             // prepare the fock matrix according to the output density matrix of the previous step
@@ -3003,17 +2993,32 @@ impl ScfTraceRecord {
 
 
             // solve the diss against the error vector
-            let coeff = diis_solver(&self.error_vector, &self.error_vector.len());
-            //println!("debug: diis_c: {:?}", &coeff);
-
-            // now extrapolate the fock matrix for the next step
-            (0..spin_channel).into_iter().for_each(|i_spin| {
-                let mut next_hamiltonian = MatrixFull::new(self.target_vector[0][i_spin].size.clone(),0.0);
-                coeff.iter().enumerate().for_each(|(i,value)| {
-                    next_hamiltonian.self_scaled_add(&self.target_vector[i+start_dim][i_spin], *value);
+            if let Some(coeff) = diis_solver(&self.error_vector, &self.error_vector.len()) {
+                // now extrapolate the fock matrix for the next step
+                (0..spin_channel).into_iter().for_each(|i_spin| {
+                    let mut next_hamiltonian = MatrixFull::new(self.target_vector[0][i_spin].size.clone(),0.0);
+                    coeff.iter().enumerate().for_each(|(i,value)| {
+                        next_hamiltonian.self_scaled_add(&self.target_vector[i+start_dim][i_spin], *value);
+                    });
+                    scf.hamiltonian[i_spin] = next_hamiltonian.to_matrixupper();
                 });
-                scf.hamiltonian[i_spin] = next_hamiltonian.to_matrixupper();
-            });
+
+            } else {
+                println!("WARNING: fail to obtain the DIIS coefficients. Turn to use the linear mixing algorithm, and re-invoke DIIS  8 steps later");
+                for i_spin in (0..spin_channel) {
+                    let residual_dm = self.density_matrix[1][i_spin].sub(&self.density_matrix[0][i_spin]).unwrap();
+                    scf.density_matrix[i_spin] = self.density_matrix[0][i_spin]
+                        .scaled_add(&residual_dm, alpha)
+                        .unwrap();
+                }
+                scf.generate_hf_hamiltonian();
+                //let index = self.target_vector.len()-1;
+                //self.target_vector.remove(index);
+                //self.error_vector.remove(index);
+                self.start_diis_cycle = self.num_iter + 8;
+                self.target_vector =  Vec::<[MatrixFull<f64>;2]>::new();
+                self.error_vector =  Vec::<Vec::<f64>>::new();
+            }
             let dt3 = time::Local::now();
             let timecost1 = (dt2.timestamp_millis()-dt1.timestamp_millis()) as f64 /1000.0;
             let timecost2 = (dt3.timestamp_millis()-dt2.timestamp_millis()) as f64 /1000.0;
@@ -3040,15 +3045,10 @@ pub fn generate_diis_error_vector(hamiltonian: &[MatrixUpper<f64>;2],
             //println!("debug: {:?}", &hamiltonian);
             let mut cur_target = [hamiltonian[0].to_matrixfull().unwrap(),
                  hamiltonian[1].to_matrixfull().unwrap()];
-            //let mut cur_target = [MatrixFull::empty(),MatrixFull::empty()];
-            //for i_spin in 0..spin_channel {
-            //    cur_target[i_spin] = hamiltonian[i_spin].to_matrixfull().unwrap()
-            //};
 
             let mut full_ovlp = ovlp.to_matrixfull().unwrap();
 
             //let mut sqrt_inv_ovlp = full_ovlp.lapack_power(-0.5,10.0E-6).unwrap();
-
             //let mut tmp_num = 0_usize;
             //sqrt_inv_ovlp.data.iter().enumerate().for_each(|ig| {
             //    let j = ig.0/sqrt_inv_ovlp.indicing[1];
@@ -3092,12 +3092,7 @@ pub fn generate_diis_error_vector(hamiltonian: &[MatrixUpper<f64>;2],
 }
 
 pub fn diis_solver(em: &Vec<Vec<f64>>,
-                   num_vec:&usize) -> Vec<f64> {
-
-    //if ! tm.len()==em.len() {
-    //    println!("ERROR: the length of target vector is not the same as the corresponding error vector");
-    //}
-    //let dim = dm.len();
+                   num_vec:&usize) -> Option<Vec<f64>> {
 
     let dim_vec = em.len();
     let start_dim = if (em.len()>=*num_vec) {em.len()-*num_vec} else {0};
@@ -3105,7 +3100,7 @@ pub fn diis_solver(em: &Vec<Vec<f64>>,
     let mut coeff = Vec::<f64>::new();
     //let mut norm_rdm = [Vec::<f64>::new(),Vec::<f64>::new()];
     let mut odm = MatrixFull::new([1,1],0.0);
-    let mut inv_opta = MatrixFull::new([dim,dim],0.0);
+    //let mut inv_opta = MatrixFull::new([dim,dim],0.0);
     //let mut sum_inv_norm_rdm = [0.0,0.0];
     let mut sum_inv_norm_rdm = 0.0_f64;
 
@@ -3121,22 +3116,17 @@ pub fn diis_solver(em: &Vec<Vec<f64>>,
         })
     });
     //println!("debug");
-    inv_opta = opta.lapack_inverse().unwrap();
+    let inv_opta = if let Some(inv_opta) = _dinverse(&mut opta) {
+        //println!("diis_solver: _dinverse");
+        inv_opta
+    //} else if let Some(inv_opta) = opta.lapack_power(-1.0, INVERSE_THRESHOLD) {
+    //    println!("diis_solver: lapack_power");
+    //    inv_opta
+    } else {
+        //println!("diis_solver: none");
+        return None
+    };
     sum_inv_norm_rdm = inv_opta.data.iter().sum::<f64>().powf(-1.0f64);
-    //(0..*spin_channel).into_iter().for_each(|i_spin| {
-    //    let mut opta = MatrixFull::new([dim,dim],0.0);
-    //    (start_dim..dim_vec).into_iter().for_each(|i| {
-    //        (start_dim..dim_vec).into_iter().for_each(|j| {
-    //            let inv_norm_rdm = em[i][i_spin].data.iter()
-    //                .zip(em[j][i_spin].data.iter())
-    //                .fold(0.0,|c,(d,e)| {c + d*e});
-    //            opta.set2d([i-start_dim,j-start_dim],inv_norm_rdm);
-    //            //sum_inv_norm_rdm += inv_norm_rdm;
-    //        })
-    //    });
-    //    inv_opta[i_spin] = opta.lapack_inverse().unwrap();
-    //    sum_inv_norm_rdm[i_spin] = inv_opta[i_spin].data.iter().sum::<f64>().powf(-1.0f64);
-    //});
 
     // now prepare the coefficients for the pulay mixing
     coeff = vec![sum_inv_norm_rdm;dim];
@@ -3148,19 +3138,8 @@ pub fn diis_solver(em: &Vec<Vec<f64>>,
                  .iter()
                  .sum::<f64>();
     });
-    //(0..*spin_channel).into_iter().for_each(|i_spin| {
-    //    coeff[i_spin] = vec![sum_inv_norm_rdm[i_spin];dim];
-    //    coeff[i_spin].iter().for_each(|i| {println!("coeff: {}",i)});
-    //    (0..dim).zip(coeff[i_spin].iter_mut()).for_each(|(i,value)| {
-    //        //println!("{:?}",*value);
-    //        *value *= inv_opta[i_spin].get2d_slice([0,i], dim)
-    //                 .unwrap()
-    //                 .iter()
-    //                 .sum::<f64>();
-    //    });
-    //});
 
-    coeff
+    Some(coeff)
 
 }
 
