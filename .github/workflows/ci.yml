@@ -5,20 +5,37 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Install
+      - name: Install basic deps
         run: |
             cd ..
             curl -o rustup-init https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init
             chmod +x rustup-init
             ./rustup-init -y
-            curl -o Cargo.toml -L "https://github.com/igor-1982/rest_workspace/blob/master/Cargo.toml?raw=true"
-            cat Cargo.toml
-            curl -L "https://github.com/pyscf/pyscf-build-deps/blob/master/pyscf-2.1-deps.tar.gz?raw=true" | tar xzf -
             sudo apt-get update -qy 
             sudo apt-get install libhdf5-dev libopenblas-dev gcc gfortran -qy
             #ls /usr/lib/x86_64-linux-gnu
-            ls -l deps/lib
-            ls -l deps/lib64
+            #ls -l deps/lib
+            #ls -l deps/lib64
+      - name: Install libcint, libxc, rest_tensors
+        run: |
+            curl -o Cargo.toml -L "https://github.com/igor-1982/rest_workspace/blob/master/Cargo.toml?raw=true"
+            #curl -L "https://github.com/pyscf/pyscf-build-deps/blob/master/pyscf-2.1-deps.tar.gz?raw=true" | tar xzf -
+            wget https://github.com/sunqm/libcint/archive/refs/tags/v5.1.5.tar.gz
+            tar -zxf libcint-5.1.5.tar.gz
+            cd libcint-5.1.5
+            mkdir build && cd build
+            cmake -DWITH_F12=1 -DWITH_RANGE_COULOMB=1 -DWITH_COULOMB_ERF=1 -DMIN_EXPCUTOFF=20 -DKEEP_GOING=1 -DCMAKE_INSTALL_PREFIX:PATH=/home/runner/work/rest/deps -DCMAKE_INSTALL_LIBDIR:PATH=lib ..
+            make && make install
+            cd ..
+            wget https://gitlab.com/libxc/libxc/-/archive/5.2.0/libxc-5.2.0.tar.gz
+            tar -zxf libxc-5.2.0.tar.gz
+            cd libxc-5.2.0
+            mkdir build && cd build
+            cmake -DCMAKE_BUILD_TYPE=RELEASE -DBUILD_SHARED_LIBS=1 -DCMAKE_INSTALL_PREFIX:PATH=/home/runner/work/rest/deps -DCMAKE_INSTALL_LIBDIR:PATH=lib ..
+            make && make install
+            cd ..
+      - name: Build
+        run: |
             export REST_FORTRAN_COMPILER="gfortran"
             export REST_CINT_DIR=`pwd`/deps/lib
             export REST_EXT_DIR=`pwd`/deps/lib
