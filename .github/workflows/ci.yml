@@ -18,7 +18,8 @@ jobs:
             #ls -l deps/lib64
       - name: Install libcint, libxc, rest_tensors
         run: |
-            curl -o Cargo.toml -L "https://github.com/igor-1982/rest_workspace/blob/master/Cargo.toml?raw=true"
+            cd ..
+            pwd
             #curl -L "https://github.com/pyscf/pyscf-build-deps/blob/master/pyscf-2.1-deps.tar.gz?raw=true" | tar xzf -
             wget -O libcint-5.1.5.tar.gz https://github.com/sunqm/libcint/archive/refs/tags/v5.1.5.tar.gz
             tar -zxf libcint-5.1.5.tar.gz
@@ -32,10 +33,12 @@ jobs:
             cd libxc-5.2.0
             mkdir build && cd build
             cmake -DCMAKE_BUILD_TYPE=RELEASE -DBUILD_SHARED_LIBS=1 -DCMAKE_INSTALL_PREFIX:PATH=/home/runner/work/rest/deps -DCMAKE_INSTALL_LIBDIR:PATH=lib ..
-            make -j4 && make install
-            cd ../..
+            make -j2 && make install
       - name: Build
         run: |
+            cd ..
+            pwd
+            curl -o Cargo.toml -L "https://github.com/igor-1982/rest_workspace/blob/master/Cargo.toml?raw=true"
             export REST_FORTRAN_COMPILER="gfortran"
             export REST_CINT_DIR=`pwd`/deps/lib
             export REST_EXT_DIR=`pwd`/deps/lib
