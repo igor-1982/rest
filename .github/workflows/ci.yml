@@ -20,7 +20,7 @@ jobs:
         run: |
             curl -o Cargo.toml -L "https://github.com/igor-1982/rest_workspace/blob/master/Cargo.toml?raw=true"
             #curl -L "https://github.com/pyscf/pyscf-build-deps/blob/master/pyscf-2.1-deps.tar.gz?raw=true" | tar xzf -
-            wget https://github.com/sunqm/libcint/archive/refs/tags/v5.1.5.tar.gz
+            wget -O libcint-5.1.5.tar.gz https://github.com/sunqm/libcint/archive/refs/tags/v5.1.5.tar.gz
             tar -zxf libcint-5.1.5.tar.gz
             cd libcint-5.1.5
             mkdir build && cd build
