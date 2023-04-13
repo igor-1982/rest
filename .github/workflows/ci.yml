@@ -26,14 +26,14 @@ jobs:
             mkdir build && cd build
             cmake -DWITH_F12=1 -DWITH_RANGE_COULOMB=1 -DWITH_COULOMB_ERF=1 -DMIN_EXPCUTOFF=20 -DKEEP_GOING=1 -DCMAKE_INSTALL_PREFIX:PATH=/home/runner/work/rest/deps -DCMAKE_INSTALL_LIBDIR:PATH=lib ..
             make && make install
-            cd ..
+            cd ../..
             wget https://gitlab.com/libxc/libxc/-/archive/5.2.0/libxc-5.2.0.tar.gz
             tar -zxf libxc-5.2.0.tar.gz
             cd libxc-5.2.0
             mkdir build && cd build
             cmake -DCMAKE_BUILD_TYPE=RELEASE -DBUILD_SHARED_LIBS=1 -DCMAKE_INSTALL_PREFIX:PATH=/home/runner/work/rest/deps -DCMAKE_INSTALL_LIBDIR:PATH=lib ..
-            make && make install
-            cd ..
+            make -j4 && make install
+            cd ../..
       - name: Build
         run: |
             export REST_FORTRAN_COMPILER="gfortran"
