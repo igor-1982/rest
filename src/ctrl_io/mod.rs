@@ -72,7 +72,6 @@ pub struct InputKeywords {
     pub eri_type: String,
     #[pyo3(get, set)]
     pub xc: String,
-    #[pyo3(get, set)]
     pub charge: f64,
     #[pyo3(get, set)]
     pub spin: f64,
@@ -179,7 +178,7 @@ impl InputKeywords {
             isdf_k_mu: 8,
             // Keywords associated with the method employed
             xc: String::from("x3lyp"),
-            eri_type: String::from("ri-v"),
+            eri_type: String::from("ri_v"),
             charge: 0.0_f64,
             spin: 1.0_f64,
             spin_channel: 1_usize,
@@ -205,13 +204,13 @@ impl InputKeywords {
             etb_beta: 2.0,
             // Keywords for the scf procedures
             chkfile: String::from("none"),
-            chkfile_type: String::from("none"),
+            chkfile_type: String::from("hdf5"),
             guessfile: String::from("none"),
             guessfile_type: String::from("hdf5"),
-            mixer: String::from("direct"),
-            mix_param: 1.0,
-            num_max_diis: 2,
-            start_diis_cycle: 2,
+            mixer: String::from("diis"),
+            mix_param: 0.6,
+            num_max_diis: 8,
+            start_diis_cycle: 1,
             max_scf_cycle: 100,
             scf_acc_rho: 1.0e-6,
             scf_acc_eev: 1.0e-5,
@@ -221,6 +220,9 @@ impl InputKeywords {
             initial_guess: String::from("sad"),
             noiter: false,
             check_stab: false,
+            // Kyewords for the manner to evaluate the Vk (and also Vxc) potentials
+            // True:  using only density matrix in the evaluation
+            // False: use coefficients as well with higher efficiency
             use_dm_only: false,
             // Keywords for the fciqmc dump
             fciqmc_dump: false,
@@ -319,7 +321,9 @@ impl InputKeywords {
                             String::from("ri_v")
                         } else {tmp_eri.to_lowercase()}
                     },
+                    other => {String::from("ri_v")},
                     other => {String::from("analytic")},
+                    other => {String::from("ri_v")},
                 };
                 if tmp_input.eri_type.eq(&String::from("ri_v"))
                 {

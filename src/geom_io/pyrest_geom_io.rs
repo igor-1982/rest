@@ -6,8 +6,12 @@ use super::GeomCell;
 #[pymethods]
 impl GeomCell {
     #[new]
-    pub fn new() -> GeomCell {
-        GeomCell::init_geom()
+    #[pyo3(signature = (pos, **unit))]
+    pub fn new(pos: String, unit: Option<String>) -> GeomCell {
+        let mut new_geom = GeomCell::init_geom();
+        new_geom.py_set_unit(unit.unwrap_or(String::from("Angstrom")));
+        new_geom.py_set_position_from_string(pos);
+        new_geom
     }
     pub fn py_get_unit(&self) -> String {
         match self.unit {
@@ -45,5 +49,11 @@ impl GeomCell {
         self.fix = fix;
         self.position = pos;
         self.nfree = n_free;
+    }
+    pub fn py_calc_nuc_energy(&self) -> f64 {
+        self.calc_nuc_energy()
+    }
+    pub fn py_to_xyz(&self, filename:String) {
+        self.to_xyz(filename)
     }
 }

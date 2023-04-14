@@ -7,8 +7,9 @@ use super::Molecule;
 #[pymethods]
 impl Molecule {
     #[new]
-    pub fn new() -> PyResult<Molecule> {
-        Ok(Molecule::init_mol())
+    #[pyo3(signature = (ctrl, geom))]
+    pub fn new(ctrl: InputKeywords, geom: GeomCell) -> PyResult<Molecule> {
+        Ok(Molecule::build_native(ctrl, geom).unwrap())
     }
 
     pub fn py_build(&mut self, ctrl: InputKeywords, geom: GeomCell) -> PyResult<Molecule> {

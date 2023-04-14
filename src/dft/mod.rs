@@ -738,6 +738,7 @@ impl DFA4REST {
         let num_grids = range_grids.len();
         let num_basis = dm[0].size[0];
 
+
         let loc_coordinates = &grids.coordinates[range_grids.clone()];
         let loc_weights = &grids.weights[range_grids.clone()];
 

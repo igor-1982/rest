@@ -1,6 +1,6 @@
 #![allow(unused)]
 use std::collections::binary_heap::Iter;
-use std::fs::File;
+use std::fs::{File, self};
 use std::io::{Write,BufRead, BufReader};
 use pyo3::{pyclass, pymethods};
 use rest_tensors::MatrixFull;
@@ -169,6 +169,7 @@ impl GeomCell {
             let tmp_range2 = (0..i);
             self.position.iter_columns(tmp_range2).enumerate().for_each(|(j,rj)| {
                 let j_charge = mass_charge[j].1;
+                //println!("debug: {:?}, {:?}, i_charge: {:16.4}, j_charge: {:16.4}", &ri,&rj, i_charge, j_charge);
                 let dd = ri.iter().zip(rj.iter())
                     .fold(0.0,|acc,(ri,rj)| acc + (ri-rj).powf(2.0)).sqrt();
                 nuc_energy += i_charge*j_charge/dd;
@@ -428,6 +429,15 @@ impl GeomCell {
         };
         Ok((tmp_ele, tmp_fix, tmp_pos_tensor, tmp_nfree))
 
+    }
+
+    pub fn to_xyz(&self, filename: String) {
+        let ang = crate::constants::ANG;
+        let mut input = fs::File::create(&filename).unwrap();
+        write!(input, "{}\n\n", self.elem.len());
+        self.position.iter_columns_full().zip(self.elem.iter()).for_each(|(pos, elem)| {
+            write!(input, "{:3}{:16.8}{:16.8}{:16.8}\n", elem, pos[0]*ang,pos[1]*ang,pos[2]*ang);
+        });
     }
 }
 
