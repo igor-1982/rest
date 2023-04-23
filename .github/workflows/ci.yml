@@ -47,4 +47,4 @@ jobs:
             export REST_XC_DIR=`pwd`/deps/lib
             git clone https://github.com/igor-1982/rest_tensors.git
             git clone https://github.com/igor-1982/rest_libcint.git
-            cargo build
+            RUSTFLAGS="-l xc -L$REST_XC_DIR" cargo build
