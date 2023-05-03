@@ -13,6 +13,7 @@ pub mod isdf;
 pub mod molecule_io;
 pub mod scf_io;
 pub mod utilities;
+pub mod external_libs;
 
 //extern crate rest;
 

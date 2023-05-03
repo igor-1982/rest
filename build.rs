@@ -21,7 +21,7 @@ fn main() {
         hdf5_dir
     } else {"".to_string()};
 
-    let library_names = ["restmatr","openblas","xc","hdf5"];
+    let library_names = ["restmatr","openblas","xc","hdf5","rest2fch"];
     library_names.iter().for_each(|name| {
         println!("cargo:rustc-link-lib={}",*name);
     });

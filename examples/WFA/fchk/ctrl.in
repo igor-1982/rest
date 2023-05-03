@@ -1,0 +1,24 @@
+[ctrl]
+     print_level =          3            
+     xc =                   "hf"        
+     basis_path =           "../../../basis-set-pool/cc-pVTZ"
+     auxbas_path =          "../../../basis-set-pool/cc-pVTZ-RIFIT"
+     eri_type =             "ri-v"
+     auxbas_type =          "spheric"
+     charge =               0.0
+     spin =                 1.0
+     spin_polarization =    false
+     external_grids =       "none"
+     mixer =                "diis"
+     num_threads =          3
+     initial_guess =        "sad"
+     output_fchk =          true
+
+ [geom]
+     name = "HCl_example"
+     unit = "Angstrom"
+     position = [
+             "H   0.0000000000      0.0000000000      0.0000000000",
+             "Cl  1.2700000000      0.0000000000      0.0000000000"
+     ]
+
