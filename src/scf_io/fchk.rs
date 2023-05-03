@@ -202,10 +202,21 @@ impl SCF {
                 });
             });
         });
+        write!(input, "Int Atom Types                             I   N={:12}\n", natom);
+        let mut i_index = 0;
+        self.mol.geom.elem.iter().for_each(|x| {
+            if (i_index + 1)%6 == 0 {
+                write!(input, "{:12}\n", 0)
+            } else {
+                write!(input, "{:12}", 0)
+            };
+            i_index += 1;
+        });
+        if i_index % 6 != 0 {write!(input, "\n");}
         write!(input, "Number of contracted shells                I {:16}\n",num_contract);
         write!(input, "Number of primitive shells                 I {:16}\n",num_primitiv);
-        write!(input, "Pure/Cartesian d shells                    I {:16}\n", num_d_shell);
-        write!(input, "Pure/Cartesian f shells                    I {:16}\n", num_f_shell);
+        //write!(input, "Pure/Cartesian d shells                    I {:16}\n", num_d_shell);
+        //write!(input, "Pure/Cartesian f shells                    I {:16}\n", num_f_shell);
         write!(input, "Highest angular momentum                   I {:16}\n", max_ang);
         write!(input, "Largest degree of contraction              I {:16}\n", max_contract);
         // ==============================
@@ -220,7 +231,7 @@ impl SCF {
         write!(input, "Primitive exponents                        R   N={:12}\n", primitive_exp.len());
         dump_real_r2f!(input, primitive_exp);
         write!(input, "Contraction coefficients                   R   N={:12}\n", coeff_vec.len());
-        dump_real_r2f!(input, &coeff_vec);
+        dump_real_r2f!(input, coeff_vec);
 //        write!(input, "P(S=P) Contraction coefficients            R   N={:12}\n", coeff_vec.len());
 //        let mut i_index = 0;
 //        coeff_vec.iter().for_each(|x| {
@@ -234,7 +245,7 @@ impl SCF {
 //        });
 //        if i_index % 5 != 0 {write!(input, "\n");}
         write!(input, "Coordinates of each shell                  R   N={:12}\n", coord_each_shell.len());
-        dump_real_r2f!(input, &coord_each_shell);
+        dump_real_r2f!(input, coord_each_shell);
         // ==============================
         // Now for total and orb energies
         // ==============================
