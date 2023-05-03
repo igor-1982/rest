@@ -44,6 +44,7 @@ macro_rules! dump_int {
 
 impl SCF {
     pub fn save_fchk_of_gaussian(&self) {
+        println!("\nSave fch file");
         self.create_fchk_head();
         self.fchk_write_mo();
     }
