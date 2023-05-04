@@ -16,7 +16,7 @@ jobs:
             #ls /usr/lib/x86_64-linux-gnu
             #ls -l deps/lib
             #ls -l deps/lib64
-      - name: Install libcint, libxc, rest_tensors
+      - name: Install libcint, libxc, rest_tensors, etc
         run: |
             cd ..
             pwd
@@ -34,6 +34,10 @@ jobs:
             mkdir build && cd build
             cmake -DCMAKE_BUILD_TYPE=RELEASE -DBUILD_SHARED_LIBS=1 -DCMAKE_INSTALL_PREFIX:PATH=/home/runner/work/rest/deps -DCMAKE_INSTALL_LIBDIR:PATH=lib ..
             make -j2 && make install
+            cd ../..
+            git clone https://gitlab.com/jeanwsr/MOKIT -b for-rest
+            cd MOKIT/src
+            make rest2fch -f Makefile.gnu_openblas
       - name: Build
         run: |
             cd ..
@@ -45,6 +49,7 @@ jobs:
             export REST_BLAS_DIR=/usr/lib
             export REST_HDF5_DIR=/usr/lib
             export REST_XC_DIR=`pwd`/deps/lib
+            cp MOKIT/mokit/lib/librest2fch.so deps/lib
             git clone https://github.com/igor-1982/rest_tensors.git
             git clone https://github.com/igor-1982/rest_libcint.git
             RUSTFLAGS="-l xc -L$REST_XC_DIR" cargo build
