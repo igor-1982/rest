@@ -9,6 +9,7 @@ extern "C" {
         coeff2: *const c_double,
         ab: *const c_char,
         ev: *const c_double,
+        natorb: *const c_int,
         gen_density: *const c_int
     );
 }

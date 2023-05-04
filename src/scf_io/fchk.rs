@@ -317,9 +317,9 @@ impl SCF {
     
         for i_spin in 0..self.mol.spin_channel {
             if i_spin ==0  {
-                py2fch(format!("{}.fchk", self.mol.geom.name), nbf, nif, &self.eigenvectors[i_spin].data, 'a', &self.eigenvalues[i_spin], 0);
+                py2fch(format!("{}.fchk", self.mol.geom.name), nbf, nif, &self.eigenvectors[i_spin].data, 'a', &self.eigenvalues[i_spin], 0, 0);
             } else {
-                py2fch(format!("{}.fchk", self.mol.geom.name), nbf, nif, &self.eigenvectors[i_spin].data, 'b', &self.eigenvalues[i_spin], 0);
+                py2fch(format!("{}.fchk", self.mol.geom.name), nbf, nif, &self.eigenvectors[i_spin].data, 'b', &self.eigenvalues[i_spin], 0, 0);
             }
         }
     }

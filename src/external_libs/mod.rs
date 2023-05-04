@@ -10,6 +10,7 @@ pub fn py2fch(
     eigenvector:&[f64], 
     ab: char,
     eigenvalues:&[f64],
+    natorb: usize,
     gen_density: usize) 
 {
     //let fchname_cstring = CString::new(fchname).expect("CString::new failed");
@@ -23,6 +24,8 @@ pub fn py2fch(
         eigenvector.as_ptr(), 
         &(ab as c_char),
         eigenvalues.as_ptr(), 
-        &(gen_density as i32))
+        &(natorb as i32),
+        &(gen_density as i32)
+    )
     }
 }
