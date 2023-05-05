@@ -52,4 +52,4 @@ jobs:
             cp MOKIT/mokit/lib/librest2fch.so deps/lib
             git clone https://github.com/igor-1982/rest_tensors.git
             git clone https://github.com/igor-1982/rest_libcint.git
-            RUSTFLAGS="-l xc -L$REST_XC_DIR" cargo build
+            RUSTFLAGS="-l xc -l rest2fch -L$REST_XC_DIR" cargo build
