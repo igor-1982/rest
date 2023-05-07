@@ -69,6 +69,7 @@ mod ri_rpa;
 mod isdf;
 mod constants;
 mod post_scf_analysis;
+mod external_libs;
 //use rayon;
 #[global_allocator]
 static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
