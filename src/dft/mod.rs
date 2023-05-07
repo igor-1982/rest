@@ -31,15 +31,17 @@ use std::sync::mpsc::channel;
 use libxc::{XcFuncType, LibXCFamily};
 //use std::intrinsics::expf64;
 
-#[derive(Clone,Debug)]
+#[derive(Clone,Debug, PartialEq, Eq)]
 pub enum DFAFamily {
     LDA,
     GGA,
     MGGA,
     HybridGGA,
     HybridMGGA,
-    XDH,
+    PT2,
+    SBGE2,
     RPA,
+    SCSRPA,
     Unknown
 }
 
@@ -64,9 +66,11 @@ impl DFAFamily {
             DFAFamily::MGGA => libxc::LibXCFamily::MGGA,
             DFAFamily::HybridGGA => libxc::LibXCFamily::HybridGGA,
             DFAFamily::HybridMGGA => libxc::LibXCFamily::HybridMGGA,
-            DFAFamily::XDH => libxc::LibXCFamily::HybridGGA,
+            DFAFamily::PT2 => libxc::LibXCFamily::HybridGGA,
+            DFAFamily::SBGE2 => libxc::LibXCFamily::HybridGGA,
+            DFAFamily::SCSRPA => libxc::LibXCFamily::HybridGGA,
             DFAFamily::RPA => libxc::LibXCFamily::GGA,
-            DFAFamily::Unknown => libxc::LibXCFamily::Unknown,
+            _ => libxc::LibXCFamily::Unknown,
         }
     }
     pub fn from_libxc_family(family: &libxc::LibXCFamily) -> DFAFamily {
@@ -76,8 +80,23 @@ impl DFAFamily {
             libxc::LibXCFamily::MGGA => DFAFamily::MGGA,
             libxc::LibXCFamily::HybridGGA => DFAFamily::HybridGGA,
             libxc::LibXCFamily::HybridMGGA => DFAFamily::HybridMGGA,
-            libxc::LibXCFamily::Unknown => DFAFamily::Unknown,
+            _ => DFAFamily::Unknown,
         }
+    }
+    pub fn to_name(&self) -> String {
+        match self {
+            DFAFamily::LDA => {"LDA".to_string()},
+            DFAFamily::GGA => {"GGA".to_string()},
+            DFAFamily::MGGA => {"Meta-GGA".to_string()},
+            DFAFamily::HybridGGA => {"Hybrid-GGA".to_string()},
+            DFAFamily::HybridMGGA => {"Hybrid-meta-GGA".to_string()},
+            DFAFamily::PT2 => {"PT2".to_string()},
+            DFAFamily::SBGE2 => {"SBGE2".to_string()},
+            DFAFamily::RPA => {"RPA".to_string()},
+            DFAFamily::SCSRPA => {"SCSRPA".to_string()},
+            DFAFamily::Unknown => {"Unknown".to_string()},
+        }
+
     }
 }
 
@@ -89,6 +108,19 @@ impl DFA4REST {
         let mut vmicro:c_int = 0;
         unsafe{libxc::ffi_xc::xc_version(&mut  vmajor, &mut vminor, &mut vmicro)};
         println!("Libxc version used in REST: {}.{}.{}", vmajor, vminor, vmicro);
+    }
+
+    pub fn new_xc(spin_channel: usize, print_level: usize) -> DFA4REST {
+        DFA4REST { 
+            spin_channel, 
+            dfa_compnt_scf: vec![], 
+            dfa_paramr_scf: vec![], 
+            dfa_hybrid_scf: 0.0, 
+            dfa_family_pos: None, 
+            dfa_compnt_pos: None, 
+            dfa_paramr_pos: None, 
+            dfa_hybrid_pos: None, 
+            dfa_paramr_adv: None }
     }
 
     pub fn new(name: &str, spin_channel: usize, print_level: usize) -> DFA4REST {
@@ -104,7 +136,7 @@ impl DFA4REST {
                 if let (Some(dfatype),Some(dfacomp)) = 
                     (&dfa.dfa_family_pos, &dfa.dfa_compnt_pos) {
                     //match dfatype {
-                    //    DFAFamily::XDH => println!("XYG3-type functional '{}' is employed", &name),
+                    //    DFAFamily::PT2 => println!("XYG3-type functional '{}' is employed", &name),
                     //    DFAFamily::RPA => println!("RPA-type functional '{}' is employed", &name),
                     //    _ => println!("Standard DFA '{}' is employed", &name),
                     //}
@@ -132,6 +164,7 @@ impl DFA4REST {
 
     pub fn libxc_code_fdqc(name: &str) -> [usize;3] {
         let lower_name = name.to_lowercase();
+        //println!("Debug: {:?}", &lower_name);
         // for a list of exchange-correlation functionals
         if lower_name.eq(&"hf".to_string()) {
             [0,0,0]
@@ -155,6 +188,8 @@ impl DFA4REST {
             [402,0,0]
         } else if lower_name.eq(&"x3lyp".to_string()) {
             [411,0,0]
+        } else if lower_name.eq(&"pbe0".to_string()) {
+            [406,0,0]
         // for a list of exchange functionals
         } else if lower_name.eq(&"lda_x_slater".to_string()) {
             [0,1,0]
@@ -194,18 +229,8 @@ impl DFA4REST {
     //}
 
     pub fn xc_func_init_fdqc(name: &str, spin_channel: usize) -> Vec<usize> {
-        let lower_name = name.to_lowercase();
         let xc_code = DFA4REST::libxc_code_fdqc(name);
         xc_code.iter().filter(|x| **x!=0).map(|x| *x).collect::<Vec<usize>>()
-
-        //xc_code
-        //let mut xc_list: Vec<XcFuncType> = vec![];
-        //xc_code.iter().for_each(|x| {
-        //    if *x!=0 {
-        //        xc_list.push(XcFuncType::xc_func_init(*x, spin_channel));
-        //    }
-        //});
-        //xc_list
     }
 
     pub fn init_libxc(&self, xc_code: &usize) -> XcFuncType {
@@ -247,15 +272,6 @@ impl DFA4REST {
     }
     pub fn parse_scf_nonstd(codelist:Vec<usize>, paramlist:Vec<f64>, spin_channel: usize) -> DFA4REST {
         if codelist.len()!=paramlist.len() {panic!("codelist (len: {}) does not match paramlist (len: {})", codelist.len(), paramlist.len())}
-        //let mut dfa_compnt_scf: Vec<XcFuncType> = vec![];
-        //codelist.iter().for_each(|x| {
-        //    if *x!=0 {
-        //        dfa_compnt_scf.push(XcFuncType::xc_func_init(*x, spin_channel));
-        //    }
-        //});
-        //let dfa_paramr_scf =  vec![1.0;dfa_compnt_scf.len()];
-        //let dfa_hybrid_scf = DFA4REST::get_hybrid_libxc(&dfa_compnt_scf,spin_channel);
-        //let dfa_paramr_scf =  vec![1.0;dfa_compnt_scf.len()];
         let dfa_hybrid_scf = DFA4REST::get_hybrid_libxc(&codelist,spin_channel);
         DFA4REST {
             spin_channel,
@@ -270,34 +286,20 @@ impl DFA4REST {
         }
     }
 
-    //pub fn iter_xc_scf(&self) -> Zip<Iter<>, Iter<Vec<XcFuncType, Global>>>
-    //{
-    //    self.dfa_compnt_scf.iter().zip(self.dfa_compnt_pos.iter())
-    //    .
-    //}
-
     pub fn parse_postscf(name: &str,spin_channel: usize) -> Option<DFA4REST> {
         let tmp_name = name.to_lowercase();
         if tmp_name.eq("xyg3") {
-            let dfa_family_pos = Some(DFAFamily::XDH);
+            let dfa_family_pos = Some(DFAFamily::PT2);
             let pos_dfa = ["lda_x_slater", "gga_x_b88","lda_c_vwn_rpa","gga_c_lyp"];
             let dfa_compnt_pos: Option<Vec<usize>> = Some(pos_dfa.iter().map(|xc| {
                 DFA4REST::xc_func_init_fdqc(*xc, spin_channel).into_iter()})
                 .flatten()
                 .collect());
-            //let dfa_compnt_pos: Option<Vec<XcFuncType>> = Some(pos_dfa.iter().map(|xc| {
-            //    DFA4REST::xc_func_init_fdqc(*xc, spin_channel).into_iter()})
-            //    .flatten()
-            //    .collect());
             let dfa_paramr_pos = Some(vec![-0.0140,0.2107,0.00,0.6789]);
-            //let dfa_paramr_pos = Some(vec![1.0,1.0,1.00,1.0]);
             let dfa_hybrid_pos = Some(0.8033);
             let dfa_paramr_adv = Some(vec![0.3211,0.3211]);
 
             let scf_dfa = ["b3lyp"];
-            //let dfa_compnt_scf: Vec<XcFuncType> = scf_dfa.iter().map(|xc| {
-            //    DFA4REST::xc_func_init_fdqc(*xc, spin_channel).into_iter()})
-            //    .flatten().collect();
             let dfa_compnt_scf: Vec<usize> = scf_dfa.iter().map(|xc| {
                 DFA4REST::xc_func_init_fdqc(*xc, spin_channel).into_iter()})
                 .flatten().collect();
@@ -315,7 +317,7 @@ impl DFA4REST {
                 dfa_hybrid_pos
             })
         } else if tmp_name.eq("xygjos") {
-            let dfa_family_pos = Some(DFAFamily::XDH);
+            let dfa_family_pos = Some(DFAFamily::PT2);
             let pos_dfa = ["lda_x_slater", "gga_x_b88","lda_c_vwn_rpa","gga_c_lyp"];
             //let dfa_compnt_pos: Option<Vec<XcFuncType>> = Some(pos_dfa.iter().map(|xc| {
             //    DFA4REST::xc_func_init_fdqc(*xc, spin_channel).into_iter()})
@@ -349,7 +351,7 @@ impl DFA4REST {
                 dfa_hybrid_pos
             })
         } else if tmp_name.eq("xyg7") {
-            let dfa_family_pos = Some(DFAFamily::XDH);
+            let dfa_family_pos = Some(DFAFamily::PT2);
             let pos_dfa = ["lda_x_slater", "gga_x_b88","lda_c_vwn_rpa","gga_c_lyp"];
             //let dfa_compnt_pos: Option<Vec<XcFuncType>> = Some(pos_dfa.iter().map(|xc| {
             //    DFA4REST::xc_func_init_fdqc(*xc, spin_channel).into_iter()})
@@ -366,6 +368,35 @@ impl DFA4REST {
             //let dfa_compnt_scf: Vec<XcFuncType> = scf_dfa.iter().map(|xc| {
             //    DFA4REST::xc_func_init_fdqc(*xc, spin_channel).into_iter()})
             //    .flatten().collect();
+            let dfa_compnt_scf: Vec<usize> = scf_dfa.iter().map(|xc| {
+                DFA4REST::xc_func_init_fdqc(*xc, spin_channel).into_iter()})
+                .flatten().collect();
+            let dfa_paramr_scf = vec![1.0;dfa_compnt_scf.len()];
+            let dfa_hybrid_scf = DFA4REST::get_hybrid_libxc(&dfa_compnt_scf,spin_channel);
+            Some(DFA4REST{
+                spin_channel,
+                dfa_compnt_scf,
+                dfa_paramr_scf,
+                dfa_hybrid_scf,
+                dfa_paramr_adv,
+                dfa_family_pos,
+                dfa_compnt_pos,
+                dfa_paramr_pos,
+                dfa_hybrid_pos
+            })
+        } else if tmp_name.eq("zrps") {
+            let dfa_family_pos = Some(DFAFamily::SBGE2);
+            let pos_dfa = ["gga_x_pbe","gga_c_pbe"];
+            let scf_dfa = ["pbe0"];
+            let dfa_paramr_pos = Some(vec![0.5,0.75]);
+            let dfa_hybrid_pos = Some(0.5);
+            let dfa_paramr_adv = Some(vec![0.25,0.00]);
+
+            // Now initialize ZRPS
+            let dfa_compnt_pos: Option<Vec<usize>> = Some(pos_dfa.iter().map(|xc| {
+                DFA4REST::xc_func_init_fdqc(*xc, spin_channel).into_iter()})
+                .flatten().collect());
+            let dfa_family_scf = DFAFamily::HybridGGA;
             let dfa_compnt_scf: Vec<usize> = scf_dfa.iter().map(|xc| {
                 DFA4REST::xc_func_init_fdqc(*xc, spin_channel).into_iter()})
                 .flatten().collect();
@@ -411,7 +442,7 @@ impl DFA4REST {
                 dfa_hybrid_pos
             })
         } else if tmp_name.eq("mp2") {
-            let dfa_family_pos = Some(DFAFamily::XDH);
+            let dfa_family_pos = Some(DFAFamily::PT2);
             let dfa_compnt_pos: Option<Vec<usize>> = Some(vec![]);
             let dfa_paramr_pos = Some(vec![]);
             let dfa_hybrid_pos = Some(1.0);
@@ -438,7 +469,7 @@ impl DFA4REST {
                 dfa_hybrid_pos
             })
         } else if tmp_name.eq("scs-mp2") {
-            let dfa_family_pos = Some(DFAFamily::XDH);
+            let dfa_family_pos = Some(DFAFamily::PT2);
             let dfa_compnt_pos: Option<Vec<usize>> = Some(vec![]);
             let dfa_paramr_pos = Some(vec![]);
             let dfa_hybrid_pos = Some(1.0);
@@ -945,6 +976,51 @@ impl DFA4REST {
         (loc_exc_total,loc_vxc_ao,loc_total_elec)
     }
 
+    pub fn post_xc_exc(&self, post_xc: &Vec<String>, grids: &crate::dft::Grids, dm: &Vec<MatrixFull<f64>>, mo: &[MatrixFull<f64>;2], occ: &[Vec<f64>;2]) 
+    -> Vec<[f64;2]> {
+        let mut post_xc_energy:Vec<[f64;2]>=vec![];
+        let spin_channel = self.spin_channel;
+        let num_grids = grids.coordinates.len();
+        let num_basis = dm[0].size[0];
+        let dt0 = utilities::init_timing();
+        let (rho,rhop) = grids.prepare_tabulated_density_2(mo, occ, spin_channel);
+        let use_density_gradient = post_xc.iter().fold(false,|flag, x| {
+            let code = DFA4REST::xc_func_init_fdqc(x,spin_channel);
+            let x_flag = code.iter().fold(false, |flag, xc_code| {
+                let xc_func = self.init_libxc(xc_code);
+                flag || xc_func.is_gga()|| xc_func.is_hybrid_gga()
+            });
+            flag || x_flag
+        });
+        let sigma = if use_density_gradient {
+            prepare_tabulated_sigma_rayon(&rhop, spin_channel)
+        } else {
+            MatrixFull::empty()
+        };
+        post_xc.iter().for_each(|x| {
+            let mut exc = MatrixFull::new([num_grids,1],0.0);
+            let mut exc_total =[0.0,0.0];
+            let code = DFA4REST::xc_func_init_fdqc(x,spin_channel);
+            //println!("debug xc_code: {:?}", &code);
+            code.iter().for_each(|xc_code| {
+                exc.par_self_scaled_add(&self.xc_exc_code(xc_code, &rho, &sigma, spin_channel),1.0);
+            });
+
+            for i_spin in 0..spin_channel {
+                exc_total[i_spin] = izip!(exc.data.iter(),rho.iter_column(i_spin),grids.weights.iter())
+                    .fold(0.0,|acc,(exc,rho,weight)| {
+                        acc + exc * rho * weight
+                    });
+            };
+            //println!("exc_total: {:?}", &exc_total);
+
+            post_xc_energy.push(exc_total);
+        });
+
+        post_xc_energy
+
+    }
+
     pub fn xc_exc(&self, grids: &mut Grids, spin_channel: usize, dm: &mut Vec<MatrixFull<f64>>, mo: &mut [MatrixFull<f64>;2], occ: &mut [Vec<f64>;2],iop: usize) -> Vec<f64> {
         let num_grids = grids.coordinates.len();
         let num_basis = dm[0].size[0];
@@ -1039,6 +1115,35 @@ impl DFA4REST {
             println!("electron number in beta-channel:  {:12.8}", total_elec[1]);
         }
         exc_total
+    }
+    pub fn xc_exc_code(&self, xc_code: &usize, rho: &MatrixFull<f64>, sigma:&MatrixFull<f64>, spin_channel: usize) -> MatrixFull<f64> {
+        let xc_func = self.init_libxc(xc_code);
+        let num_grids = rho.size()[0];
+        let tmp_exc = match xc_func.xc_func_family {
+            libxc::LibXCFamily::LDA => {
+                MatrixFull::from_vec([num_grids,1],
+                    if spin_channel==1 {
+                        xc_func.lda_exc(rho.data_ref().unwrap())
+                    } else {
+                        xc_func.lda_exc(rho.transpose().data_ref().unwrap())
+                    }
+                ).unwrap()
+                //exc.par_self_scaled_add(&tmp_exc,*xc_para);
+            },
+            libxc::LibXCFamily::GGA | libxc::LibXCFamily::HybridGGA => {
+                //println!("debug, {:?}, {:?}, {:?}", xc_code, xc_func, sigma.data.len());
+                MatrixFull::from_vec([num_grids,1],
+                    if spin_channel==1 {
+                        xc_func.gga_exc(rho.data_ref().unwrap(),sigma.data_ref().unwrap())
+                    } else {
+                        xc_func.gga_exc(rho.transpose().data_ref().unwrap(),sigma.transpose().data_ref().unwrap())
+                    }
+                ).unwrap()
+                //exc.par_self_scaled_add(&tmp_exc,*xc_para);
+            },
+            _ => {panic!("{} is not yet implemented", xc_func.get_family_name())}
+        };
+        tmp_exc
     }
 }
 
@@ -1165,7 +1270,7 @@ fn prepare_tabulated_sigma_rayon(rhop: &RIFull<f64>, spin_channel: usize) -> Mat
             let rhop_yd = rhop.par_iter_slices_x(1,1);
             let rhop_zd = rhop.par_iter_slices_x(2,1);
             //izip!(sigma.par_iter_column_mut(2), rhop_xd,rhop_yd,rhop_zd).for_each(|(sigma, dx,dy,dz)| {
-            sigma.par_iter_column_mut(0).zip(rhop_xd).zip(rhop_yd).zip(rhop_zd)
+            sigma.par_iter_column_mut(2).zip(rhop_xd).zip(rhop_yd).zip(rhop_zd)
                .for_each(|(((sigma,dx),dy),dz)| {
                 *sigma = dx.powf(2.0) + dy.powf(2.0) + dz.powf(2.0);
             });
@@ -1889,6 +1994,7 @@ pub fn par_numerical_density(grid: &Grids, mol: &Molecule, dm: &mut [MatrixFull<
     
     total_density
 }
+
 
 
 //#[test]

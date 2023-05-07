@@ -75,6 +75,9 @@ static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 //static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use anyhow;
+use crate::dft::DFA4REST;
+use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa};
+use crate::scf_io::scf;
 use time::{DateTime,Local};
 use crate::molecule_io::Molecule;
 
@@ -111,6 +114,13 @@ fn main() -> anyhow::Result<()> {
     }
 
     //====================================
+    // Now for post-xc calculations
+    //====================================
+    if scf_data.mol.ctrl.post_xc.len()>=1 {
+        print_out_dfa(&scf_data);
+    }
+
+    //====================================
     // Now for post-SCF analysis
     //====================================
     post_scf_analysis::post_scf_analysis(&scf_data);
@@ -121,7 +131,7 @@ fn main() -> anyhow::Result<()> {
 
     if let Some(dft_method) = &scf_data.mol.xc_data.dfa_family_pos {
         match dft_method {
-            dft::DFAFamily::XDH => {
+            dft::DFAFamily::PT2 | dft::DFAFamily::SBGE2 => {
                 time_mark.new_item("PT2", "the PT2 evaluation");
                 time_mark.count_start("PT2");
                 ri_pt2::xdh_calculations(&mut scf_data);
@@ -136,6 +146,14 @@ fn main() -> anyhow::Result<()> {
             _ => {}
         }
     }
+
+    //====================================
+    // Now for post-correlation calculations
+    //====================================
+    if scf_data.mol.ctrl.post_correlation.len()>=1 {
+        post_scf_correlation(&mut scf_data);
+    }
+
 
     time_mark.count("Overall");
 

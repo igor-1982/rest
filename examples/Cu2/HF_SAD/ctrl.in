@@ -1,7 +1,7 @@
 [ctrl]
      print_level =               1
      xc =                        "hf"
-     basis_path =                "../../../basis-set-pool/def2-SVP"
+     basis_path =                "../../../basis-set-pool/cc-pVTZ"
      basis_type =                "spheric"
      auxbas_path =               "../../../basis-set-pool/def2-SV(P)-JKFIT"
      even_tempered_basis =       false
@@ -9,7 +9,7 @@
      etb_beta =                  "2.0"
      eri_type =                  "ri-v"
      auxbas_type =               "spheric"
-     initial_guess =             "sad"
+     initial_guess =             "hcore"
      # import the initial guess from a HDF5 file
      guessfile =                 "none"
      guessfile_type =            "hdf5"
@@ -33,8 +33,10 @@
      name = "Cu2"
      unit = "angstrom"
      position = [
- "Cu                 6.64063000    1.27799000    6.15738000",
- "Cu                 8.11653000    1.27763000    4.11665000"
+                 '''
+                 Cu                 6.64063000    1.27799000    6.15738000
+                 Cu                 8.11653000    1.27763000    4.11665000
+                 '''
      ]
 
 

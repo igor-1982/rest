@@ -55,8 +55,6 @@ pub struct InputKeywords {
     #[pyo3(get, set)]
     pub use_auxbas: bool,
     #[pyo3(get, set)]
-    pub use_auxbas_symm: bool,
-    #[pyo3(get, set)]
     pub even_tempered_basis: bool,
     #[pyo3(get, set)]
     pub etb_start_atom_number: usize,
@@ -71,7 +69,11 @@ pub struct InputKeywords {
     #[pyo3(get, set)]
     pub eri_type: String,
     #[pyo3(get, set)]
+    pub use_ri_symm: bool,
+    #[pyo3(get, set)]
     pub xc: String,
+    pub post_xc: Vec<String>,
+    pub post_correlation: Vec<DFAFamily>,
     pub charge: f64,
     #[pyo3(get, set)]
     pub spin: f64,
@@ -173,12 +175,14 @@ impl InputKeywords {
             auxbas_path: String::from("./def2-SV(P)-JKFIT"),
             auxbas_type: String::from("spheric"),
             use_auxbas: true,
-            use_auxbas_symm: false,
             use_isdf: false,
             isdf_k_mu: 8,
             // Keywords associated with the method employed
             xc: String::from("x3lyp"),
+            post_xc: vec![],
+            post_correlation: vec![],
             eri_type: String::from("ri_v"),
+            use_ri_symm: false,
             charge: 0.0_f64,
             spin: 1.0_f64,
             spin_channel: 1_usize,
@@ -338,12 +342,12 @@ impl InputKeywords {
                 };
                 if tmp_input.print_level>0 {println!("ERI Type: {}", tmp_input.eri_type)};
 
-                tmp_input.use_auxbas_symm = match tmp_ctrl.get("use_auxbas_symm").unwrap_or(&serde_json::Value::Null) {
+                tmp_input.use_ri_symm = match tmp_ctrl.get("use_ri_symm").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::Bool(tmp_str) => {*tmp_str},
                     other => {false},
                 };
                 if tmp_input.print_level>0 {
-                    if tmp_input.use_auxbas_symm {
+                    if tmp_input.use_ri_symm {
                         println!("Turn on the basis pair symmetry for RI 3D-tensors")
                     } else {
                         println!("Turn off the basis pair symmetry for RI 3D-tensors")
@@ -395,7 +399,56 @@ impl InputKeywords {
                     other => {String::from("hf")},
                 };
                 if tmp_input.print_level>0 {println!("The exchange-correlation method: {}", tmp_input.xc)};
-
+                //let re0 = Regex::new(r"
+                //                    (?P<elem>\w{1,2})\s*,?    # the element
+                //                    \s+
+                //                    (?P<x>[\+-]?\d+.\d+)\s*,? # the 'x' position
+                //                    \s+
+                //                    (?P<y>[\+-]?\d+.\d+)\s*,? # the 'y' position
+                //                    \s+
+                //                    (?P<z>[\+-]?\d+.\d+)\s*,? # the 'z' position
+                //                    \s*").unwrap();
+                tmp_input.post_xc = match tmp_ctrl.get("post_xc").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_xc) => {vec![tmp_xc.to_lowercase()]},
+                    serde_json::Value::Array(tmp_xc) => {
+                        let mut tmp_vec:Vec<String> = vec![];
+                        tmp_xc.iter().for_each(|x| {
+                            let xc_method = x.to_string();
+                            let string_len = xc_method.len();
+                            tmp_vec.push(xc_method[1..string_len-1].to_string())
+                        });
+                        tmp_vec
+                    },
+                    other => {vec![]},
+                };
+                let post_corr = match tmp_ctrl.get("post_correlation").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_xc) => {vec![tmp_xc.to_lowercase()]},
+                    serde_json::Value::Array(tmp_xc) => {
+                        let mut tmp_vec:Vec<String> = vec![];
+                        tmp_xc.iter().for_each(|x| {
+                            let xc_method = x.to_string();
+                            let string_len = xc_method.len();
+                            tmp_vec.push(xc_method[1..string_len-1].to_string())
+                        });
+                        tmp_vec
+                    },
+                    other => {vec![]},
+                };
+                tmp_input.post_correlation = vec![];
+                post_corr.iter().for_each(|corr| {
+                    if corr.to_lowercase().eq("pt2") {
+                        tmp_input.post_correlation.push(DFAFamily::PT2)
+                    } else if corr.to_lowercase().eq("sbge2") {
+                        tmp_input.post_correlation.push(DFAFamily::SBGE2)
+                    } else if corr.to_lowercase().eq("rpa") {
+                        tmp_input.post_correlation.push(DFAFamily::RPA)
+                    } else if corr.to_lowercase().eq("scsrpa") {
+                        tmp_input.post_correlation.push(DFAFamily::SCSRPA)
+                    } else {
+                        println!("Unknown post-scf correlation method: {}", corr)
+                    }
+                    //if corr.to_lowercase().eq(&pt2) 
+                });
                 // ===============================================
                 //  Keywords to determine the spin channel, which 
                 //   is important to turn on RHF(RKS) or UHF(UKS)

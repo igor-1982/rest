@@ -6,7 +6,7 @@ from pyscf.lib import chkfile
 import scipy
 from time import ctime, time
 	   
-lib.num_threads(12)
+lib.num_threads(6)
 TimeStart = time()
 mol = gto.Mole(
         atom='''
@@ -53,12 +53,12 @@ mol = gto.Mole(
 #method.grids.becke_scheme = dft.original_becke
 #method.grids.level = 3
 method = scf.RHF(mol).density_fit(auxbasis="def2-svp-jkfit")
-method.chkfile='restart.chk'
-D = method.get_init_guess(mol,'1e')
-method.init_guess = '1e'
-method.chkfile='init_guess.chk'
-chkfile.save_mol(mol,method.chkfile)
-chkfile.dump(method.chkfile,"init_guess",D)
+#method.chkfile='restart.chk'
+#D = method.get_init_guess(mol,'1e')
+#method.init_guess = '1e'
+#method.chkfile='init_guess.chk'
+#chkfile.save_mol(mol,method.chkfile)
+#chkfile.dump(method.chkfile,"init_guess",D)
 
 print('Default DFT(RI-HF).  E = %.12f' % method.kernel())
 print("Total job time: %10.2f(wall)" %(time()-TimeStart))

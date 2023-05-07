@@ -1,0 +1,49 @@
+[ctrl]
+     # 设置程序输出的程度，缺省为1
+     print_level =               1
+     # 设置Rayon和OpenMP的并行数，缺省为1
+     num_threads =               8
+     # 设置使用的电子结构方法，缺省为HF
+     xc =                        "pbe0" 
+     post_xc =                   ['lda_x_slater', 'gga_x_b88', 'gga_x_pbe', 'lda_c_vwn', 'gga_c_lyp', 'gga_c_pbe']
+     post_correlation =           ["SBGE2", "PT2", "RPA"]
+     frozen_core_postscf =       21
+     frequency_points=           100
+     # 设置（辅助）基组的路径。如果找不到该路径，则创建该路径，并从BSE下载
+     # 注意：计算节点需支持连接外网。
+     basis_path =                "../../../basis-set-pool/cc-pVDZ"
+     auxbas_path =               "../../../basis-set-pool/def2-SV(P)-JKFIT" 
+     # 辅助基函数自动生成设置
+     even_tempered_basis =       false
+     etb_start_atom_number =     1
+     etb_beta =                  0.5
+     # 使用resolution-of-identity (RI)技术处理四中心积分（缺省）
+     eri_type =                  "ri_v"
+     use_ri_symm =               true
+     use_dm_only =               true
+     charge =                    0.0
+     spin =                      1.0
+     spin_polarization =         false
+     mixer =                     "diis"
+     num_max_diis =              8
+     start_diis_cycle =          1
+     mix_param =                 0.01
+     max_scf_cycle =             600
+     scf_acc_rho =               1.0e-6
+     scf_acc_eev =               1.0e-6
+     scf_acc_etot =              1.0e-8
+     initial_guess =             "sad"
+     chkfile =                   "none"
+     fchk =                      false
+     pruning =                   "nwchem"
+     radial_grid_method =        "treutler"
+     external_grids =            "none"
+
+[geom]
+     name = "Cu2"
+     unit = "angstrom"
+     position = '''
+                 Cu                 6.64063000    1.27799000    6.15738000
+                 Cu                 8.11653000    1.27763000    4.11665000
+     '''
+

@@ -4,6 +4,7 @@
      basis_path=               "../../../basis-set-pool/cc-pVDZ"
      auxbas_path=              "../../../basis-set-pool/def2-SV(P)-JKFIT"
      basis_type=               "spheric"
+     initial_guess=            "hcore"
      eri_type=                 "ri-v"
      auxbas_type=              "spheric"
      guessfile=                "none"
@@ -24,8 +25,9 @@
 [geom]
      name="H2, example"
      unit="Angstrom"
-     position=[
-             "H   0.0000000000      0.0000000000      0.0000000000",
-             "H   0.7600000000      0.0000000000      0.0000000000"
+     position=['''
+             H   0.0000000000      0.0000000000      0.0000000000
+             H   0.7600000000      0.0000000000      0.0000000000
+             '''
      ]
 

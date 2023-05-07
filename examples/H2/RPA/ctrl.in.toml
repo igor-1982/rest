@@ -1,6 +1,7 @@
 [ctrl]
      print_level=              1
-     xc=                       "rpa@pbe"
+     xc=                       "pbe0"
+     post_correlation=         ["rpa"]
      frozen_core_postscf=      0
      frequency_points=         40
      basis_path=               "../../../basis-set-pool/cc-pVDZ"
@@ -28,8 +29,6 @@
 [geom]
      name="H2, example"
      unit="Angstrom"
-     position=[
-             "H   0.0000000000      0.0000000000      0.0000000000",
-             "H   0.7600000000      0.0000000000      0.0000000000"
-     ]
-
+     position='''
+             H   0.0000000000      0.0000000000      8.0000000000
+             H   0.0000000000      0.0000000000      0.0000000000'''

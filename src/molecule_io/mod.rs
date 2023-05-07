@@ -1555,33 +1555,33 @@ pub fn count_frozen_core_states(n_frozen_shell: i32, elem: &Vec<String>) -> usiz
 
     elem.iter().for_each(|sn| {
         let formated_elem = crate::geom_io::formated_element_name(&sn);
-        let flag_first_row  = ELEM1ST.iter().fold(true, |acc, elem| acc || elem.eq(&formated_elem));
+        let flag_first_row  = ELEM1ST.iter().fold(false, |acc, elem| acc || elem.eq(&formated_elem));
         let flag_second_row = if flag_first_row {
             false
         } else {
-            ELEM2ND.iter().fold(true, |acc, elem| acc || elem.eq(&formated_elem))
+            ELEM2ND.iter().fold(false, |acc, elem| acc || elem.eq(&formated_elem))
         };
         let flag_third_row  = if flag_first_row || flag_second_row {
             false
         } else {
-            ELEM3RD.iter().fold(true, |acc, elem| acc || elem.eq(&formated_elem))
+            ELEM3RD.iter().fold(false, |acc, elem| acc || elem.eq(&formated_elem))
         };
         let flag_fourth_row = if flag_first_row || flag_second_row || flag_third_row {
             false
         } else {
-            ELEM4TH.iter().fold(true, |acc, elem| acc || elem.eq(&formated_elem))
+            ELEM4TH.iter().fold(false, |acc, elem| acc || elem.eq(&formated_elem))
         };
         let flag_fifth_row  = if flag_first_row || flag_second_row || flag_third_row || flag_fourth_row {
             false
         } else {
-            ELEM5TH.iter().fold(true, |acc, elem| acc || elem.eq(&formated_elem))
+            ELEM5TH.iter().fold(false, |acc, elem| acc || elem.eq(&formated_elem))
         };
         let flag_sixth_row  = if flag_first_row || flag_second_row || flag_third_row || flag_fourth_row || flag_fifth_row {
             false
         } else {
-            ELEM6TH.iter().fold(true, |acc, elem| acc || elem.eq(&formated_elem))
+            ELEM6TH.iter().fold(false, |acc, elem| acc || elem.eq(&formated_elem))
         };
-        let flag_tm = ELEMTMS.iter().fold(true, |acc, elem| acc || elem.eq(&formated_elem));
+        let flag_tm = ELEMTMS.iter().fold(false, |acc, elem| acc || elem.eq(&formated_elem));
 
         let n_frozen_shell_curr = if flag_tm {
             n_tm += 1;
