@@ -266,6 +266,7 @@ impl SCF {
         let ri3fn_full = new_scf.mol.ctrl.use_auxbas && !new_scf.mol.ctrl.use_ri_symm;
         let ri3fn_symm = new_scf.mol.ctrl.use_auxbas && new_scf.mol.ctrl.use_ri_symm;
 
+        time_mark.count_start("CInt");
         new_scf.ri3fn = if ri3fn_full && !isdf_full {
             //Some(new_scf.mol.prepare_ri3fn_for_ri_v_rayon())
             Some(new_scf.mol.prepare_ri3fn_for_ri_v_full_rayon())
@@ -289,13 +290,14 @@ impl SCF {
         } else {
             None
         };
+        time_mark.count("CInt");
 
-        // for debug
-        if let Some(ri3fn) = &new_scf.rimatr {
-            //println!("debug ri3fn_symm 02");
-            //println!("generate ri3fn from rimatr");
-            new_scf.ri3fn = Some(generate_ri3fn_from_rimatr(&ri3fn.0,&ri3fn.1,&ri3fn.2))
-        };
+        //// for debug
+        //if let Some(ri3fn) = &new_scf.rimatr {
+        //    //println!("debug ri3fn_symm 02");
+        //    //println!("generate ri3fn from rimatr");
+        //    new_scf.ri3fn = Some(generate_ri3fn_from_rimatr(&ri3fn.0,&ri3fn.1,&ri3fn.2))
+        //};
 
         
         // now prepare initial guess from different methods

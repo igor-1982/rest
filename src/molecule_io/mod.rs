@@ -1251,7 +1251,6 @@ impl Molecule {
         let n_basis = self.num_basis;
         let n_auxbas = self.num_auxbas;
 
-        utilities::omp_set_num_threads_wrapper(1);
 
         // First the Cholesky decomposition `L` of the inverse of the auxiliary 2-center coulumb matrix: V=(\nu|\mu)
         time_records.count_start("aux_ij");
@@ -1259,7 +1258,6 @@ impl Molecule {
         aux_v = aux_v.lapack_power(-0.5, AUXBAS_THRESHOLD).unwrap();
         //aux_v = aux_v.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
         time_records.count("aux_ij");
-
 
         // Then, prepare the 3-center integrals: O_V = (ij|\nu), and multiple with `L`
         time_records.count_start("prim ri");
@@ -1275,6 +1273,7 @@ impl Molecule {
                    self.ctrl.basis_type);
         };
 
+        utilities::omp_set_num_threads_wrapper(1);
         let (sender, receiver) = channel();
         //self.cint_aux_fdqc.par_iter().enumerate().for_each_with(sender,|s,(k,bas_info)| {
         self.cint_fdqc.par_iter().enumerate().for_each_with(sender,|s, (j,bas_info_j)| {
@@ -1343,17 +1342,15 @@ impl Molecule {
                 0..n_basis,0..basis_len_j,0..n_auxbas,
             );
         });
-        time_records.count("prim ri");
-
         utilities::omp_set_num_threads_wrapper(self.ctrl.num_threads.unwrap());
 
-
+        time_records.count("prim ri");
         time_records.count("all ri");
-
 
         if self.ctrl.print_level>=2 {
             time_records.report_all();
         }
+
 
         ri3fn
     }
@@ -1373,7 +1370,6 @@ impl Molecule {
         let n_baspar = (self.num_basis+1)*self.num_basis/2;
 
         // First the Cholesky decomposition `L` of the inverse of the auxiliary 2-center coulumb matrix: V=(\nu|\mu)
-        utilities::omp_set_num_threads_wrapper(1);
         time_records.count_start("aux_ij");
         let mut aux_v = self.int_ij_aux_columb();
         aux_v = aux_v.lapack_power(-0.5, AUXBAS_THRESHOLD).unwrap();
@@ -1402,6 +1398,7 @@ impl Molecule {
             }
         };
 
+        utilities::omp_set_num_threads_wrapper(1);
         let (sender, receiver) = channel();
         par_shellpair.par_iter().for_each_with(sender, |s, shell_index| {
             // first, initialize rust_cint for each rayon threads
@@ -1501,10 +1498,9 @@ impl Molecule {
             });
         });
 
-        time_records.count("prim ri");
-
         utilities::omp_set_num_threads_wrapper(self.ctrl.num_threads.unwrap());
 
+        time_records.count("prim ri");
 
         time_records.count("all ri");
 
