@@ -65,6 +65,7 @@ mod molecule_io;
 mod scf_io;
 mod initial_guess;
 mod ri_pt2;
+mod grad;
 mod ri_rpa;
 mod isdf;
 mod constants;
@@ -74,6 +75,7 @@ pub mod post_scf_analysis;
 static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 //static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+use crate::grad::rhf::Gradient;
 pub use crate::initial_guess::sap::*;
 use crate::{post_scf_analysis::{rand_wf_real_space, cube_build, molden_build}, isdf::error_isdf, molecule_io::Molecule};
 
@@ -94,6 +96,8 @@ fn main() -> anyhow::Result<()> {
     let mut mol = Molecule::build(ctrl_file)?;
 
     let mut scf_data = scf_io::scf(mol).unwrap();
+
+    let mut grad_data = Gradient::build(&scf_data.mol);
 
     time_mark.count("SCF");
 
