@@ -1,2 +1,8 @@
 Cargo.lock                                                                                                                                                                   
-bse_pool
+basis-set-pool/
+python_tests/
+debug_logs/
+.gitignore
+*.log
+examples/
+*.py
