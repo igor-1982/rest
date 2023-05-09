@@ -262,17 +262,13 @@ impl SCF {
         time_mark.count("Grids AO");
         
         // determine what kind of ri3fn is generated.
-        let isdf_full = new_scf.mol.ctrl.eri_type.eq("isdf_full");
+        let isdf_full = new_scf.mol.ctrl.eri_type.eq("ri_v") && new_scf.mol.ctrl.use_isdf;
         let ri3fn_full = new_scf.mol.ctrl.use_auxbas && !new_scf.mol.ctrl.use_ri_symm;
         let ri3fn_symm = new_scf.mol.ctrl.use_auxbas && new_scf.mol.ctrl.use_ri_symm;
 
         time_mark.count_start("CInt");
         new_scf.ri3fn = if ri3fn_full && !isdf_full {
-            //Some(new_scf.mol.prepare_ri3fn_for_ri_v_rayon())
             Some(new_scf.mol.prepare_ri3fn_for_ri_v_full_rayon())
-            //println!("generate ri3fn from rimatr");
-            //let (rimatr, basbas2baspar, baspar2basbas) = new_scf.mol.prepare_rimatr_for_ri_v_rayon();
-            //Some(generate_ri3fn_from_rimatr(&rimatr, &basbas2baspar, &baspar2basbas))
         } else if ri3fn_full && isdf_full {
             if let Some(grids) = &new_scf.grids {
                 Some(prepare_for_ri_isdf(new_scf.mol.ctrl.isdf_k_mu, &new_scf.mol, &grids))
@@ -283,10 +279,12 @@ impl SCF {
             None
         };
 
-        new_scf.rimatr = if ri3fn_symm {
+        new_scf.rimatr = if ri3fn_symm  && ! isdf_full {
             //println!("generate ri3fn from rimatr");
             let (rimatr, basbas2baspar, baspar2basbas) = new_scf.mol.prepare_rimatr_for_ri_v_rayon();
             Some((rimatr, basbas2baspar, baspar2basbas))
+        } else if ri3fn_symm  && isdf_full {
+            None
         } else {
             None
         };

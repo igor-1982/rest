@@ -329,11 +329,15 @@ impl InputKeywords {
                     other => {String::from("analytic")},
                     other => {String::from("ri_v")},
                 };
-                if tmp_input.eri_type.eq(&String::from("ri_v"))
+                let mut eri_type = tmp_input.eri_type.clone();
+                if eri_type.eq(&String::from("ri_v"))
                 {
                     tmp_input.use_auxbas = true;
                     tmp_input.use_isdf = false;
-                } else if tmp_input.eri_type.eq(&String::from("isdf_full")) {
+                } else if eri_type.eq(&String::from("isdf_full")) {
+                    // =========== for debug use by IGOR =================
+                    tmp_input.eri_type = String::from("ri_v");
+                    //====================================================
                     tmp_input.use_auxbas = true;
                     tmp_input.use_isdf = true;
                 } else {

@@ -76,6 +76,7 @@ static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 //static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use anyhow;
+use crate::isdf::error_isdf;
 use crate::dft::DFA4REST;
 use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa};
 use crate::scf_io::scf;
@@ -126,8 +127,8 @@ fn main() -> anyhow::Result<()> {
     //====================================
     post_scf_analysis::post_scf_analysis(&scf_data);
 
-    /* let error_isdf = error_isdf(3..4, &scf_data);
-    println!("k_mu:{:?}, abs_error: {:?}, rel_error: {:?}", error_isdf.0, error_isdf.1, error_isdf.2); */
+    //let error_isdf = error_isdf(8..9, &scf_data);
+    //println!("k_mu:{:?}, abs_error: {:?}, rel_error: {:?}", error_isdf.0, error_isdf.1, error_isdf.2);
 
 
     if let Some(dft_method) = &scf_data.mol.xc_data.dfa_family_pos {
