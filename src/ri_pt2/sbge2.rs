@@ -514,7 +514,7 @@ pub fn open_shell_sbge2_rayon(scf_data: &crate::scf_io::SCF) -> anyhow::Result<[
                 });
             }
         }
-        if scf_data.mol.ctrl.print_level>0 {
+        if scf_data.mol.ctrl.print_level>1 {
             let num_occ_alpha = scf_data.homo[0]+1;
             let num_occ_beta = scf_data.homo[1]+1;
             println!("Print the correlation energies for each electron-pair:");

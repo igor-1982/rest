@@ -112,7 +112,7 @@ pub fn initial_guess_from_hdf5chk(mol: &Molecule) -> ([MatrixFull<f64>;2],[Vec<f
 
         tmp_eigenvalues[i]=buf02[ (0+i)*mol.num_state..(1+i)*mol.num_state].to_vec();
     });
-    if mol.ctrl.print_level>1 {
+    if mol.ctrl.print_level>3 {
         (0..mol.spin_channel).into_iter().for_each(|i| {
             tmp_eigenvectors[i].formated_output(5, "full");
             println!("eigenval {:?}", &tmp_eigenvalues[i]);

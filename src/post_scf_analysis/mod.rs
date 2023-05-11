@@ -1,6 +1,6 @@
 use pyrest::dft::DFAFamily;
 
-use crate::ri_pt2::sbge2::close_shell_sbge2_rayon;
+use crate::ri_pt2::sbge2::{close_shell_sbge2_rayon, open_shell_sbge2_rayon};
 use crate::ri_rpa::{evaluate_rpa_correlation, evaluate_rpa_correlation_rayon};
 use crate::scf_io::SCF;
 
@@ -77,7 +77,7 @@ pub fn post_scf_correlation(scf_data: &mut SCF) {
                     close_shell_sbge2_rayon(&scf_data).unwrap()
                 } else {
                     //[0.0,0.0,0.0]
-                    open_shell_pt2_rayon(&scf_data).unwrap()
+                    open_shell_sbge2_rayon(&scf_data).unwrap()
                 };
                 post_corr.push((crate::dft::DFAFamily::SBGE2, energy_post));
 
