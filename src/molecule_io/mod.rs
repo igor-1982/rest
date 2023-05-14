@@ -1036,6 +1036,10 @@ impl Molecule {
     }
 
     pub fn int_ij_aux_columb(&self) -> MatrixFull<f64> {
+        self.int_ij_aux_columb_rayon()
+    }
+
+    pub fn int_ij_aux_columb_serial(&self) -> MatrixFull<f64> {
         let mut cint_data = self.initialize_cint(true);
         let n_auxbas = self.num_auxbas;
         let n_basis_shell = self.cint_bas.len();
@@ -1061,6 +1065,39 @@ impl Molecule {
             }
         }
         cint_data.final_c2r();
+        //aux_v.formated_output_e(4, "full");
+        aux_v
+    }
+    
+    pub fn int_ij_aux_columb_rayon(&self) -> MatrixFull<f64> {
+        let n_auxbas = self.num_auxbas;
+        let n_basis_shell = self.cint_bas.len();
+        let n_auxbas_shell = self.cint_aux_bas.len();
+        let mut aux_v = MatrixFull::new([n_auxbas,n_auxbas],0.0);
+        let (sender, receiver) = channel();
+        self.cint_aux_fdqc.par_iter().enumerate().for_each_with(sender,|s,(l,fdqc)| {
+            let mut cint_data = self.initialize_cint(true);
+            cint_data.cint2c2e_optimizer_rust();
+            let basis_start_l = fdqc[0];
+            let basis_len_l = fdqc[1];
+            let gl  = l + n_basis_shell;
+            let mut loc_aux_v = MatrixFull::new([n_auxbas,basis_len_l],0.0);
+            for k in 0..n_auxbas_shell {
+                let basis_start_k = self.cint_aux_fdqc[k][0];
+                let basis_len_k = self.cint_aux_fdqc[k][1];
+                let gk  = k + n_basis_shell;
+                let buf = cint_data.cint_2c2e(gk as i32, gl as i32);
+                let mut tmp_slices = loc_aux_v.iter_submatrix_mut(
+                    basis_start_k..basis_start_k+basis_len_k,
+                    0..basis_len_l);
+                tmp_slices.zip(buf.iter()).for_each(|value| {*value.0 = *value.1});
+            }
+            cint_data.final_c2r();
+            s.send((loc_aux_v, basis_start_l, basis_len_l)).unwrap()
+        });
+        receiver.into_iter().for_each(|(loc_aux_v, basis_start_l, basis_len_l)| {
+            aux_v.copy_from_matr(0..n_auxbas, basis_start_l..basis_start_l+basis_len_l, &loc_aux_v, 0..n_auxbas, 0..basis_len_l);
+        });
         //aux_v.formated_output_e(4, "full");
         aux_v
     }
