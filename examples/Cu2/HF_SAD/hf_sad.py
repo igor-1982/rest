@@ -1,4 +1,4 @@
-#!/usr/bin/env python3                                                                                                                                                                                                                
+#!/usr/bin/env python3
 import pyscf
 import numpy, scipy
 #from pyscf import gto

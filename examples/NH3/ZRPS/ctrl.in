@@ -1,6 +1,6 @@
 [ctrl]
      # 设置程序输出的程度，缺省为1
-     print_level =               2
+     print_level =               1
      # 设置Rayon和OpenMP的并行数，缺省为1
      num_threads =               4
      # 设置使用的电子结构方法，缺省为HF
@@ -17,7 +17,7 @@
      etb_beta =                  1.0
      # 使用resolution-of-identity (RI)技术处理四中心积分（缺省）
      eri_type =                  "ri_v"
-     use_ri_symm =               false
+     use_ri_symm =               true
      use_dm_only =               true
      charge =                    0.0
      spin =                      1.0

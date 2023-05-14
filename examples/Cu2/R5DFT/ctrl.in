@@ -24,6 +24,8 @@
      charge =                    0.0
      spin =                      1.0
      spin_polarization =         false
+     # SCF自洽相关参数设置
+     initial_guess =             "sad"
      mixer =                     "diis"
      num_max_diis =              8
      start_diis_cycle =          1
@@ -32,9 +34,8 @@
      scf_acc_rho =               1.0e-6
      scf_acc_eev =               1.0e-6
      scf_acc_etot =              1.0e-8
-     initial_guess =             "sad"
      chkfile =                   "none"
-     fchk =                      false
+     chkfile_type =              "hdf5"
      pruning =                   "nwchem"
      radial_grid_method =        "treutler"
      external_grids =            "none"

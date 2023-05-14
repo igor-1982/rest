@@ -7,7 +7,7 @@
      xc =                        "x3lyp" 
      # 设置（辅助）基组的路径。如果找不到该路径，则创建该路径，并从BSE下载
      # 注意：计算节点需支持连接外网。
-     basis_path =                "../../../basis-set-pool/cc-pVQZ"
+     basis_path =                "../../../basis-set-pool/cc-pVDZ"
      auxbas_path =               "../../../basis-set-pool/def2-SV(P)-JKFIT" 
      # 辅助基函数自动生成设置
      even_tempered_basis =       true
