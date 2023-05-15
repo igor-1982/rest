@@ -21,7 +21,7 @@
      radial_grid_method =        "treutler"
      external_grids =            "none"
      mixer =                     "diis"
-     num_max_diis =              10
+     num_max_diis =              8
      start_diis_cycle =          1
      mix_param =                 0.2
      max_scf_cycle =             1000

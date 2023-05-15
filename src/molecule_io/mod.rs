@@ -1568,6 +1568,7 @@ impl Molecule {
 
         time_records.new_item("prim ri", "for the pure three-center integrals");
         time_records.new_item("aux_ij", "for the coulomb matrix of auxiliary basis");
+        time_records.new_item("inv_sqrt", "for the sqrt inverse of aux_ij");
 
         let n_basis = self.num_basis;
         let n_auxbas = self.num_auxbas;
@@ -1576,9 +1577,11 @@ impl Molecule {
         // First the Cholesky decomposition `L` of the inverse of the auxiliary 2-center coulumb matrix: V=(\nu|\mu)
         time_records.count_start("aux_ij");
         let mut aux_v = self.int_ij_aux_columb();
+        time_records.count("aux_ij");
+        time_records.count_start("inv_sqrt");
         aux_v = aux_v.lapack_power(-0.5, AUXBAS_THRESHOLD).unwrap();
         //aux_v = aux_v.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
-        time_records.count("aux_ij");
+        time_records.count("inv_sqrt");
 
         // Then, prepare the 3-center integrals: O_V = (ij|\nu), and multiple with `L`
         time_records.count_start("prim ri");

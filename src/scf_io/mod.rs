@@ -1891,6 +1891,7 @@ impl SCF {
         let pre_energy = scftracerecode.scf_energy;
         let diff_energy = cur_energy-pre_energy;
         let etot_converge = diff_energy.abs()<=scf_acc_etot;
+        //scftracerecode.energy_change.push(diff_energy);
 
         let cur_energy = &self.eigenvalues;
         let pre_energy = &scftracerecode.eigenvalues;
@@ -2850,6 +2851,7 @@ pub struct ScfTraceRecord {
     //pub eigenvectors: Vec<[MatrixFull<f64>;2]>,
     //pub eigenvalues: Vec<[Vec<f64>;2]>,
     pub scf_energy : f64,
+    pub energy_records: Vec<f64>,
     pub eigenvectors: [MatrixFull<f64>;2],
     pub eigenvalues: [Vec<f64>;2],
     pub density_matrix: [Vec<MatrixFull<f64>>;2],
@@ -2869,6 +2871,7 @@ impl ScfTraceRecord {
             num_max_records,
             start_diis_cycle,
             scf_energy : 0.0,
+            energy_records: vec![],
             eigenvectors: [MatrixFull::new([1,1],0.0),
                               MatrixFull::new([1,1],0.0)],
             eigenvalues: [Vec::<f64>::new(),Vec::<f64>::new()],
@@ -2912,6 +2915,7 @@ impl ScfTraceRecord {
 
         // now store the scf energy, eigenvectors and eigenvalues of the last two steps
         //let tmp_data =  self.scf_energy[1].clone();
+        self.energy_records.push(scf.scf_energy);
         self.scf_energy=scf.scf_energy;
         //let tmp_data =  self.eigenvectors[1].clone();
         self.eigenvectors=scf.eigenvectors.clone();
@@ -2946,9 +2950,32 @@ impl ScfTraceRecord {
     pub fn prepare_next_input(&mut self, scf: &mut SCF) {
         let spin_channel = scf.mol.spin_channel;
         let start_pulay = self.start_diis_cycle;
-        //if self.residual_density.len()>=2 {
-        let alpha = self.mix_param;
-        let beta = 1.0-self.mix_param;
+        let num_step = self.energy_records.len();
+        let oscillation_flag_1 = if num_step >=3 {
+            let change_1 = self.energy_records[num_step-1] - self.energy_records[num_step-2];
+            let change_2 = self.energy_records[num_step-2] - self.energy_records[num_step-3];
+            change_1 > 0.0 && change_2 > 0.0
+        }else {
+            false
+        };
+        //let oscillation_flag_2 = if num_step >=3 {
+        //    self.energy_change[num_step-2]*self.energy_change[num_step-3] < 0.0
+        //}else {
+        //    false
+        //};
+
+        let mut alpha = self.mix_param;
+        let mut beta = 1.0-alpha;
+
+        if self.mixer.eq(&"diis") {
+            if num_step > 10 && oscillation_flag_1 {
+                self.start_diis_cycle = self.num_iter + 4;
+                self.target_vector =  Vec::<[MatrixFull<f64>;2]>::new();
+                self.error_vector =  Vec::<Vec::<f64>>::new();
+            }
+        }
+
+
         if self.mixer.eq(&"direct") {
             scf.generate_hf_hamiltonian();
         }
@@ -2975,6 +3002,7 @@ impl ScfTraceRecord {
             // prepare the fock matrix according to the output density matrix of the previous step
             //
             let dt1 = time::Local::now();
+            //let prev_hamiltonian = scf.hamiltonian.clone();
             scf.generate_hf_hamiltonian();
             let dt2 = time::Local::now();
 
@@ -2992,7 +3020,7 @@ impl ScfTraceRecord {
             self.target_vector.push(cur_target);
 
 
-            // solve the diss against the error vector
+            // solve the DIIS against the error vector
             if let Some(coeff) = diis_solver(&self.error_vector, &self.error_vector.len()) {
                 // now extrapolate the fock matrix for the next step
                 (0..spin_channel).into_iter().for_each(|i_spin| {
@@ -3000,7 +3028,15 @@ impl ScfTraceRecord {
                     coeff.iter().enumerate().for_each(|(i,value)| {
                         next_hamiltonian.self_scaled_add(&self.target_vector[i+start_dim][i_spin], *value);
                     });
-                    scf.hamiltonian[i_spin] = next_hamiltonian.to_matrixupper();
+                    let next_hamiltonian = next_hamiltonian.to_matrixupper();
+                    //if (alpha-1.0)<1.0E-10 {
+                        scf.hamiltonian[i_spin] = next_hamiltonian;
+                    //} else {
+                    //    scf.hamiltonian[i_spin].data.par_iter_mut().zip(prev_hamiltonian[i_spin].data.par_iter()).zip(next_hamiltonian.data.par_iter())
+                    //    .for_each(|((to, prev), new)| {
+                    //        *to = prev*beta + new*alpha;
+                    //    });
+                    //}
                 });
 
             } else {
@@ -3042,23 +3078,10 @@ pub fn generate_diis_error_vector(hamiltonian: &[MatrixUpper<f64>;2],
                 MatrixFull::new([1,1],0.0),
                 MatrixFull::new([1,1],0.0)
             ];
-            //println!("debug: {:?}", &hamiltonian);
             let mut cur_target = [hamiltonian[0].to_matrixfull().unwrap(),
                  hamiltonian[1].to_matrixfull().unwrap()];
 
             let mut full_ovlp = ovlp.to_matrixfull().unwrap();
-
-            //let mut sqrt_inv_ovlp = full_ovlp.lapack_power(-0.5,10.0E-6).unwrap();
-            //let mut tmp_num = 0_usize;
-            //sqrt_inv_ovlp.data.iter().enumerate().for_each(|ig| {
-            //    let j = ig.0/sqrt_inv_ovlp.indicing[1];
-            //    let i = ig.0%sqrt_inv_ovlp.indicing[1];
-            //    if ig.1.abs()>0.1 {
-            //        println!("I= {:3} J= {:3} Int= {:16.8}",i, j, ig.1);
-            //        tmp_num += 1;
-            //    }
-            //});
-            //println!("Print out {} elements of sqrt_inv_ovlp", tmp_num);
 
             // now generte the error as the commutator of [fds-sdf]
             (0..spin_channel).into_iter().for_each(|i_spin| {
