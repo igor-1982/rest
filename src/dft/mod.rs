@@ -596,18 +596,6 @@ impl DFA4REST {
                 _ => {println!("{} is not yet implemented", xc_func.get_family_name())}
             }
         });
-        //println!("debug exc");
-        //(0..100).for_each(|i| {
-        //    println!("{:16.8},{:16.8},{:16.8}", exc[[i,0]],rho[[i,0]],rho[[i,1]]);
-        //});
-        //println!("debug vrho");
-        //(0..100).for_each(|i| {
-        //    println!("{:16.8},{:16.8}", vrho[[i,0]],vrho[[i,1]]);
-        //});
-        //println!("debug vsigma");
-        //(0..100).for_each(|i| {
-        //    println!("{:16.8},{:16.8},{:16.8}", vsigma[[i,0]],vsigma[[i,1]],vsigma[[i,2]]);
-        //});
 
         let dt4 = utilities::timing(&dt3, Some("evaluate vrho and vsigma"));
         
@@ -778,6 +766,7 @@ impl DFA4REST {
         let mut loc_exc = MatrixFull::new([num_grids,1],0.0);
         let mut loc_exc_total = vec![0.0;spin_channel];
         let mut loc_vxc_ao = vec![MatrixFull::new([num_basis,num_grids],0.0);spin_channel];
+        //println!("debug loc_vxc_ao size: {:?}", loc_vxc_ao[0].size());
         let dt0 = utilities::init_timing();
 
         /// rho and rhop have been localized.

@@ -2148,6 +2148,7 @@ impl SCF {
             grids.parallel_balancing.par_iter().for_each_with(sender,|s,range_grids| {
                 //println!("debug 0: {}", rayon::current_thread_index().unwrap());
                 let (exc,vxc_ao,total_elec) = self.mol.xc_data.xc_exc_vxc_slots_dm_only(range_grids.clone(), grids, spin_channel,dm, mo, occ);
+                //println!("debug: {:?}", vxc_ao[0].size());
                 //println!("debug loc_exc: {:?}, {:?}, {:?}", exc, vxc_ao[0].size(), vxc_ao[0].data.iter().sum::<f64>());
                 //exc_spin = exc;
                 let mut vxc_mf: Vec<MatrixFull<f64>> = vec![MatrixFull::new([num_basis,num_basis],0.0f64);spin_channel];;

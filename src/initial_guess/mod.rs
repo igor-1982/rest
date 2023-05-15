@@ -1,4 +1,4 @@
-use tensors::{MatrixFull, MatrixUpper};
+use tensors::{MatrixFull, MatrixUpper, BasicMatrix};
 
 use crate::{molecule_io::Molecule, scf_io::SCF, dft::Grids};
 
@@ -45,6 +45,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
         scf_data.generate_hf_hamiltonian();
     } else if scf_data.mol.ctrl.initial_guess.eq(&"sad") {
         scf_data.density_matrix = initial_guess_from_sad(&scf_data.mol);
+        //println!("debug: dm size: {:?}", scf_data.density_matrix[0].size());
         // for DFT methods, it needs the eigenvectors to generate the hamiltoniam. In consequence, we use the hf method to prepare the eigenvectors from the guess dm
         //for i in 0..scf_data.mol.spin_channel {
         //    println!("debug {}", if i==0 {"Alpha"} else {"Beta"});
