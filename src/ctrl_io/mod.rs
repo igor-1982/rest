@@ -115,6 +115,7 @@ pub struct InputKeywords {
     pub num_max_diis: usize,
     #[pyo3(get, set)]
     pub start_diis_cycle: usize,
+    pub start_check_oscillation: usize,
     #[pyo3(get, set)]
     pub max_scf_cycle: usize,
     #[pyo3(get, set)]
@@ -215,6 +216,7 @@ impl InputKeywords {
             mix_param: 0.6,
             num_max_diis: 8,
             start_diis_cycle: 1,
+            start_check_oscillation: 20,
             max_scf_cycle: 100,
             scf_acc_rho: 1.0e-6,
             scf_acc_eev: 1.0e-5,
@@ -610,6 +612,11 @@ impl InputKeywords {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(2_usize)},
                     serde_json::Value::Number(tmp_num) => {tmp_num.as_i64().unwrap_or(2) as usize},
                     other => {2_usize}
+                };
+                tmp_input.start_check_oscillation = match tmp_ctrl.get("start_check_oscillation").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(20_usize)},
+                    serde_json::Value::Number(tmp_num) => {tmp_num.as_i64().unwrap_or(20) as usize},
+                    other => {20_usize}
                 };
 
                 // Initial guess relevant keywords

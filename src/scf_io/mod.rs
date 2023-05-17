@@ -2993,6 +2993,7 @@ impl ScfTraceRecord {
             // Reference: P. Pulay, Improved SCF Convergence Acceleration, JCC, 1982, 3:556-560.
             // 
             let start_dim = 0usize;
+            let mut start_check_oscillation = scf.mol.ctrl.start_check_oscillation;
             //
             // prepare the fock matrix according to the output density matrix of the previous step
             //
@@ -3006,7 +3007,7 @@ impl ScfTraceRecord {
             let num_step = self.energy_records.len();
             let oscillation_flag = if num_step >=2 {
                 let change_1 = self.energy_records[num_step-1] - self.energy_records[num_step-2];
-                num_step > 3 && change_1 > 0.0
+                num_step > start_check_oscillation && change_1 > 0.0
                 //false
             }else {
                 false
