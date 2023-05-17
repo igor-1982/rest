@@ -2852,6 +2852,7 @@ pub struct ScfTraceRecord {
     //pub eigenvalues: Vec<[Vec<f64>;2]>,
     pub scf_energy : f64,
     pub energy_records: Vec<f64>,
+    pub prev_hamiltonian: Vec<[MatrixUpper<f64>;2]>,
     pub eigenvectors: [MatrixFull<f64>;2],
     pub eigenvalues: [Vec<f64>;2],
     pub density_matrix: [Vec<MatrixFull<f64>>;2],
@@ -2872,6 +2873,7 @@ impl ScfTraceRecord {
             start_diis_cycle,
             scf_energy : 0.0,
             energy_records: vec![],
+            prev_hamiltonian: vec![[MatrixUpper::empty(),MatrixUpper::empty()]],
             eigenvectors: [MatrixFull::new([1,1],0.0),
                               MatrixFull::new([1,1],0.0)],
             eigenvalues: [Vec::<f64>::new(),Vec::<f64>::new()],
@@ -2915,7 +2917,6 @@ impl ScfTraceRecord {
 
         // now store the scf energy, eigenvectors and eigenvalues of the last two steps
         //let tmp_data =  self.scf_energy[1].clone();
-        self.energy_records.push(scf.scf_energy);
         self.scf_energy=scf.scf_energy;
         //let tmp_data =  self.eigenvectors[1].clone();
         self.eigenvectors=scf.eigenvectors.clone();
@@ -2950,39 +2951,33 @@ impl ScfTraceRecord {
     pub fn prepare_next_input(&mut self, scf: &mut SCF) {
         let spin_channel = scf.mol.spin_channel;
         let start_pulay = self.start_diis_cycle;
-        let num_step = self.energy_records.len();
-        let oscillation_flag_1 = if num_step >=3 {
-            let change_1 = self.energy_records[num_step-1] - self.energy_records[num_step-2];
-            let change_2 = self.energy_records[num_step-2] - self.energy_records[num_step-3];
-            change_1 > 0.0 && change_2 > 0.0
-        }else {
-            false
-        };
+        //if self.num_iter>=2 {
+        //    self.prev_hamiltonian = scf.hamiltonian.clone()
+        //};
         //let oscillation_flag_2 = if num_step >=3 {
         //    self.energy_change[num_step-2]*self.energy_change[num_step-3] < 0.0
         //}else {
         //    false
         //};
 
-        let mut alpha = self.mix_param;
-        let mut beta = 1.0-alpha;
 
-        if self.mixer.eq(&"diis") {
-            if num_step > 10 && oscillation_flag_1 {
-                self.start_diis_cycle = self.num_iter + 4;
-                self.target_vector =  Vec::<[MatrixFull<f64>;2]>::new();
-                self.error_vector =  Vec::<Vec::<f64>>::new();
-            }
-        }
+        //if self.mixer.eq(&"diis") {
+        //    if num_step > 10 && oscillation_flag_1 {
+        //        self.start_diis_cycle = self.num_iter + 4;
+        //        self.target_vector =  Vec::<[MatrixFull<f64>;2]>::new();
+        //        self.error_vector =  Vec::<Vec::<f64>>::new();
+        //    }
+        //}
 
 
         if self.mixer.eq(&"direct") {
             scf.generate_hf_hamiltonian();
         }
         else if self.mixer.eq(&"linear") 
-            || (self.mixer.eq(&"ddiis") && self.num_iter<start_pulay) 
             || (self.mixer.eq(&"diis") && self.num_iter<start_pulay) 
         {
+            let mut alpha = self.mix_param;
+            let mut beta = 1.0-alpha;
             // n1[in] = a*n0[out] + (1-a)*n0[in] = n0[out]-(1-a)*Rn0 = n0[in] + a*Rn0
             // Rn0 = n0[out]-n0[in]; the residual density in the current iteration
             // n1[in] is the input density for the next iteration
@@ -3002,9 +2997,23 @@ impl ScfTraceRecord {
             // prepare the fock matrix according to the output density matrix of the previous step
             //
             let dt1 = time::Local::now();
-            //let prev_hamiltonian = scf.hamiltonian.clone();
+
             scf.generate_hf_hamiltonian();
+
+
+            // update the energy records and check the oscillation
+            self.energy_records.push(scf.scf_energy);
+            let num_step = self.energy_records.len();
+            let oscillation_flag = if num_step >=2 {
+                let change_1 = self.energy_records[num_step-1] - self.energy_records[num_step-2];
+                num_step > 3 && change_1 > 0.0
+                //false
+            }else {
+                false
+            };
+
             let dt2 = time::Local::now();
+
 
             // check if the storage of fock matrix reaches the maximum setting
             if self.target_vector.len() == self.num_max_records {
@@ -3029,17 +3038,32 @@ impl ScfTraceRecord {
                         next_hamiltonian.self_scaled_add(&self.target_vector[i+start_dim][i_spin], *value);
                     });
                     let next_hamiltonian = next_hamiltonian.to_matrixupper();
-                    //if (alpha-1.0)<1.0E-10 {
+
+                    if oscillation_flag {
+                        println!("Energy increase is detected. Turn on the linear mixing algorithm with (H[DIIS, i-1] + H[DIIS, i+1]).");
+                        let length = self.energy_records.len();
+                        println!("Prev_Energies: ({:16.8}, {:16.8})", self.energy_records[length-2], self.energy_records[length-1]);
+                        let mut alpha: f64 = self.mix_param;
+                        let mut beta = 1.0-alpha;
+                        scf.hamiltonian[i_spin].data.par_iter_mut().zip(self.prev_hamiltonian[0][i_spin].data.par_iter()).zip(next_hamiltonian.data.par_iter())
+                        .for_each(|((to, prev), new)| {
+                            *to = prev*beta + new*alpha;
+                        });
+                    } else {
                         scf.hamiltonian[i_spin] = next_hamiltonian;
-                    //} else {
-                    //    scf.hamiltonian[i_spin].data.par_iter_mut().zip(prev_hamiltonian[i_spin].data.par_iter()).zip(next_hamiltonian.data.par_iter())
-                    //    .for_each(|((to, prev), new)| {
-                    //        *to = prev*beta + new*alpha;
-                    //    });
-                    //}
+                    }
                 });
 
+                // update the previous hamiltonian list to make sure the first item is H[DIIS, i-1]
+                // and the second term is H[DIIS, i]
+                if self.prev_hamiltonian.len() == 2 {self.prev_hamiltonian.remove(0);};
+                self.prev_hamiltonian.push(scf.hamiltonian.clone());
+
+
+
             } else {
+                let mut alpha = self.mix_param;
+                let mut beta = 1.0-alpha;
                 println!("WARNING: fail to obtain the DIIS coefficients. Turn to use the linear mixing algorithm, and re-invoke DIIS  8 steps later");
                 for i_spin in (0..spin_channel) {
                     let residual_dm = self.density_matrix[1][i_spin].sub(&self.density_matrix[0][i_spin]).unwrap();
@@ -3199,11 +3223,8 @@ pub fn scf(mol:Molecule) -> anyhow::Result<SCF> {
         let dt1_2 = time::Local::now();
         scf_data.generate_density_matrix();
         let dt1_3 = time::Local::now();
-
-
         scf_converge = scf_data.check_scf_convergence(&scf_records);
         let dt1_4 = time::Local::now();
-
         scf_records.update(&scf_data);
         let dt1_5 = time::Local::now();
 
