@@ -191,7 +191,7 @@ pub fn evaluate_osrpa_correlation_rayon(scf_data: &SCF) -> anyhow::Result<[f64;3
 
     // for scs-rpa, higher oder OS terms are combined with the SS term to be the SS+ term
     // SS+ = RPA_total - RPA_OS
-    Ok([rpa_c_energy, rpa_c_energy_os, rpa_c_energy-rpa_c_energy_os])
+    Ok([rpa_c_energy, rpa_c_energy_os, rpa_c_energy_ss])
 }
 
 fn evaluate_osrpa_integrand(

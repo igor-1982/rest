@@ -78,7 +78,11 @@ pub fn xdh_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
             match  dfa_family_pos {
                 crate::dft::DFAFamily::PT2 => open_shell_pt2_rayon(&scf_data).unwrap(),
                 crate::dft::DFAFamily::SBGE2 => open_shell_sbge2_rayon(scf_data).unwrap(),
-                crate::dft::DFAFamily::SCSRPA => evaluate_osrpa_correlation_rayon(scf_data).unwrap(),
+                crate::dft::DFAFamily::SCSRPA => {
+                    let c_rpa = evaluate_osrpa_correlation_rayon(scf_data).unwrap();
+                    //[c_rpa[0], c_rpa[1], c_rpa[0]-c_rpa[1]]
+                    c_rpa
+                },
                 _ => [0.0,0.0,0.0]
             }
             
@@ -90,6 +94,11 @@ pub fn xdh_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
             open_shell_pt2(&scf_data).unwrap()
         };
     };
+
+    if scf_data.mol.ctrl.xc.eq(&"scsrpa") {
+        let pt2_c_old = pt2_c.clone();
+        pt2_c[2] = pt2_c[0] - pt2_c[1]
+    }
     //println!("{:?}",&pt2_c);
     let hy_coeffi_scf = scf_data.mol.xc_data.dfa_hybrid_scf;
     let hy_coeffi_xdh = if let Some(coeff) = scf_data.mol.xc_data.dfa_hybrid_pos {coeff} else {0.0};
