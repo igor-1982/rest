@@ -10,6 +10,7 @@ use tensors::BasicMatrix;
 use tensors::matrix_blas_lapack::{_dsymm, _dgemm};
 
 use crate::ri_pt2::sbge2::{close_shell_sbge2_rayon,open_shell_sbge2_rayon};
+use crate::ri_rpa::scsrpa::evaluate_osrpa_correlation_rayon;
 use crate::scf_io::determine_ri3mo_size_for_pt2_and_rpa;
 use crate::molecule_io::Molecule;
 use crate::scf_io::SCF;
@@ -39,7 +40,7 @@ pub fn xdh_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
         crate::dft::DFAFamily::PT2 => "PT2".to_string(),
         crate::dft::DFAFamily::SBGE2 => "SBGE2".to_string(),
         crate::dft::DFAFamily::RPA => "RPA".to_string(),
-        crate::dft::DFAFamily::SCSRPA => "RPA".to_string(),
+        crate::dft::DFAFamily::SCSRPA => "SCSRPA".to_string(),
         _ => panic!("Error: No post-scf calculation is needed"),
     };
     println!("==========================================");
@@ -70,12 +71,14 @@ pub fn xdh_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
             match  dfa_family_pos {
                 crate::dft::DFAFamily::PT2 => close_shell_pt2_rayon(&scf_data).unwrap(),
                 crate::dft::DFAFamily::SBGE2 => close_shell_sbge2_rayon(scf_data).unwrap(),
+                crate::dft::DFAFamily::SCSRPA => evaluate_osrpa_correlation_rayon(scf_data).unwrap(),
                 _ => [0.0,0.0,0.0]
             }
         } else {
             match  dfa_family_pos {
                 crate::dft::DFAFamily::PT2 => open_shell_pt2_rayon(&scf_data).unwrap(),
                 crate::dft::DFAFamily::SBGE2 => open_shell_sbge2_rayon(scf_data).unwrap(),
+                crate::dft::DFAFamily::SCSRPA => evaluate_osrpa_correlation_rayon(scf_data).unwrap(),
                 _ => [0.0,0.0,0.0]
             }
             

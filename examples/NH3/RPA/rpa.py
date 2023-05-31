@@ -17,7 +17,7 @@ mol = gto.Mole(
          charge=0,spin=0,basis='cc-pvdz',verbose=4
       ).build()
 method = scf.RKS(mol).density_fit(auxbasis="def2-svp-jkfit")
-method.xc = 'pbe'
+method.xc = 'b3lyp'
 mf = method.run()
 rpa = RPA(mf, auxbasis="def2-svp-jkfit")
 

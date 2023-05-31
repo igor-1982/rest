@@ -441,6 +441,35 @@ impl DFA4REST {
                 dfa_paramr_pos,
                 dfa_hybrid_pos
             })
+        } else if tmp_name.eq("scsrpa") {
+            let dfa_family_pos = Some(DFAFamily::SCSRPA);
+            let dfa_compnt_pos: Option<Vec<usize>> = Some(vec![]);
+            let dfa_paramr_pos = Some(vec![]);
+            let dfa_hybrid_pos = Some(1.0);
+            let dfa_paramr_adv = Some(vec![1.2,0.75]);
+
+            let dfa_family_scf = DFAFamily::HybridGGA;
+            let scf_dfa = ["pbe0"];
+            //let dfa_compnt_scf: Vec<XcFuncType> = scf_dfa.iter().map(|xc| {
+            //    DFA4REST::xc_func_init_fdqc(*xc, spin_channel).into_iter()})
+            //    .flatten().collect();
+            let dfa_compnt_scf: Vec<usize> = scf_dfa.iter().map(|xc| {
+                DFA4REST::xc_func_init_fdqc(*xc, spin_channel).into_iter()})
+                .flatten().collect();
+            let dfa_paramr_scf = vec![1.0;dfa_compnt_scf.len()];
+            //let dfa_hybrid_scf = 0.0;
+            let dfa_hybrid_scf = DFA4REST::get_hybrid_libxc(&dfa_compnt_scf,spin_channel);
+            Some(DFA4REST{
+                spin_channel,
+                dfa_compnt_scf,
+                dfa_paramr_scf,
+                dfa_hybrid_scf,
+                dfa_paramr_adv,
+                dfa_family_pos,
+                dfa_compnt_pos,
+                dfa_paramr_pos,
+                dfa_hybrid_pos
+            })
         } else if tmp_name.eq("mp2") {
             let dfa_family_pos = Some(DFAFamily::PT2);
             let dfa_compnt_pos: Option<Vec<usize>> = Some(vec![]);

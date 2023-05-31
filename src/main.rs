@@ -145,6 +145,12 @@ fn main() -> anyhow::Result<()> {
                 ri_rpa::rpa_calculations(&mut scf_data);
                 time_mark.count("RPA");
             }
+            dft::DFAFamily::SCSRPA => {
+                time_mark.new_item("SCS-RPA", "the SCS-RPA evaluation");
+                time_mark.count_start("SCS-RPA");
+                ri_pt2::xdh_calculations(&mut scf_data);
+                time_mark.count("SCS-RPA");
+            }
             _ => {}
         }
     }

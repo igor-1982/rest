@@ -1,3 +1,5 @@
+pub mod scsrpa;
+
 use std::num;
 use std::sync::mpsc::channel;
 
@@ -7,7 +9,7 @@ use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use rest_tensors::{TensorOpt,RIFull, MatrixFull, TensorSlice};
 use rest_tensors::matrix_blas_lapack::{_dgemm_nn,_dgemm_tn};
 use libm::{exp,cos};
-use serde::__private::de;
+//use serde::__private::de;
 use tensors::ParMathMatrix;
 use tensors::matrix_blas_lapack::_dgemm;
 
@@ -56,7 +58,8 @@ pub fn rpa_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
         };
         scf_data.generate_ri3mo_rayon(vir_range, occ_range);
 
-        rpa_c_energy = evaluate_rpa_correlation(scf_data).unwrap();
+        rpa_c_energy = evaluate_rpa_correlation_rayon(scf_data).unwrap();
+        //rpa_c_energy = evaluate_rpa_correlation(scf_data).unwrap();
 
     } else {
         let mut rimo: Vec<RIFull<f64>> = if let Some(riao)=&scf_data.ri3fn {
@@ -81,9 +84,10 @@ pub fn rpa_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
             rpa_c_energy += rpa_c_integrand*weight
 
         });
+
+        rpa_c_energy = rpa_c_energy*0.5/PI;
     }
 
-    rpa_c_energy = rpa_c_energy*0.5/PI;
 
     let hy_coeffi_scf = scf_data.mol.xc_data.dfa_hybrid_scf;
     let hy_coeffi_pot = if let Some(coeff) = scf_data.mol.xc_data.dfa_hybrid_pos {coeff} else {0.0};

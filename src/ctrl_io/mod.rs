@@ -86,6 +86,8 @@ pub struct InputKeywords {
     #[pyo3(get, set)]
     pub frequency_points: usize,
     #[pyo3(get, set)]
+    pub lambda_points: usize,
+    #[pyo3(get, set)]
     pub freq_grid_type: usize,
     #[pyo3(get, set)]
     pub freq_cut_off: f64,
@@ -194,6 +196,8 @@ impl InputKeywords {
             frequency_points: 20_usize,
             freq_grid_type: 0_usize,
             freq_cut_off: 10.0_f64,
+            // Keywords for scsRPA lambda tabulation
+            lambda_points: 20_usize,
             // Keywords for DFT numerical integration
             radial_precision: 1.0e-12,
             min_num_angular_points: 110,
@@ -506,6 +510,11 @@ impl InputKeywords {
                     serde_json::Value::String(tmp_fg) => {tmp_fg.to_lowercase().parse().unwrap_or(10.0)},
                     serde_json::Value::Number(tmp_fg) => {tmp_fg.as_f64().unwrap_or(10.0)},
                     other => {10.0},
+                };
+                tmp_input.lambda_points = match tmp_ctrl.get("lambda_points").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_fp) => {tmp_fp.to_lowercase().parse().unwrap_or(20_usize)},
+                    serde_json::Value::Number(tmp_fp) => {tmp_fp.as_i64().unwrap_or(20) as usize},
+                    other => {20_usize},
                 };
                 //===============================================
                 // Keywords for fciqmc dump

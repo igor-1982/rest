@@ -1,6 +1,7 @@
 use pyrest::dft::DFAFamily;
 
 use crate::ri_pt2::sbge2::{close_shell_sbge2_rayon, open_shell_sbge2_rayon};
+use crate::ri_rpa::scsrpa::evaluate_osrpa_correlation_rayon;
 use crate::ri_rpa::{evaluate_rpa_correlation, evaluate_rpa_correlation_rayon};
 use crate::scf_io::SCF;
 
@@ -65,6 +66,7 @@ pub fn post_scf_correlation(scf_data: &mut SCF) {
     scf_data.mol.ctrl.post_correlation.iter().filter(|corr| *corr!=&dfa_family_pos).for_each(|corr| {
         match corr {
             crate::dft::DFAFamily::PT2 => {
+                println!("Evaluating the PT2 correlation");
                 let energy_post = if spin_channel == 1 {
                     close_shell_pt2_rayon(&scf_data).unwrap()
                 } else {
@@ -73,6 +75,7 @@ pub fn post_scf_correlation(scf_data: &mut SCF) {
                 post_corr.push((crate::dft::DFAFamily::PT2, energy_post));
             },
             crate::dft::DFAFamily::SBGE2 => {
+                println!("Evaluating the sBGE2 correlation");
                 let energy_post = if spin_channel == 1 {
                     close_shell_sbge2_rayon(&scf_data).unwrap()
                 } else {
@@ -83,10 +86,16 @@ pub fn post_scf_correlation(scf_data: &mut SCF) {
 
             },
             crate::dft::DFAFamily::RPA => {
+                println!("Evaluating the dRPA correlation");
                 let energy_post = evaluate_rpa_correlation_rayon(&scf_data).unwrap();
                 post_corr.push((crate::dft::DFAFamily::RPA, [energy_post, 0.0,0.0]));
             },
-            //crate::dft::DFAFamily::SCSRPA => todo!(),
+            crate::dft::DFAFamily::SCSRPA => {
+                println!("Evaluating the scsRPA correlation");
+                let energy_post = evaluate_osrpa_correlation_rayon(&scf_data).unwrap();
+                post_corr.push((crate::dft::DFAFamily::SCSRPA, energy_post));
+
+            }
             _ => {println!("Unknown post-scf correlation methods")}
         }
     });

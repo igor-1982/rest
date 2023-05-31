@@ -2,12 +2,13 @@
      # 设置程序输出的程度，缺省为1
      print_level =               2
      # 设置Rayon和OpenMP的并行数，缺省为1
-     num_threads =               4
+     num_threads =               6
      # 设置使用的电子结构方法，缺省为HF
-     xc =                        "b3lyp" 
-     post_xc =                   ['lda_x_slater', 'gga_x_b88', 'gga_x_pbe', 'lda_c_vwn', 'gga_c_lyp', 'gga_c_pbe']
-     post_correlation =           ["PT2", "SBGE2","RPA", "SCSRPA"]
-     frequency_points =           40
+     xc =                        "scsrpa" 
+     #post_xc =                   ['lda_x_slater', 'gga_x_b88', 'gga_x_pbe', 'lda_c_vwn', 'gga_c_lyp', 'gga_c_pbe']
+     #post_correlation =           ["PT2", "SBGE2","SCSRPA"]
+     frequency_points =          60
+     lambda_points =             20
      # 设置（辅助）基组的路径。如果找不到该路径，则创建该路径，并从BSE下载
      # 注意：计算节点需支持连接外网。
      basis_path =                "./cc-pVDZ"
@@ -20,9 +21,9 @@
      eri_type =                  "ri_v"
      use_ri_symm =               true
      use_dm_only =               true
-     charge =                    0.0
-     spin =                      1.0
-     spin_polarization =         false
+     charge =                   -1.0
+     spin =                      2.0
+     spin_polarization =         true
      mixer =                     "diis"
      num_max_diis =              8
      start_diis_cycle =          1
