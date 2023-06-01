@@ -98,6 +98,7 @@ pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Resul
 }
 
 pub fn evaluate_special_radius(polar_freq: &MatrixFull<f64>) -> f64 {
+
     let (_, eigenvalues, non_sigular) = _dsyev(polar_freq, 'N');
 
     //let special_radius = eigenvalues.iter().map(|x| x.abs()).max().unwrap();
@@ -106,18 +107,14 @@ pub fn evaluate_special_radius(polar_freq: &MatrixFull<f64>) -> f64 {
 }
 
 pub fn evaluate_osrpa_correlation_rayon(scf_data: &SCF) -> anyhow::Result<[f64;3]>  {
-    // In this subroutine, we call the lapack dgemm in a rayon parallel environment.
-    // In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
-    let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
-    utilities::omp_set_num_threads_wrapper(1);
 
     let mut rpa_c_energy = 0.0_f64;
     let mut rpa_c_energy_os = 0.0_f64;
     let mut rpa_c_energy_ss = 0.0_f64;
 
     let spin_channel = scf_data.mol.spin_channel;
-    let num_freq = scf_data.mol.ctrl.frequency_points;
     let freq_grid_type = scf_data.mol.ctrl.freq_grid_type;
+    let num_freq = scf_data.mol.ctrl.frequency_points;
     let max_freq = scf_data.mol.ctrl.freq_cut_off;
     let mut sp = format!("The frequency integration is tabulated by {:3} grids using", num_freq);
     let (omega,weight) = if freq_grid_type==0 {
@@ -144,7 +141,7 @@ pub fn evaluate_osrpa_correlation_rayon(scf_data: &SCF) -> anyhow::Result<[f64;3
     let spin_polar_freq = evaluate_spin_response_serial(scf_data, 0.0).unwrap();
 
     let mut special_radius = [0.0f64; 2];
-    let mut sc_check = [true; 2];
+    let mut sc_check = [false; 2];
 
     for i_spin in 0..spin_channel {
         let polar_freq = spin_polar_freq.get(i_spin).unwrap();
@@ -152,10 +149,18 @@ pub fn evaluate_osrpa_correlation_rayon(scf_data: &SCF) -> anyhow::Result<[f64;3
         sc_check[i_spin] = special_radius[i_spin] > 0.8f64;
     }
     if spin_channel == 1 {
+        sc_check = [false;2];
         let mut tmp_sr = special_radius[0];
         special_radius[1] = tmp_sr;
     }
     println!("Special radius of non-interacting response matrix: ({:16.8}, {:16.8})", special_radius[0], special_radius[1]);
+
+    // In this subroutine, we call the lapack dgemm in a rayon parallel environment.
+    // In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
+    let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
+    let mut per_omp_num_threads = default_omp_num_threads/num_freq;
+    if default_omp_num_threads%num_freq != 0 {per_omp_num_threads += 1};
+    utilities::omp_set_num_threads_wrapper(per_omp_num_threads);
 
     let (sender,receiver) = channel();
     rayon::prelude::IndexedParallelIterator::zip(omega.par_iter(), weight.par_iter())

@@ -185,7 +185,7 @@ impl InputKeywords {
             post_xc: vec![],
             post_correlation: vec![],
             eri_type: String::from("ri_v"),
-            use_ri_symm: false,
+            use_ri_symm: true,
             charge: 0.0_f64,
             spin: 1.0_f64,
             spin_channel: 1_usize,

@@ -2355,8 +2355,8 @@ impl SCF {
         }
 
         // deallocate the rimatr to save the memory
-        self.rimatr=None;
-        self.ri3mo = Some(ri3mo);
+        self.rimatr = None;
+        self.ri3mo  = Some(ri3mo);
 
         utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
 

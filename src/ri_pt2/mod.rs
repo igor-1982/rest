@@ -110,10 +110,11 @@ pub fn xdh_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
                             x_energy * (hy_coeffi_xdh-hy_coeffi_scf) +
                             xc_energy_xdh-xc_energy_scf +
                             xdh_pt2_energy;
-    println!("E[{:5}]=: {:16.8} Ha, Ex[HF]: {:16.8} Ha, Ec[PT2]: {:16.8} Ha", 
+    println!("E[{:5}]=: {:16.8} Ha, Ex[HF]: {:16.8} Ha, Ec[{:5}]: {:16.8} Ha", 
         scf_data.mol.ctrl.xc.to_uppercase(), 
         total_energy, 
         x_energy, 
+        postscf_method,
         pt2_c[0]);
     Ok(total_energy)
 }
