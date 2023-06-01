@@ -28,7 +28,8 @@
      scf_acc_eev =               1.0e-5
      scf_acc_etot =              1.0e-8
      initial_guess =             "sad"
-     chkfile =                   "none"
+     chkfile =                   "nh3"
+     chkfile_type =              "hdf5"
      fchk =                      false
      pruning =                   "nwchem"
      radial_grid_method =        "treutler"

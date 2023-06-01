@@ -7,6 +7,7 @@ use libc::SCHED_OTHER;
 use core::num;
 use std::fmt::format;
 use std::io::Write;
+use std::path::Path;
 //use std::{fs, vec};
 use std::thread::panicking;
 use std::{vec, fs};
@@ -32,6 +33,7 @@ use std::sync::mpsc::{channel, Receiver};
 mod addons;
 mod fchk;
 mod pyrest_scf_io;
+use ndarray;
 
 use crate::constants::{SPECIES_INFO, INVERSE_THRESHOLD};
 
@@ -1998,6 +2000,26 @@ impl SCF {
     }
     pub fn save_chkfile(&self) {
         if self.mol.ctrl.restart {
+            let chkfile= &self.mol.ctrl.chkfile;
+            let path = Path::new(chkfile);
+            if path.exists() {std::fs::remove_file(chkfile).unwrap()};
+            let file = hdf5::File::create(chkfile).unwrap();
+            let scf = file.create_group("scf").unwrap();
+            let builder = scf.new_dataset_builder();
+            builder.with_data(&ndarray::arr0(self.scf_energy)
+            ).create("e_tot").unwrap();
+
+            let mut eigenvectors: Vec<f64> = vec![];
+            let mut eigenvalues: Vec<f64> = vec![];
+            for i_spin in 0..self.mol.spin_channel {
+                let tmp_eigenvectors = self.eigenvectors[i_spin].transpose();
+                eigenvectors.extend(tmp_eigenvectors.data.iter());
+                eigenvalues.extend(self.eigenvalues[i_spin].iter());
+            }
+            let builder = scf.new_dataset_builder();
+            builder.with_data(&ndarray::arr1(&eigenvectors)).create("mo_coeff");
+            let builder = scf.new_dataset_builder();
+            builder.with_data(&ndarray::arr1(&eigenvalues)).create("mo_energy");
         }
     }
 
@@ -3258,9 +3280,9 @@ pub fn scf(mol:Molecule) -> anyhow::Result<SCF> {
         if scf_data.mol.ctrl.print_level>3 {
             scf_data.formated_eigenvectors();
         }
-        // not yet implemented. Just an empty subroutine
         scf_data.save_chkfile();
     } else {
+        scf_data.save_chkfile();
         println!("SCF does not converge within {:03} iterations",scf_records.num_iter);
     }
     let dt2 = time::Local::now();

@@ -7,7 +7,7 @@
      xc =                        "scsrpa" 
      #post_xc =                   ['lda_x_slater', 'gga_x_b88', 'gga_x_pbe', 'lda_c_vwn', 'gga_c_lyp', 'gga_c_pbe']
      #post_correlation =           ["PT2", "SBGE2","SCSRPA"]
-     frequency_points =          60
+     frequency_points =          30
      lambda_points =             20
      # 设置（辅助）基组的路径。如果找不到该路径，则创建该路径，并从BSE下载
      # 注意：计算节点需支持连接外网。
@@ -24,6 +24,8 @@
      charge =                   -1.0
      spin =                      2.0
      spin_polarization =         true
+     chkfile =                   "NH3-anion"
+     chkfile_type =              "hdf5"
      mixer =                     "diis"
      num_max_diis =              8
      start_diis_cycle =          1
@@ -32,8 +34,7 @@
      scf_acc_rho =               1.0e-8
      scf_acc_eev =               1.0e-8
      scf_acc_etot =              1.0e-8
-     initial_guess =             "hcore"
-     chkfile =                   "none"
+     initial_guess =             "sad"
      fchk =                      false
      pruning =                   "nwchem"
      radial_grid_method =        "treutler"
