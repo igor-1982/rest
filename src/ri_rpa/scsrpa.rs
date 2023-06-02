@@ -80,7 +80,7 @@ pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Resul
                 //);
                 _dgemm_full(&tmp_matrix, 'N', &rimo_j, 'T', polar_freq, 1.0, 1.0);
                 timerecords.count("dgemm");
-                timerecords.count_start("all");
+                timerecords.count("all");
             };
 
             //receiver.into_iter().for_each(|loc_polar_freq| {
