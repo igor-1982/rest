@@ -5,13 +5,17 @@ use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use statrs::statistics::Max;
 use tensors::{MatrixFull, MathMatrix, BasicMatrix};
 
-use crate::{scf_io::{SCF,scf}, utilities};
+use crate::{scf_io::{SCF,scf}, utilities::{self, TimeRecords}};
 use crate::constants::{PI, E, INVERSE_THRESHOLD};
 use tensors::matrix_blas_lapack::{_dgemm,_dsyev};
 
 use super::{trans_gauss_legendre_grids, gauss_legendre_grids, logarithmic_grid};
 
 pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Result<Vec<MatrixFull<f64>>> {
+
+    let mut timerecords = TimeRecords::new();
+    timerecords.new_item("submatrix", "iter submatrix");
+    timerecords.new_item("dgemm", "dgemm");
 
     let num_auxbas = scf_data.mol.num_auxbas;
     let num_basis = scf_data.mol.num_basis;
@@ -68,17 +72,21 @@ pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Resul
                     (j_state_occ*frac_spin_occ)*(1.0f64-k_state_occ*frac_spin_occ);
 
                 let k_loc_state = k_state - vir_range.start;
+                timerecords.count_start("submatrix");
                 let from_iter = ri3mo.get_slices(0..num_auxbas, k_loc_state..k_loc_state+1, j_loc_state..j_loc_state+1);
                 let to_iter = tmp_matrix.iter_submatrix_mut(0..num_auxbas,k_loc_state..k_loc_state+1);
                 to_iter.zip(from_iter).for_each(|(to, from)| {
                     *to = from * zeta
                 });
+                timerecords.count("submatrix");
+                timerecords.count_start("dgemm");
                 _dgemm(
                     &tmp_matrix, (0..num_auxbas, 0..vir_range.len()), 'N',
                     &rimo_j, (0..num_auxbas, 0..vir_range.len()), 'T',
                     polar_freq, (0..num_auxbas, 0..num_auxbas),
                     1.0, 1.0
                 );
+                timerecords.count("dgemm");
 
                 //s.send(loc_polar_freq).unwrap()
 
@@ -87,6 +95,8 @@ pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Resul
             //receiver.into_iter().for_each(|loc_polar_freq| {
             //    polar_freq += loc_polar_freq
             //})
+
+            timerecords.report_all();
 
         }
     } else {
@@ -138,16 +148,27 @@ pub fn evaluate_osrpa_correlation_rayon(scf_data: &SCF) -> anyhow::Result<[f64;3
     //let (lambda_omega,lambda_weight) = trans_gauss_legendre_grids(1.0, num_lambda);
     let (lambda_omega,lambda_weight) = gauss_legendre_grids([0.0,1.0], num_lambda);
 
+    let mut timerecords = TimeRecords::new();
+    timerecords.new_item("evaluate_special_radius", "");
+    timerecords.new_item("evaluate_spin_response_serial", "");
+
+    timerecords.count_start("evaluate_spin_response_serial");
     let spin_polar_freq = evaluate_spin_response_serial(scf_data, 0.0).unwrap();
+    timerecords.count("evaluate_spin_response_serial");
 
     let mut special_radius = [0.0f64; 2];
     let mut sc_check = [false; 2];
 
+    timerecords.count_start("evaluate_special_radius");
     for i_spin in 0..spin_channel {
         let polar_freq = spin_polar_freq.get(i_spin).unwrap();
         special_radius[i_spin] = evaluate_special_radius(polar_freq);
         sc_check[i_spin] = special_radius[i_spin] > 0.8f64;
     }
+    timerecords.count("evaluate_special_radius");
+
+    timerecords.report_all();
+
     if spin_channel == 1 {
         sc_check = [false;2];
         let mut tmp_sr = special_radius[0];

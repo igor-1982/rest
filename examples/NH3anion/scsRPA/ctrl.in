@@ -7,12 +7,12 @@
      xc =                        "scsrpa" 
      #post_xc =                   ['lda_x_slater', 'gga_x_b88', 'gga_x_pbe', 'lda_c_vwn', 'gga_c_lyp', 'gga_c_pbe']
      #post_correlation =           ["PT2", "SBGE2","SCSRPA"]
-     frequency_points =          30
+     frequency_points =          6
      lambda_points =             20
      # 设置（辅助）基组的路径。如果找不到该路径，则创建该路径，并从BSE下载
      # 注意：计算节点需支持连接外网。
-     basis_path =                "./cc-pVDZ"
-     auxbas_path =               "./def2-SV(P)-JKFIT" 
+     basis_path =                "/home/igor/Documents/Package-Pool/rest_workspace/rest/basis-set-pool/cc-pVQZ"
+     auxbas_path =               "/home/igor/Documents/Package-Pool/rest_workspace/rest/basis-set-pool/def2-SV(P)-JKFIT" 
      # 辅助基函数自动生成设置
      even_tempered_basis =       false
      etb_start_atom_number =     1
