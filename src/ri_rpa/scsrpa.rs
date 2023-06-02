@@ -43,44 +43,34 @@ pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Resul
 
             
             //let mut rimo = riao.ao2mo(eigenvector).unwrap();
-            let mut elec_pair: Vec<[usize;2]> = vec![];
+            timerecords.count_start("all");
             for j_state in start_mo..num_occu {
-                for k_state in lumo..num_state {
-                    elec_pair.push([j_state,k_state])
-                }
-            };
-            //let (sender,receiver) = channel();
-            elec_pair.iter().for_each(|i_pair| {
-                timerecords.count_start("all");
-
-                //let mut loc_polar_freq = MatrixFull::new([num_auxbas,num_auxbas],0.0);
-                let j_state = i_pair[0];
-                let k_state = i_pair[1];
-
                 let j_state_eigen = eigenvalues[j_state];
                 let j_state_occ = occ_numbers[j_state];
-                let mut tmp_matrix = MatrixFull::new([num_auxbas,vir_range.len()],0.0);
-
                 let j_loc_state = j_state - occ_range.start;
                 let rimo_j = ri3mo.get_reducing_matrix(j_loc_state).unwrap();
+                let mut tmp_matrix = MatrixFull::new([num_auxbas,vir_range.len()],0.0);
+                for k_state in lumo..num_state {
 
-                let k_state_eigen = eigenvalues.get(k_state).unwrap();
-                let k_state_occ = occ_numbers.get(k_state).unwrap();
-                //let zeta = num_spin*(j_state_eigen-k_state_eigen) /
-                //    ((j_state_eigen-k_state_eigen).powf(2.0) + freq*freq)*
-                //    (j_state_occ-k_state_occ);
-                let zeta = 2.0f64*(j_state_eigen-k_state_eigen) /
-                    ((j_state_eigen-k_state_eigen).powf(2.0) + freq*freq)*
-                    (j_state_occ*frac_spin_occ)*(1.0f64-k_state_occ*frac_spin_occ);
 
-                let k_loc_state = k_state - vir_range.start;
-                timerecords.count_start("submatrix");
-                let from_iter = ri3mo.get_slices(0..num_auxbas, k_loc_state..k_loc_state+1, j_loc_state..j_loc_state+1);
-                let to_iter = tmp_matrix.iter_submatrix_mut(0..num_auxbas,k_loc_state..k_loc_state+1);
-                to_iter.zip(from_iter).for_each(|(to, from)| {
-                    *to = from * zeta
-                });
-                timerecords.count("submatrix");
+                    let k_state_eigen = eigenvalues.get(k_state).unwrap();
+                    let k_state_occ = occ_numbers.get(k_state).unwrap();
+                    //let zeta = num_spin*(j_state_eigen-k_state_eigen) /
+                    //    ((j_state_eigen-k_state_eigen).powf(2.0) + freq*freq)*
+                    //    (j_state_occ-k_state_occ);
+                    let zeta = 2.0f64*(j_state_eigen-k_state_eigen) /
+                        ((j_state_eigen-k_state_eigen).powf(2.0) + freq*freq)*
+                        (j_state_occ*frac_spin_occ)*(1.0f64-k_state_occ*frac_spin_occ);
+
+                    let k_loc_state = k_state - vir_range.start;
+                    timerecords.count_start("submatrix");
+                    let from_iter = ri3mo.get_slices(0..num_auxbas, k_loc_state..k_loc_state+1, j_loc_state..j_loc_state+1);
+                    let to_iter = tmp_matrix.iter_submatrix_mut(0..num_auxbas,k_loc_state..k_loc_state+1);
+                    to_iter.zip(from_iter).for_each(|(to, from)| {
+                        *to = from * zeta
+                    });
+                    timerecords.count("submatrix");
+                }
                 timerecords.count_start("dgemm");
                 //_dgemm(
                 //    &tmp_matrix, (0..num_auxbas, 0..vir_range.len()), 'N',
@@ -90,11 +80,8 @@ pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Resul
                 //);
                 _dgemm_full(&tmp_matrix, 'N', &rimo_j, 'T', polar_freq, 1.0, 1.0);
                 timerecords.count("dgemm");
-                timerecords.count("all");
-
-                //s.send(loc_polar_freq).unwrap()
-
-            });
+                timerecords.count_start("all");
+            };
 
             //receiver.into_iter().for_each(|loc_polar_freq| {
             //    polar_freq += loc_polar_freq
