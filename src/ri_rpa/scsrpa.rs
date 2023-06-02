@@ -3,7 +3,7 @@ use std::{sync::mpsc::channel, num};
 use num_traits::{abs, Float};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use statrs::statistics::Max;
-use tensors::{MatrixFull, MathMatrix, BasicMatrix};
+use tensors::{MatrixFull, MathMatrix, BasicMatrix, matrix_blas_lapack::_dgemm_full};
 
 use crate::{scf_io::{SCF,scf}, utilities::{self, TimeRecords}};
 use crate::constants::{PI, E, INVERSE_THRESHOLD};
@@ -14,6 +14,7 @@ use super::{trans_gauss_legendre_grids, gauss_legendre_grids, logarithmic_grid};
 pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Result<Vec<MatrixFull<f64>>> {
 
     let mut timerecords = TimeRecords::new();
+    timerecords.new_item("all", "all exclude dgemm");
     timerecords.new_item("submatrix", "iter submatrix");
     timerecords.new_item("dgemm", "dgemm");
 
@@ -50,6 +51,7 @@ pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Resul
             };
             //let (sender,receiver) = channel();
             elec_pair.iter().for_each(|i_pair| {
+                timerecords.count_start("all");
 
                 //let mut loc_polar_freq = MatrixFull::new([num_auxbas,num_auxbas],0.0);
                 let j_state = i_pair[0];
@@ -80,13 +82,15 @@ pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Resul
                 });
                 timerecords.count("submatrix");
                 timerecords.count_start("dgemm");
-                _dgemm(
-                    &tmp_matrix, (0..num_auxbas, 0..vir_range.len()), 'N',
-                    &rimo_j, (0..num_auxbas, 0..vir_range.len()), 'T',
-                    polar_freq, (0..num_auxbas, 0..num_auxbas),
-                    1.0, 1.0
-                );
+                //_dgemm(
+                //    &tmp_matrix, (0..num_auxbas, 0..vir_range.len()), 'N',
+                //    &rimo_j, (0..num_auxbas, 0..vir_range.len()), 'T',
+                //    polar_freq, (0..num_auxbas, 0..num_auxbas),
+                //    1.0, 1.0
+                //);
+                _dgemm_full(&tmp_matrix, 'N', &rimo_j, 'T', polar_freq, 1.0, 1.0);
                 timerecords.count("dgemm");
+                timerecords.count("all");
 
                 //s.send(loc_polar_freq).unwrap()
 
