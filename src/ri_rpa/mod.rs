@@ -351,51 +351,35 @@ fn evaluate_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Result<MatrixF
             //let mut rimo = riao.ao2mo(eigenvector).unwrap();
             let mut elec_pair: Vec<[usize;2]> = vec![];
             for j_state in start_mo..num_occu {
-                for k_state in lumo..num_state {
-                    elec_pair.push([j_state,k_state])
+                    let j_state_eigen = eigenvalues[j_state];
+                    let j_state_occ = occ_numbers[j_state];
+                    let j_loc_state = j_state - occ_range.start;
+                    let rimo_j = ri3mo.get_reducing_matrix(j_loc_state).unwrap();
+
+                    let mut tmp_matrix = MatrixFull::new([num_auxbas,vir_range.len()],0.0);
+
+                    for k_state in lumo..num_state {
+
+                    let k_state_eigen = eigenvalues.get(k_state).unwrap();
+                    let k_state_occ = occ_numbers.get(k_state).unwrap();
+                    let zeta = num_spin*(j_state_eigen-k_state_eigen) /
+                        ((j_state_eigen-k_state_eigen).powf(2.0) + freq*freq)*
+                        (j_state_occ-k_state_occ);
+
+                    let k_loc_state = k_state - vir_range.start;
+                    let from_iter = ri3mo.get_slices(0..num_auxbas, k_loc_state..k_loc_state+1, j_loc_state..j_loc_state+1);
+                    let to_iter = tmp_matrix.iter_submatrix_mut(0..num_auxbas,k_loc_state..k_loc_state+1);
+                    to_iter.zip(from_iter).for_each(|(to, from)| {
+                        *to = from * zeta
+                    });
                 }
-            };
-            //let (sender,receiver) = channel();
-            elec_pair.iter().for_each(|i_pair| {
-
-                //let mut loc_polar_freq = MatrixFull::new([num_auxbas,num_auxbas],0.0);
-                let j_state = i_pair[0];
-                let k_state = i_pair[1];
-
-                let j_state_eigen = eigenvalues[j_state];
-                let j_state_occ = occ_numbers[j_state];
-                let mut tmp_matrix = MatrixFull::new([num_auxbas,vir_range.len()],0.0);
-
-                let j_loc_state = j_state - occ_range.start;
-                let rimo_j = ri3mo.get_reducing_matrix(j_loc_state).unwrap();
-
-                let k_state_eigen = eigenvalues.get(k_state).unwrap();
-                let k_state_occ = occ_numbers.get(k_state).unwrap();
-                let zeta = num_spin*(j_state_eigen-k_state_eigen) /
-                    ((j_state_eigen-k_state_eigen).powf(2.0) + freq*freq)*
-                    (j_state_occ-k_state_occ);
-
-                let k_loc_state = k_state - vir_range.start;
-                let from_iter = ri3mo.get_slices(0..num_auxbas, k_loc_state..k_loc_state+1, j_loc_state..j_loc_state+1);
-                let to_iter = tmp_matrix.iter_submatrix_mut(0..num_auxbas,k_loc_state..k_loc_state+1);
-                to_iter.zip(from_iter).for_each(|(to, from)| {
-                    *to = from * zeta
-                });
                 _dgemm(
                     &tmp_matrix, (0..num_auxbas, 0..vir_range.len()), 'N',
                     &rimo_j, (0..num_auxbas, 0..vir_range.len()), 'T',
                     &mut polar_freq, (0..num_auxbas, 0..num_auxbas),
                     1.0, 1.0
                 );
-
-                //s.send(loc_polar_freq).unwrap()
-
-            });
-
-            //receiver.into_iter().for_each(|loc_polar_freq| {
-            //    polar_freq += loc_polar_freq
-            //})
-
+            }
         }
     } else {
         panic!("RI3MO should be initialized before the RPA calculations")
