@@ -10,6 +10,7 @@ pub mod cube_build;
 pub mod molden_build;
 
 use crate::ri_pt2::{close_shell_pt2_rayon, open_shell_pt2_rayon};
+use crate::utilities::TimeRecords;
 
 pub fn post_scf_analysis(scf_data: &SCF) {
     if scf_data.mol.ctrl.output_fchk {
@@ -49,6 +50,8 @@ pub fn print_out_dfa(scf_data: &SCF) {
 
 /// NOTE: only support symmetric RI-V tensors
 pub fn post_scf_correlation(scf_data: &mut SCF) {
+
+    let mut timerecords = TimeRecords::new();
     let spin_channel = scf_data.mol.spin_channel;
     let dfa_family_pos = if let Some(tmp_dfa) = &scf_data.mol.xc_data.dfa_family_pos {
         tmp_dfa.clone()
@@ -66,6 +69,8 @@ pub fn post_scf_correlation(scf_data: &mut SCF) {
     scf_data.mol.ctrl.post_correlation.iter().filter(|corr| *corr!=&dfa_family_pos).for_each(|corr| {
         match corr {
             crate::dft::DFAFamily::PT2 => {
+                timerecords.new_item("PT2", "the PT2 calculation");
+                timerecords.count_start("PT2");
                 println!("Evaluating the PT2 correlation");
                 let energy_post = if spin_channel == 1 {
                     close_shell_pt2_rayon(&scf_data).unwrap()
@@ -73,8 +78,11 @@ pub fn post_scf_correlation(scf_data: &mut SCF) {
                     open_shell_pt2_rayon(&scf_data).unwrap()
                 };
                 post_corr.push((crate::dft::DFAFamily::PT2, energy_post));
+                timerecords.count("PT2");
             },
             crate::dft::DFAFamily::SBGE2 => {
+                timerecords.new_item("sBGE2", "the sBGE2 calculation");
+                timerecords.count_start("sBGE2");
                 println!("Evaluating the sBGE2 correlation");
                 let energy_post = if spin_channel == 1 {
                     close_shell_sbge2_rayon(&scf_data).unwrap()
@@ -83,18 +91,24 @@ pub fn post_scf_correlation(scf_data: &mut SCF) {
                     open_shell_sbge2_rayon(&scf_data).unwrap()
                 };
                 post_corr.push((crate::dft::DFAFamily::SBGE2, energy_post));
+                timerecords.count("sBGE2");
 
             },
             crate::dft::DFAFamily::RPA => {
+                timerecords.new_item("dRPA", "the dRPA calculation");
+                timerecords.count_start("dRPA");
                 println!("Evaluating the dRPA correlation");
                 let energy_post = evaluate_rpa_correlation_rayon(&scf_data).unwrap();
                 post_corr.push((crate::dft::DFAFamily::RPA, [energy_post, 0.0,0.0]));
+                timerecords.count("dRPA");
             },
             crate::dft::DFAFamily::SCSRPA => {
+                timerecords.new_item("SCSRPA", "the scsRPA calculation");
+                timerecords.count_start("SCSRPA");
                 println!("Evaluating the scsRPA correlation");
                 let energy_post = evaluate_osrpa_correlation_rayon(&scf_data).unwrap();
                 post_corr.push((crate::dft::DFAFamily::SCSRPA, energy_post));
-
+                timerecords.count("SCSRPA");
             }
             _ => {println!("Unknown post-scf correlation methods")}
         }
@@ -106,9 +120,9 @@ pub fn post_scf_correlation(scf_data: &mut SCF) {
 
     post_corr.iter().for_each(|(name,energy)| {
         println!("{:16}: {:16.8}, {:16.8}, {:16.8}", name.to_name(), energy[0], energy[1], energy[2]);
-
     });
     println!("----------------------------------------------------------------------");
+    if scf_data.mol.ctrl.print_level>1 {timerecords.report_all()};
 }
 
 fn fciqmc_dump(scf_data: &SCF) {

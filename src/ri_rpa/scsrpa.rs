@@ -1,7 +1,7 @@
 use std::{sync::mpsc::channel, num};
 
 use num_traits::{abs, Float};
-use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator, IndexedParallelIterator};
 use statrs::statistics::Max;
 use tensors::{MatrixFull, MathMatrix, BasicMatrix, matrix_blas_lapack::_dgemm_full};
 
@@ -13,10 +13,10 @@ use super::{trans_gauss_legendre_grids, gauss_legendre_grids, logarithmic_grid};
 
 pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Result<Vec<MatrixFull<f64>>> {
 
-    let mut timerecords = TimeRecords::new();
-    timerecords.new_item("all", "all exclude dgemm");
-    timerecords.new_item("submatrix", "iter submatrix");
-    timerecords.new_item("dgemm", "dgemm");
+    //let mut timerecords = TimeRecords::new();
+    //timerecords.new_item("all", "all exclude dgemm");
+    //timerecords.new_item("submatrix", "iter submatrix");
+    //timerecords.new_item("dgemm", "dgemm");
 
     let num_auxbas = scf_data.mol.num_auxbas;
     let num_basis = scf_data.mol.num_basis;
@@ -43,7 +43,7 @@ pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Resul
 
             
             //let mut rimo = riao.ao2mo(eigenvector).unwrap();
-            timerecords.count_start("all");
+            //timerecords.count_start("all");
             for j_state in start_mo..num_occu {
                 let j_state_eigen = eigenvalues[j_state];
                 let j_state_occ = occ_numbers[j_state];
@@ -63,15 +63,15 @@ pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Resul
                         (j_state_occ*frac_spin_occ)*(1.0f64-k_state_occ*frac_spin_occ);
 
                     let k_loc_state = k_state - vir_range.start;
-                    timerecords.count_start("submatrix");
+                    //timerecords.count_start("submatrix");
                     let from_iter = ri3mo.get_slices(0..num_auxbas, k_loc_state..k_loc_state+1, j_loc_state..j_loc_state+1);
                     let to_iter = tmp_matrix.iter_submatrix_mut(0..num_auxbas,k_loc_state..k_loc_state+1);
                     to_iter.zip(from_iter).for_each(|(to, from)| {
                         *to = from * zeta
                     });
-                    timerecords.count("submatrix");
+                    //timerecords.count("submatrix");
                 }
-                timerecords.count_start("dgemm");
+                //timerecords.count_start("dgemm");
                 //_dgemm(
                 //    &tmp_matrix, (0..num_auxbas, 0..vir_range.len()), 'N',
                 //    &rimo_j, (0..num_auxbas, 0..vir_range.len()), 'T',
@@ -79,15 +79,15 @@ pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Resul
                 //    1.0, 1.0
                 //);
                 _dgemm_full(&tmp_matrix, 'N', &rimo_j, 'T', polar_freq, 1.0, 1.0);
-                timerecords.count("dgemm");
-                timerecords.count("all");
+                //timerecords.count("dgemm");
+                //timerecords.count("all");
             };
 
             //receiver.into_iter().for_each(|loc_polar_freq| {
             //    polar_freq += loc_polar_freq
             //})
 
-            timerecords.report_all();
+            //timerecords.report_all();
 
         }
     } else {
@@ -171,11 +171,11 @@ pub fn evaluate_osrpa_correlation_rayon(scf_data: &SCF) -> anyhow::Result<[f64;3
     // In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
     let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
     let mut per_omp_num_threads = default_omp_num_threads/num_freq;
-    if default_omp_num_threads%num_freq != 0 {per_omp_num_threads += 1};
+    //if default_omp_num_threads%num_freq != 0 {per_omp_num_threads += 1};
     utilities::omp_set_num_threads_wrapper(per_omp_num_threads);
 
     let (sender,receiver) = channel();
-    rayon::prelude::IndexedParallelIterator::zip(omega.par_iter(), weight.par_iter())
+    omega.par_iter().zip(weight.par_iter())
         .for_each_with(sender, |s, (omega,weight)| {
         let mut response_freq = evaluate_spin_response_serial(scf_data, *omega).unwrap();
         //if scf_data.mol.spin_channel == 1 {
@@ -335,7 +335,7 @@ fn evaluate_osrpa_integrand(
             let rpa_c_integrand_os_i = evaluate_osrpa_response(i_spin, j_spin, 
                 &spin_polar_freq, &lambda_omega, &lambda_weight, &sc_check);
             rpa_c_integrand_os += rpa_c_integrand_os_i;
-            println!("debug: osRPA correlation ({}-spin): {:16.8} Ha", i_spin, rpa_c_integrand_os_i);
+            //println!("debug: osRPA correlation ({}-spin): {:16.8} Ha", i_spin, rpa_c_integrand_os_i);
         }
 
     }
@@ -400,15 +400,15 @@ pub fn evaluate_osrpa_response(
         }
         if (i_term as usize) >=100  {println!("WARNNING: delta_trace = {:16.8} after {:4.1} steps", delta_trace, i_term)};
     } else {
-        if special_radius>=1.0f64 {
-            println!("Special radius of non-interacting response matrix in the {}-spin channel >=1.0 ({:16.8})",
-                j_spin,special_radius);
-            println!("Strong correlation breaks the perturbative OS-type particle-hole summation in the {}-spin channel", j_spin);
-        } else {
-            println!("Special radius of non-interacting response matrix in the {}-spin channel >={} ({:16.8})",
-                j_spin,c_osrpa_threshold,special_radius);
-            println!("Strong correlation is large in the OS-type particle-hole summation in the {}-spin channel", j_spin);
-        }
+        //if special_radius>=1.0f64 {
+        //    println!("Special radius of non-interacting response matrix in the {}-spin channel >=1.0 ({:16.8})",
+        //        j_spin,special_radius);
+        //    println!("Strong correlation breaks the perturbative OS-type particle-hole summation in the {}-spin channel", j_spin);
+        //} else {
+        //    println!("Special radius of non-interacting response matrix in the {}-spin channel >={} ({:16.8})",
+        //        j_spin,c_osrpa_threshold,special_radius);
+        //    println!("Strong correlation is large in the OS-type particle-hole summation in the {}-spin channel", j_spin);
+        //}
 
         //rpa_c_integrand_spin = 0.0f64;
         //let transpose_polar_freq_i = polar_freq_i.transpose();
