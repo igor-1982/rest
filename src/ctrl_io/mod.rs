@@ -150,14 +150,11 @@ pub struct InputKeywords {
     #[pyo3(get, set)]
     pub fciqmc_dump: bool,
     // Kyewords for post scf analysis
-    #[pyo3(get, set)]
-    pub output_wfn_in_real_space: usize,
-    #[pyo3(get, set)]
-    pub output_cube: bool,
-    #[pyo3(get, set)]
-    pub output_molden: bool,
-    #[pyo3(get, set)]
-    pub output_fchk: bool,
+    pub outputs: Vec<String>,
+    //pub output_wfn_in_real_space: usize,
+    //pub output_cube: bool,
+    //pub output_molden: bool,
+    //pub output_fchk: bool,
     // Keywords for sad initial guess
     #[pyo3(get, set)]
     pub atom_sad: bool,
@@ -237,10 +234,11 @@ impl InputKeywords {
             // Keywords for the fciqmc dump
             fciqmc_dump: false,
             // Kyewords for post scf
-            output_wfn_in_real_space: 0,
-            output_cube: false,
-            output_molden: false,
-            output_fchk: false,
+            outputs: vec![],
+            //output_wfn_in_real_space: 0,
+            //output_cube: false,
+            //output_molden: false,
+            //output_fchk: false,
             // Keyword to turn on atom calculations for the SAD initial guess
             atom_sad: false,
             // Derived keywords of identifying the method used
@@ -675,29 +673,41 @@ impl InputKeywords {
                 // ================================================
                 //  Keywords associated with the post-SCF analyais
                 // ================================================
-                tmp_input.output_wfn_in_real_space = match tmp_ctrl.get("output_wfn_in_real_space").unwrap_or(&serde_json::Value::Null) {
-                    serde_json::Value::String(tmp_wfn) => {tmp_wfn.to_lowercase().parse().unwrap_or(0)},
-                    serde_json::Value::Number(tmp_wfn) => {tmp_wfn.as_i64().unwrap_or(0) as usize},
-                    other => {0_usize},
+                tmp_input.outputs = match tmp_ctrl.get("outputs").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_op) => {vec![tmp_op.to_lowercase()]},
+                    serde_json::Value::Array(tmp_op) => {
+                        let mut tmp_vec:Vec<String> = vec![];
+                        tmp_op.iter().for_each(|x| {
+                            let op_type = x.to_string();
+                            let string_len = op_type.len();
+                            tmp_vec.push(op_type[1..string_len-1].to_lowercase().to_string())
+                        });
+                        tmp_vec
+                    },
+                    other => {vec![]},
                 };
+                //tmp_input.output_wfn_in_real_space = match tmp_ctrl.get("output_wfn_in_real_space").unwrap_or(&serde_json::Value::Null) {
+                //    serde_json::Value::String(tmp_wfn) => {tmp_wfn.to_lowercase().parse().unwrap_or(0)},
+                //    serde_json::Value::Number(tmp_wfn) => {tmp_wfn.as_i64().unwrap_or(0) as usize},
+                //    other => {0_usize},
+                //};
 
-                tmp_input.output_cube = match tmp_ctrl.get("output_cube").unwrap_or(&serde_json::Value::Null) {
-                    serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
-                    serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
-                    other => false,
-                }; 
+                //tmp_input.output_cube = match tmp_ctrl.get("output_cube").unwrap_or(&serde_json::Value::Null) {
+                //    serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
+                //    serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
+                //    other => false,
+                //}; 
 
-                tmp_input.output_molden = match tmp_ctrl.get("output_molden").unwrap_or(&serde_json::Value::Null) {
-                    serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
-                    serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
-                    other => false,
-                }; 
-
-                tmp_input.output_fchk = match tmp_ctrl.get("output_fchk").unwrap_or(&serde_json::Value::Null) {
-                    serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
-                    serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
-                    other => false,
-                };
+                //tmp_input.output_molden = match tmp_ctrl.get("output_molden").unwrap_or(&serde_json::Value::Null) {
+                //    serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
+                //    serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
+                //    other => false,
+                //}; 
+                //tmp_input.output_fchk = match tmp_ctrl.get("output_fchk").unwrap_or(&serde_json::Value::Null) {
+                //    serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
+                //    serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
+                //    other => false,
+                //};
 
                 if tmp_input.print_level>0 {
                     println!("Charge: {:3}; Spin: {:3}",tmp_input.charge,tmp_input.spin);

@@ -1,39 +1,191 @@
-use pyrest::dft::DFAFamily;
-
-use crate::ri_pt2::sbge2::{close_shell_sbge2_rayon, open_shell_sbge2_rayon};
-use crate::ri_rpa::scsrpa::evaluate_osrpa_correlation_rayon;
-use crate::ri_rpa::{evaluate_rpa_correlation, evaluate_rpa_correlation_rayon};
-use crate::scf_io::SCF;
-
 pub mod rand_wf_real_space;
 pub mod cube_build;
 pub mod molden_build;
 
+use std::path::Path;
+use crate::constants::SPECIES_INFO;
+use crate::dft::DFAFamily;
+use crate::geom_io::get_mass_charge;
+use crate::ri_pt2::sbge2::{close_shell_sbge2_rayon, open_shell_sbge2_rayon};
+use crate::ri_rpa::scsrpa::evaluate_osrpa_correlation_rayon;
+use crate::ri_rpa::{evaluate_rpa_correlation, evaluate_rpa_correlation_rayon};
+use crate::scf_io::SCF;
 use crate::ri_pt2::{close_shell_pt2_rayon, open_shell_pt2_rayon};
 use crate::utilities::TimeRecords;
 
-pub fn post_scf_analysis(scf_data: &SCF) {
-    if scf_data.mol.ctrl.output_fchk {
-        scf_data.save_fchk_of_gaussian()
+pub fn post_scf_output(scf_data: &SCF) {
+    scf_data.mol.ctrl.outputs.iter().for_each(|output_type| {
+        if output_type.eq("fchk") {
+            scf_data.save_fchk_of_gaussian();
+        } else if output_type.eq("fciqmc_dump") {
+            fciqmc_dump(&scf_data);
+        } else if output_type.eq("wfn_in_real_space") {
+            let np = 100;
+            let slater_determinant = rand_wf_real_space::slater_determinant(&scf_data, np);
+            let output = serde_json::to_string(&slater_determinant).unwrap();
+            let mut file = std::fs::File::create("./wf_in_real_space.txt").unwrap();
+            std::io::Write::write(&mut file, output.as_bytes());
+        } else if output_type.eq("cube") {
+            cube_build::get_cube(&scf_data,80);
+        } else if output_type.eq("molden") {
+            molden_build::gen_molden(&scf_data);
+        } else if output_type.eq("hamiltonian") {
+           save_hamiltonian(&scf_data);
+        } else if output_type.eq("geometry") {
+           save_geometry(&scf_data);
+        } else if output_type.eq("overlap") {
+           save_overlap(&scf_data);
+        } else if output_type.eq("deeph") {
+           save_hamiltonian(&scf_data);
+           save_geometry(&scf_data);
+           scf_data.mol.geom.to_xyz("geometry.xyz".to_string());
+        }
+    });
+}
+
+pub fn save_chkfile(scf_data: &SCF) {
+    let chkfile= &scf_data.mol.ctrl.chkfile;
+    let path = Path::new(chkfile);
+    //if path.exists() {std::fs::remove_file(chkfile).unwrap()};
+    //let file = hdf5::File::create(chkfile).unwrap();
+    //let scf = file.create_group("scf").unwrap();
+    let file = if path.exists() {
+        hdf5::File::open_rw(chkfile).unwrap()
+    } else {
+        hdf5::File::create(chkfile).unwrap()
     };
-    if scf_data.mol.ctrl.fciqmc_dump {
-        fciqmc_dump(&scf_data);
-    }
-    if scf_data.mol.ctrl.output_wfn_in_real_space>0 {
-        let np = scf_data.mol.ctrl.output_wfn_in_real_space;
-        let slater_determinant = rand_wf_real_space::slater_determinant(&scf_data, np);
-        let output = serde_json::to_string(&slater_determinant).unwrap();
-        let mut file = std::fs::File::create("./wf_in_real_space.txt").unwrap();
-        std::io::Write::write(&mut file, output.as_bytes());
+    let is_exist = file.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("scf")});
+    let scf = if is_exist {
+        file.group("scf").unwrap()
+    } else {
+        file.create_group("scf").unwrap()
+    };
+
+    let is_exist = scf.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("e_tot")});
+    if is_exist {
+        let dataset = scf.dataset("e_tot").unwrap();
+        dataset.write(&ndarray::arr0(scf_data.scf_energy));
+    } else {
+        let builder = scf.new_dataset_builder();
+        //builder.with_data_as(&scf_data.scf_energy,f64).create("e_tot");
+        builder.with_data(&ndarray::arr0(scf_data.scf_energy)
+        ).create("e_tot").unwrap();
     }
 
-    if scf_data.mol.ctrl.output_cube == true {
-        let cube_file = cube_build::get_cube(&scf_data,80);
+    let is_exist = scf.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("mo_coeff")});
+    let mut eigenvectors: Vec<f64> = vec![];
+    for i_spin in 0..scf_data.mol.spin_channel {
+        let tmp_eigenvectors = scf_data.eigenvectors[i_spin].transpose();
+        eigenvectors.extend(tmp_eigenvectors.data.iter());
+    }
+    if is_exist {
+        let dataset = scf.dataset("mo_coeff").unwrap();
+        dataset.write(&ndarray::arr1(&eigenvectors));
+    } else {
+        let builder = scf.new_dataset_builder();
+        builder.with_data(&ndarray::arr1(&eigenvectors)).create("mo_coeff");
     }
 
-    if scf_data.mol.ctrl.output_molden == true {
-        let molden_file = molden_build::gen_molden(&scf_data);
+    let mut eigenvalues: Vec<f64> = vec![];
+    for i_spin in 0..scf_data.mol.spin_channel {
+        eigenvalues.extend(scf_data.eigenvalues[i_spin].iter());
     }
+    if is_exist {
+        let dataset = scf.dataset("mo_energy").unwrap();
+        dataset.write(&ndarray::arr1(&eigenvalues));
+    } else {
+        let builder = scf.new_dataset_builder();
+        builder.with_data(&ndarray::arr1(&eigenvalues)).create("mo_energy");
+    }
+
+    file.close();
+}
+
+pub fn save_hamiltonian(scf_data: &SCF) {
+    let chkfile= &scf_data.mol.ctrl.chkfile;
+    let path = Path::new(chkfile);
+    let file = if path.exists() {
+        hdf5::File::open_rw(chkfile).unwrap()
+    } else {
+        hdf5::File::create(chkfile).unwrap()
+    };
+    let is_exist = file.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("scf")});
+    let scf = if is_exist {
+        file.group("scf").unwrap()
+    } else {
+        file.create_group("scf").unwrap()
+    };
+    let mut hamiltonians: Vec<f64> = vec![];
+    for i_spin in 0..scf_data.mol.spin_channel {
+        let tmp_eigenvectors = scf_data.hamiltonian[i_spin].to_matrixfull().unwrap();
+        hamiltonians.extend(scf_data.eigenvalues[i_spin].iter());
+    }
+    let is_hamiltonian = scf.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("hamiltonian")});
+    if is_hamiltonian {
+        let dataset = scf.dataset("hamiltonian").unwrap();
+        dataset.write(&ndarray::arr1(&hamiltonians));
+    } else {
+        let builder = scf.new_dataset_builder();
+        builder.with_data(&ndarray::arr1(&hamiltonians)).create("hamiltonian");
+    };
+    file.close();
+}
+pub fn save_overlap(scf_data: &SCF) {
+    let chkfile= &scf_data.mol.ctrl.chkfile;
+    let path = Path::new(chkfile);
+    let file = if path.exists() {
+        hdf5::File::open_rw(chkfile).unwrap()
+    } else {
+        hdf5::File::create(chkfile).unwrap()
+    };
+    let is_exist = file.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("scf")});
+    let scf = if is_exist {
+        file.group("scf").unwrap()
+    } else {
+        file.create_group("scf").unwrap()
+    };
+    let mut overlap: Vec<f64> = vec![];
+    let overlap = scf_data.ovlp.to_matrixfull().unwrap();
+    let is_exist = scf.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("overlap")});
+    if is_exist {
+        let dataset = scf.dataset("overlap").unwrap();
+        dataset.write(&ndarray::arr1(&overlap.data));
+    } else {
+        let builder = scf.new_dataset_builder();
+        builder.with_data(&ndarray::arr1(&overlap.data)).create("overlap");
+    };
+    file.close();
+}
+pub fn save_geometry(scf_data: &SCF) {
+    let ang = crate::constants::ANG;
+    let chkfile= &scf_data.mol.ctrl.chkfile;
+    let path = Path::new(chkfile);
+    let file = if path.exists() {
+        hdf5::File::open_rw(chkfile).unwrap()
+    } else {
+        hdf5::File::create(chkfile).unwrap()
+    };
+    let is_geom = file.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("geom")});
+    let geom = if is_geom {
+        file.group("geom").unwrap()
+    } else {
+        file.create_group("geom").unwrap()
+    };
+    let mass_charge = get_mass_charge(&scf_data.mol.geom.elem);
+    let mut geometry: Vec<(f64,f64,f64,f64)> = vec![];
+    mass_charge.iter().zip(scf_data.mol.geom.position.iter_columns_full()).for_each(|(mass_charge, position)| {
+        geometry.push((mass_charge.1,position[0]*ang,position[1]*ang,position[2]*ang));
+    });
+
+    let is_geom = geom.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("position")});
+    if is_geom {
+        let dataset = geom.dataset("position").unwrap();
+        dataset.write(&ndarray::arr1(&geometry));
+    } else {
+        let builder = geom.new_dataset_builder();
+        builder.with_data(&ndarray::arr1(&geometry)).create("position");
+    }
+    file.close();
 }
 
 pub fn print_out_dfa(scf_data: &SCF) {
@@ -150,3 +302,13 @@ fn fciqmc_dump(scf_data: &SCF) {
         }
     }
 }
+
+
+//pub fn test_hdf5_string() {
+//    let file = hdf5::File::create("test_string").unwrap();
+//    let geom = file.group("geom").unwrap_or(file.create_group("geom").unwrap());
+//    let dd = vec!["string1", "string2"];
+//    let builder = geom.new_dataset_builder();
+//    builder.with_data(&ndarray::arr1(&dd)).create("elem");
+//    file.close();
+//}

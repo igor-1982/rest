@@ -1,40 +1,38 @@
-use clap::value_parser;
+mod addons;
+mod fchk;
+mod pyrest_scf_io;
+
+//use clap::value_parser;
 use pyo3::{pyclass, pymethods, pyfunction};
 use tensors::matrix_blas_lapack::{_dgemm, _dinverse, _dsymm};
 use tensors::{ERIFull,MatrixFull, ERIFold4, MatrixUpper, TensorSliceMut, RIFull, MatrixFullSlice, MatrixFullSliceMut, BasicMatrix, MathMatrix, MatrixUpperSlice, ParMathMatrix, ri};
 use itertools::{Itertools, iproduct, izip};
-use libc::SCHED_OTHER;
-use core::num;
-use std::fmt::format;
-use std::io::Write;
-use std::path::Path;
-//use std::{fs, vec};
-use std::thread::panicking;
-use std::{vec, fs};
-use rest_libcint::{CINTR2CDATA, CintType};
-use crate::geom_io::{GeomCell,MOrC, GeomUnit};
-use crate::basis_io::{Basis4Elem,BasInfo};
-use crate::isdf::prepare_for_ri_isdf;
-//use crate::initial_guess::sad::sad_dm;
-use crate::molecule_io::{Molecule, generate_ri3fn_from_rimatr};
-use crate::tensors::{TensorOpt,TensorOptMut,TensorSlice};
-use crate::dft::{Grids, numerical_density, par_numerical_density};
-use crate::{utilities, initial_guess};
-//use crate::initial_guess::sap::get_vsap;
-use crate::initial_guess::initial_guess;
 use rayon::prelude::*;
-use hdf5;
-//use blas::{ddot,daxpy};
 use std::sync::{Mutex, Arc,mpsc};
 use std::thread;
 use crossbeam::{channel::{unbounded,bounded},thread::{Scope,scope}};
 use std::sync::mpsc::{channel, Receiver};
-//use blas_src::openblas::dgemm;
-mod addons;
-mod fchk;
-mod pyrest_scf_io;
-use ndarray;
-
+//use ndarray;
+//use hdf5;
+//use libc::SCHED_OTHER;
+//use core::num;
+//use std::fmt::format;
+//use std::io::Write;
+//use std::path::Path;
+//use std::{fs, vec};
+//use std::thread::panicking;
+//use std::{vec, fs};
+//use rest_libcint::{CINTR2CDATA, CintType};
+//use crate::geom_io::{GeomCell,MOrC, GeomUnit};
+//use crate::basis_io::{Basis4Elem,BasInfo};
+//use crate::post_scf_analysis::save_chkfile;
+//use crate::dft::{Grids, numerical_density, par_numerical_density};
+use crate::isdf::prepare_for_ri_isdf;
+use crate::molecule_io::{Molecule, generate_ri3fn_from_rimatr};
+use crate::tensors::{TensorOpt,TensorOptMut,TensorSlice};
+use crate::dft::Grids;
+use crate::{utilities, initial_guess};
+use crate::initial_guess::initial_guess;
 use crate::constants::{SPECIES_INFO, INVERSE_THRESHOLD};
 
 
@@ -1998,30 +1996,6 @@ impl SCF {
             });
         }
     }
-    pub fn save_chkfile(&self) {
-        if self.mol.ctrl.restart {
-            let chkfile= &self.mol.ctrl.chkfile;
-            let path = Path::new(chkfile);
-            if path.exists() {std::fs::remove_file(chkfile).unwrap()};
-            let file = hdf5::File::create(chkfile).unwrap();
-            let scf = file.create_group("scf").unwrap();
-            let builder = scf.new_dataset_builder();
-            builder.with_data(&ndarray::arr0(self.scf_energy)
-            ).create("e_tot").unwrap();
-
-            let mut eigenvectors: Vec<f64> = vec![];
-            let mut eigenvalues: Vec<f64> = vec![];
-            for i_spin in 0..self.mol.spin_channel {
-                let tmp_eigenvectors = self.eigenvectors[i_spin].transpose();
-                eigenvectors.extend(tmp_eigenvectors.data.iter());
-                eigenvalues.extend(self.eigenvalues[i_spin].iter());
-            }
-            let builder = scf.new_dataset_builder();
-            builder.with_data(&ndarray::arr1(&eigenvectors)).create("mo_coeff");
-            let builder = scf.new_dataset_builder();
-            builder.with_data(&ndarray::arr1(&eigenvalues)).create("mo_energy");
-        }
-    }
 
     // relevant to RI-V
     pub fn generate_vj_with_ri_v(&mut self, scaling_factor: f64) -> Vec<MatrixUpper<f64>> {
@@ -3280,9 +3254,9 @@ pub fn scf(mol:Molecule) -> anyhow::Result<SCF> {
         if scf_data.mol.ctrl.print_level>3 {
             scf_data.formated_eigenvectors();
         }
-        scf_data.save_chkfile();
+        //if scf_data.mol.ctrl.restart {save_chkfile(&scf_data)};
     } else {
-        scf_data.save_chkfile();
+        //if scf_data.mol.ctrl.restart {save_chkfile(&scf_data)};
         println!("SCF does not converge within {:03} iterations",scf_records.num_iter);
     }
     let dt2 = time::Local::now();

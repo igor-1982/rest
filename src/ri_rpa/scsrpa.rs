@@ -11,6 +11,79 @@ use tensors::matrix_blas_lapack::{_dgemm,_dsyev};
 
 use super::{trans_gauss_legendre_grids, gauss_legendre_grids, logarithmic_grid};
 
+pub fn evaluate_spin_response_rayon(scf_data: &SCF, freq: f64) -> anyhow::Result<Vec<MatrixFull<f64>>> {
+
+    let num_auxbas = scf_data.mol.num_auxbas;
+    let num_basis = scf_data.mol.num_basis;
+    let num_state = scf_data.mol.num_state;
+    let start_mo = scf_data.mol.start_mo;
+    let spin_channel = scf_data.mol.spin_channel;
+    let num_spin = spin_channel as f64;
+    let frac_spin_occ = num_spin / 2.0f64;
+    let mut spin_polar_freq: Vec<MatrixFull<f64>> = vec![MatrixFull::empty();2];
+
+    if let Some(ri3mo_vec) = &scf_data.ri3mo {
+        for i_spin in 0..spin_channel {
+            let mut polar_freq = spin_polar_freq.get_mut(i_spin).unwrap();
+            *polar_freq = MatrixFull::new([num_auxbas,num_auxbas], 0.0);
+            let eigenvector = scf_data.eigenvectors.get(i_spin).unwrap();
+            let eigenvalues = scf_data.eigenvalues.get(i_spin).unwrap();
+            let occ_numbers = scf_data.occupation.get(i_spin).unwrap();
+            let homo = scf_data.homo.get(i_spin).unwrap().clone();
+            let lumo = scf_data.lumo.get(i_spin).unwrap().clone();
+            let num_occu = homo + 1;
+
+            let (ri3mo, vir_range, occ_range) = ri3mo_vec.get(i_spin).unwrap();
+            
+            for j_state in start_mo..num_occu {
+                let j_state_eigen = eigenvalues[j_state];
+                let j_state_occ = occ_numbers[j_state];
+                let j_loc_state = j_state - occ_range.start;
+                let rimo_j = ri3mo.get_reducing_matrix(j_loc_state).unwrap();
+                let mut tmp_matrix = MatrixFull::new([num_auxbas,vir_range.len()],0.0);
+
+                let num_threads = rayon::current_num_threads();
+                let tasks = utilities::balancing(num_state-lumo, num_threads);
+
+                let (sender, receiver) = channel();
+
+                tasks.par_iter().for_each_with(sender, |s, tasks| {
+                    let mut tmp_matrix_loc = MatrixFull::new([num_auxbas,vir_range.len()],0.0);
+                    tasks.clone().for_each(|k_state_loc| {
+                        let k_state = k_state_loc + lumo;
+                        let k_state_eigen = eigenvalues.get(k_state).unwrap();
+                        let k_state_occ = occ_numbers.get(k_state).unwrap();
+                         let zeta = 2.0f64*(j_state_eigen-k_state_eigen) /
+                             ((j_state_eigen-k_state_eigen).powf(2.0) + freq*freq)*
+                             (j_state_occ*frac_spin_occ)*(1.0f64-k_state_occ*frac_spin_occ);
+
+                         let k_loc_state = k_state - vir_range.start;
+                         //timerecords.count_start("submatrix");
+                         let from_iter = ri3mo.get_slices(0..num_auxbas, k_loc_state..k_loc_state+1, j_loc_state..j_loc_state+1);
+                         let to_iter = tmp_matrix_loc.iter_submatrix_mut(0..num_auxbas,k_loc_state..k_loc_state+1);
+                         to_iter.zip(from_iter).for_each(|(to, from)| {
+                             *to = from * zeta
+                         });
+
+                    });
+                    s.send(tmp_matrix_loc).unwrap();
+                });
+
+                receiver.into_iter().for_each(|tmp_matrix_loc| {
+                    tmp_matrix += tmp_matrix_loc
+                });
+
+                _dgemm_full(&tmp_matrix, 'N', &rimo_j, 'T', polar_freq, 1.0, 1.0);
+            };
+        }
+    } else {
+        panic!("RI3MO should be initialized before the RPA calculations")
+    };
+
+    Ok(spin_polar_freq)
+
+}
+
 pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Result<Vec<MatrixFull<f64>>> {
 
     //let mut timerecords = TimeRecords::new();

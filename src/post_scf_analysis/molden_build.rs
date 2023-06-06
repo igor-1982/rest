@@ -2,7 +2,7 @@ use crate::molecule_io::Molecule;
 use crate::geom_io;
 use crate::basis_io;
 use crate::scf_io::SCF;
-use rest_tensors::{MatrixFull};
+use rest_tensors::MatrixFull;
 use rest_libcint::CINTR2CDATA;
 use rest_libcint::CintType;
 use std::borrow::BorrowMut;
