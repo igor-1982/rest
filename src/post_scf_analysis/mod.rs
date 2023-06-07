@@ -33,6 +33,7 @@ pub fn post_scf_output(scf_data: &SCF) {
            save_hamiltonian(&scf_data);
         } else if output_type.eq("geometry") {
            save_geometry(&scf_data);
+           scf_data.mol.geom.to_xyz("geometry.xyz".to_string());
         } else if output_type.eq("overlap") {
            save_overlap(&scf_data);
         } else if output_type.eq("deeph") {
