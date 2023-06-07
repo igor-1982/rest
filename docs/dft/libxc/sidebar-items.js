@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":[["LibXCFamily",""]],"mod":[["ffi_xc",""]],"struct":[["XcFuncType",""]]};

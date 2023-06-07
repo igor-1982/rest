@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":[["count_frozen_core_states",""],["generate_ri3fn_from_rimatr",""],["get_basis_name",""]],"mod":[["pyrest_molecule_io",""]],"struct":[["Molecule","Molecule"]]};

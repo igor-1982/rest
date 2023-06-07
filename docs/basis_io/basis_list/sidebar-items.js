@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":[["basis_fuzzy_matcher","This function gives a similar legal basis set name to the given one."],["check_basis_name","This function checks if a given basis name is available in www.basissetexchange.org."]]};

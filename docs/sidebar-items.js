@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":[["main",""]],"mod":[["basis_io",""],["constants",""],["ctrl_io",""],["dft",""],["external_libs",""],["geom_io",""],["initial_guess",""],["isdf",""],["molecule_io",""],["post_scf_analysis",""],["ri_pt2",""],["ri_rpa",""],["scf_io",""],["utilities",""]],"static":[["GLOBAL",""]]};

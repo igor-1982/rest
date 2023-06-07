@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":[["gen_c",""],["generate_random_points",""],["rand_for_mol",""],["random_tabulated_ao",""],["single_slater",""],["slater_determinant",""],["tmp_iter_j",""]]};

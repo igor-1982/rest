@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":[["SCFType",""]],"mod":[["pyrest_ctrl_io",""]],"struct":[["InputKeywords","InputKeywords for a specific calculation"]]};

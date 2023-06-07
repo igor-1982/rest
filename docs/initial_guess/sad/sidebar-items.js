@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":[["block_diag",""],["block_diag_specific",""],["ctrl_setting_atom_sad",""],["initial_guess_from_sad",""]]};
