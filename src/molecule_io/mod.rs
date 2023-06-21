@@ -90,6 +90,9 @@ pub struct Molecule {
     // for frozen-core pt2, rpa and so forth
     #[pyo3(get, set)]
     pub start_mo : usize,
+    // for effective core potential in SCF
+    pub ecp_electrons : usize,
+
     pub basis4elem: Vec<Basis4Elem>,
     // fdqc_bas: store information of each basis functions
     pub fdqc_bas : Vec<BasInfo>,
@@ -123,6 +126,7 @@ impl Molecule {
             num_basis: 0,
             num_auxbas: 0,
             start_mo: 0,   // all-electron pt2, rpa and so forth
+            ecp_electrons: 0,
             spin_channel: 1,
             basis4elem: vec![],
             fdqc_bas: vec![],
@@ -159,6 +163,7 @@ impl Molecule {
 
     pub fn build_native(mut ctrl: InputKeywords, mut geom: GeomCell) -> anyhow::Result<Molecule> {
 
+        let spin_channel = ctrl.spin_channel;
         let cint_type = if ctrl.basis_type.to_lowercase()==String::from("spheric") {
             CintType::Spheric
         } else if ctrl.basis_type.to_lowercase()==String::from("cartesian") {
@@ -167,16 +172,20 @@ impl Molecule {
             panic!("Error:: Unknown basis type '{}'. Please use either 'spheric' or 'Cartesian'", 
                    ctrl.basis_type);
         };
+
         let (mut bas,mut cint_atm,mut cint_bas,cint_env,
             fdqc_bas,cint_fdqc,num_elec,num_basis,num_state) 
             = Molecule::collect_basis(&mut ctrl, &mut geom);
-        let env = cint_env.clone();
 
+        let ecp_electrons = bas.iter().fold(0, |acc, i| {
+            let ecp_electrons = if let Some(num_ecp) = i.ecp_electrons {num_ecp} else {0};
+            acc + ecp_electrons
+        });
+
+        
+        let env = cint_env.clone();
         let natm = cint_atm.len() as i32;
         let nbas = cint_bas.len() as i32;
-        
-        let spin_channel = ctrl.spin_channel;
-
         let (mut auxbas , mut cint_aux_atm,mut cint_aux_bas,cint_aux_env,
                 mut fdqc_aux_bas,mut cint_aux_fdqc,num_auxbas) 
             =(bas.clone(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),0);
@@ -195,7 +204,13 @@ impl Molecule {
         let xc_data = DFA4REST::new(&ctrl.xc,spin_channel, ctrl.print_level);
 
         // frozen-core pt2 and rpa are not yet implemented.
-        let start_mo = count_frozen_core_states(ctrl.frozen_core_postscf, &geom.elem);
+        let mut start_mo = count_frozen_core_states(ctrl.frozen_core_postscf, &geom.elem);
+
+        if start_mo < ecp_electrons {
+            println!("The counted start_mo for the frozen-core post-scf methods {} is smaller than the number of ecp electrons {}. Take the start_mo = ecp_electrons",
+                    start_mo, ecp_electrons);
+            start_mo = ecp_electrons;
+        }
 
         if ctrl.print_level>0 {
             xc_data.xc_version();
@@ -211,6 +226,7 @@ impl Molecule {
             num_basis,
             num_auxbas,
             start_mo,
+            ecp_electrons,
             spin_channel,
             basis4elem,
             fdqc_bas,
@@ -230,7 +246,6 @@ impl Molecule {
         if mol.ctrl.print_level>0 {
             println!("numbasis: {:2}, num_auxbas: {:2}", mol.num_basis,mol.num_auxbas)
         };
-
         if mol.ctrl.print_level>4 {mol.print_auxbas()};
 
         Ok(mol)
@@ -561,8 +576,8 @@ impl Molecule {
 
         let ctrl_elem = ctrl_element_checker(geom);
         let local_elem = local_element_checker(&ctrl.basis_path);
-        //println!("local elements are {:?}", local_elem);
-        //println!("ctrl elements are {:?}", ctrl_elem);
+        println!("local elements are {:?}", local_elem);
+        println!("ctrl elements are {:?}", ctrl_elem);
         let elem_intersection = ctrl_elem.intersect(local_elem.clone());
         let mut required_elem = vec![];
         for ctrl_item in ctrl_elem {
@@ -572,16 +587,12 @@ impl Molecule {
         }
     
         if required_elem.len() != 0 {
-                    //function inserted here
-
-            
             let re = Regex::new(r"/?(?P<basis>[^/]*)/?$").unwrap();
             let cap = re.captures(&ctrl.basis_path).unwrap();
             let basis_name = cap.name("basis").unwrap().to_string();
             if check_basis_name(&basis_name) {
                 bse_downloader::bse_basis_getter_v2(&basis_name,&geom, &ctrl.basis_path, &required_elem);
-            }
-            else {
+            }  else {
                 println!("Error: Missing local basis sets for {:?}", &required_elem);
                 let matched = basis_fuzzy_matcher(&basis_name);
                 match matched {
@@ -1911,11 +1922,9 @@ fn test_get_slices_mut() {
 
 #[test]
 fn test_regex() {
-
     let re = Regex::new(r"/?(?P<basis>[^/]*)/?$").unwrap();
     let cap = re.captures("./p1/p2/p3").unwrap();
     println!("{:?}",cap.name("basis").unwrap());
 }
-
 
 

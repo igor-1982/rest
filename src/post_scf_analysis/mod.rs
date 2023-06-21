@@ -13,6 +13,8 @@ use crate::scf_io::SCF;
 use crate::ri_pt2::{close_shell_pt2_rayon, open_shell_pt2_rayon};
 use crate::utilities::TimeRecords;
 
+use self::molden_build::{gen_header, gen_molden};
+
 pub fn post_scf_output(scf_data: &SCF) {
     scf_data.mol.ctrl.outputs.iter().for_each(|output_type| {
         if output_type.eq("fchk") {
@@ -36,6 +38,8 @@ pub fn post_scf_output(scf_data: &SCF) {
            scf_data.mol.geom.to_xyz("geometry.xyz".to_string());
         } else if output_type.eq("overlap") {
            save_overlap(&scf_data);
+        } else if output_type.eq("multiwfn") {
+            gen_molden(&scf_data);
         } else if output_type.eq("deeph") {
            save_hamiltonian(&scf_data);
            save_geometry(&scf_data);

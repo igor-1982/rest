@@ -2352,6 +2352,8 @@ fn debug_num_density_for_atom() {
             }
         ],
         references: None,
+        ecp_electrons: None,
+        ecp_potentials: None,
         global_index: (0,0)
     }];
     let mut center_coordinates_bohr = vec![(0.0,0.0,0.0)];

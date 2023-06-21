@@ -24,7 +24,7 @@ use self::basic_math::{double_factorial, specific_double_factorial};
 //use crate::geom_io::GeomCell;
 //use ndarray::{Axis};
 
-#[derive(Debug,Serialize,Deserialize)]
+#[derive(Debug,Clone,Serialize,Deserialize)]
 pub struct BasCellRaw {
     pub function_type: Option<String>,
     pub region: Option<String>,
@@ -38,10 +38,33 @@ pub struct RefCell {
     pub reference_keys: Option<Vec<String>>,
 }
 
-#[derive(Serialize,Deserialize)]
+#[derive(Clone, Debug,Serialize,Deserialize)]
+pub struct ECPCellRaw {
+    pub angular_momentum: Vec<i32>,
+    pub coefficients: Vec<Vec<String>>,
+    pub ecp_type: Option<String>,
+    pub r_exponents: Vec<i32>,
+    pub gaussian_exponents: Vec<String>,
+}
+#[derive(Debug,Clone,Serialize,Deserialize)]
 pub struct Basis4ElemRaw {
     pub electron_shells: Vec<BasCellRaw>,
     pub references: Option<Vec<RefCell>>,
+    pub ecp_potentials: Option<Vec<ECPCellRaw>>,
+    pub ecp_electrons: Option<usize>,
+}
+
+#[test]
+fn import_ecp()-> anyhow::Result<()> {
+    let tmp_string = fs::read_to_string(String::from("/home/igor/Documents/Package-Pool/rest_workspace/rest/basis-set-pool/def2-SVP/Au.json"))?;
+    let tmp_basis:Basis4ElemRaw = serde_json::from_str(&tmp_string[..])?;
+    if let (Some(ecp_electrons), Some(ecp_potentials))= (&tmp_basis.ecp_electrons, &tmp_basis.ecp_potentials)  {
+        println!("debug ecp electrons: {}", &ecp_electrons);
+        ecp_potentials.iter().for_each(|ecp| {
+            println!("debug ecp: {:?}", ecp.parse());
+        });
+    };
+    Ok(())
 }
 
 /// #BasCell
@@ -58,6 +81,15 @@ pub struct BasCell {
     pub angular_momentum: Vec<i32>,
     pub exponents: Vec<f64>,
     pub coefficients: Vec<Vec<f64>>,
+}
+
+#[derive(Clone, Debug,Serialize,Deserialize)]
+pub struct ECPCell {
+    pub angular_momentum: Vec<i32>,
+    pub coefficients: Vec<Vec<f64>>,
+    pub ecp_type: Option<String>,
+    pub r_exponents: Vec<i32>,
+    pub gaussian_exponents: Vec<f64>,
 }
 
 ///  # BasInfo
@@ -101,6 +133,8 @@ impl  BasInfo {
 pub struct Basis4Elem {
     pub electron_shells: Vec<BasCell>,
     pub references: Option<Vec<RefCell>>,
+    pub ecp_potentials: Option<Vec<ECPCell>>,
+    pub ecp_electrons: Option<usize>,
     pub global_index: (usize,usize)
 }
 
@@ -111,9 +145,19 @@ impl Basis4Elem {
         &tmp_basis.electron_shells.iter().for_each(|x: &BasCellRaw| {
             tmp_vec.extend(x.parse());
         });
+        let (ecp_electrons, ecp_potentials) = if let (Some(ecp_electrons), Some(ecp_potentials))= (&tmp_basis.ecp_electrons, &tmp_basis.ecp_potentials)  {
+            (
+                Some(ecp_electrons.clone()), 
+                Some(ecp_potentials.iter().map(|x| x.parse()).collect::<Vec<ECPCell>>())
+            )
+        } else {
+            (None, None)
+        };
         Ok(Basis4Elem{
             electron_shells: tmp_vec,
             references: tmp_basis.references,
+            ecp_electrons,
+            ecp_potentials,
             global_index: (0,0)
         })
     }
@@ -134,6 +178,8 @@ impl Basis4Elem {
         Ok(Basis4Elem{
             electron_shells: tmp_vec,
             references: tmp_basis.references,
+            ecp_electrons: tmp_basis.ecp_electrons,
+            ecp_potentials: None,
             global_index: (0,0)
         })
     }
@@ -155,6 +201,31 @@ impl Basis4Elem {
 
 
 }
+
+
+impl ECPCellRaw {
+    pub fn parse(&self) -> ECPCell {
+        let to_ecpcell = ECPCell {
+            angular_momentum: self.angular_momentum.clone(),    
+            ecp_type: self.ecp_type.clone(),
+            r_exponents: self.r_exponents.clone(),
+            coefficients: {
+                self.coefficients.iter().map(|i| i.iter().map(|j| j.parse().unwrap()).collect::<Vec<f64>>()).collect::<Vec<Vec<f64>>>()
+            },
+            gaussian_exponents: {
+                self.gaussian_exponents.iter().map(|i| i.parse().unwrap()).collect::<Vec<f64>>()
+            },
+        };
+        if to_ecpcell.angular_momentum.len()!=to_ecpcell.coefficients.len() {
+            panic!("The number of angular momentum is not equal to the number of coefficients\n")
+        };
+        if to_ecpcell.r_exponents.len()!=to_ecpcell.gaussian_exponents.len() {
+            panic!("The number of r_exponents is not equal to the number of gaussian_exponents\n")
+        };
+        to_ecpcell
+    }
+}
+
 
 impl BasCellRaw {
     pub fn parse(&self) -> Vec<BasCell> {
@@ -341,6 +412,15 @@ impl BasCell {
    }
 }
 
+/// produce the value of cartesian gaussian-type orbital "gau(a,l,c)" in a given coordinate "r=(x,y,z)"
+///
+///       gau(a,l,c) = Norm*x^{lx}*y^{ly}*z^{lz}*exp[-a*r^2],
+///                  = Norm*Fang*exp[-a*r^2],
+///
+/// The GTO is normalized with the normalization factor "Norm" as
+///
+///   Norm = (2a/Pi)^(3/4)*(4a)^{l/2}/((2*lx-1)!!(2*ly-1)!!(2*lz-1)!!)^{1/2}
+///
 pub fn cartesian_gto_std(a: f64, l: usize, c:&[f64;3],r:&[f64;3]) -> MatrixFull<f64> {
     // produce the value of cartesian gaussian-type orbital "gau(a,l,c)" in a given coordinate "r=(x,y,z)"
     //

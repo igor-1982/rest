@@ -201,7 +201,7 @@ impl InputKeywords {
             max_num_angular_points: 110,
             hardness: 3,
             grid_gen_level: 3,
-            pruning: String::from("sg1"),
+            pruning: String::from("nwchem"),
             rad_grid_method: String::from("treutler"),
             external_grids: "none".to_string(),
             // ETB for autogen the auxbasis

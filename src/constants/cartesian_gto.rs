@@ -79,6 +79,8 @@ pub enum CarBasInfo {
 //    data: [f64;4]
 //}
 
+/// normalization factor for gaussian-type orbital
+///    ((2*lx-1)!!(2*ly-1)!!(2*lz-1)!!)^{-1/2}
 pub const CAR_BAS_INFO_L0: CarBasInfo = CarBasInfo::L0(DMatrix4x1 {
     size: [4,1], 
     indicing: [1,4], 
@@ -266,6 +268,6 @@ pub fn cartesian_gto_const(l:usize) -> crate::constants::cartesian_gto::CarBasIn
     } else if l == 6 {
         CAR_BAS_INFO_L6
     } else {
-        panic!("No C2S transformation implementation for l > 4")
+        panic!("No C2S transformation implementation for l > 6")
     }
 }
