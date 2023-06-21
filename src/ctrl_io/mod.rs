@@ -1,3 +1,5 @@
+
+use pyo3::pyclass;
 use serde::{Deserialize,Serialize};
 //use std::{fs, str::pattern::StrSearcher};
 use std::fs;
@@ -15,93 +17,169 @@ use toml;
 //    pub geom: Option<RawGeomCell>
 //}
 
-pub enum SCFType {
-    RHF,
-    ROHF,
-    UHF
-}
+mod pyrest_ctrl_io;
 
+/// **InputKeywords** for a specific calculation
+///  ### System dependent keywords
+///  - `print_level`:  default (1). `0` dose not print anything. larger number with more output information  
+/// 
+///  ### Basis set keywords
+///  - `basis_path`:   `String`. The path where you can find the basis-set file in json format. If the basis-set file is missing, REST will try to download it from BasisSetExchange
+///  - `basis_type`:   `String`. It can be `spheric` or `cartesian`
+///  - `auxbas_path`:  `String`. The path where you can find the auxiliary basis-set file in json format. If the basis-set file is missing, REST will try to download it from BasisSetExchange
+///  - `auxbas_type`:  `String`. It can be `spheric` or `cartesian`
+///  - `even_tempered-basis`: `Bool`. True: turn on ETB to generate the auxiliary basis set
+///  - `etb_start_atom_number`: `Usize`. Use ETB, for the element with atomic index larger than this value  
+///  - `etb_beta`: `f64`. Relevant to the ETB basis set size. Smaller value indicates larger ETB basis set. NOTE: etb_beta should be larger than 1.0
 #[derive(Debug,Clone)]
+#[pyclass]
 pub struct InputKeywords {
+    #[pyo3(get, set)]
     pub print_level: usize,
     // Keywords for the (aux) basis sets
+    #[pyo3(get, set)]
     pub basis_path: String,
+    #[pyo3(get, set)]
     pub basis_type: String,
+    #[pyo3(get, set)]
     pub auxbas_path: String,
+    #[pyo3(get, set)]
     pub auxbas_type: String,
+    #[pyo3(get, set)]
     pub use_auxbas: bool,
-    pub use_auxbas_symm: bool,
+    #[pyo3(get, set)]
     pub even_tempered_basis: bool,
+    #[pyo3(get, set)]
     pub etb_start_atom_number: usize,
+    #[pyo3(get, set)]
     pub etb_beta: f64,
+    // Keywords for Gradient
+    #[pyo3(get, set)]
+    pub auxbasis_response: bool,
+    // Keywords for IDSF
+    #[pyo3(get, set)]
+    pub use_isdf: bool,
+    #[pyo3(get, set)]
+    pub isdf_k_mu: usize,
     // Keywords for systems
+    #[pyo3(get, set)]
     pub eri_type: String,
+    #[pyo3(get, set)]
+    pub use_ri_symm: bool,
+    #[pyo3(get, set)]
     pub xc: String,
+    pub post_xc: Vec<String>,
+    pub post_correlation: Vec<DFAFamily>,
     pub charge: f64,
+    #[pyo3(get, set)]
     pub spin: f64,
+    #[pyo3(get, set)]
     pub spin_channel: usize,
+    #[pyo3(get, set)]
     pub spin_polarization: bool,
+    #[pyo3(get, set)]
     pub frozen_core_postscf: i32,
+    #[pyo3(get, set)]
     pub frequency_points: usize,
+    #[pyo3(get, set)]
     pub freq_grid_type: usize,
+    #[pyo3(get, set)]
     pub freq_cut_off: f64,
     // Keywords for DFT numerical integration
+    #[pyo3(get, set)]
     pub radial_precision: f64,
+    #[pyo3(get, set)]
     pub min_num_angular_points: usize,
+    #[pyo3(get, set)]
     pub max_num_angular_points: usize,
+    #[pyo3(get, set)]
     pub grid_gen_level: usize,
+    #[pyo3(get, set)]
     pub hardness: usize,
+    #[pyo3(get, set)]
     pub pruning: String,
+    #[pyo3(get, set)]
     pub rad_grid_method: String,
+    #[pyo3(get, set)]
     pub external_grids: String,
     // Keywords for the scf procedures
+    #[pyo3(get, set)]
     pub mixer: String,
+    #[pyo3(get, set)]
     pub mix_param: f64,
+    #[pyo3(get, set)]
     pub num_max_diis: usize,
+    #[pyo3(get, set)]
     pub start_diis_cycle: usize,
+    #[pyo3(get, set)]
     pub max_scf_cycle: usize,
+    #[pyo3(get, set)]
     pub scf_acc_rho: f64,
+    #[pyo3(get, set)]
     pub scf_acc_eev: f64,
+    #[pyo3(get, set)]
     pub scf_acc_etot:f64,
+    #[pyo3(get, set)]
     pub restart: bool,
+    #[pyo3(get, set)]
     pub chkfile: String,
+    #[pyo3(get, set)]
     pub chkfile_type: String,
+    #[pyo3(get, set)]
     pub guessfile: String,
+    #[pyo3(get, set)]
     pub guessfile_type: String,
+    #[pyo3(get, set)]
     pub external_init_guess: bool,
+    #[pyo3(get, set)]
     pub initial_guess: String,
+    #[pyo3(get, set)]
     pub noiter: bool,
+    #[pyo3(get, set)]
     pub check_stab: bool,
+    #[pyo3(get, set)]
     pub use_dm_only: bool,
     // Keywords for fciqmc dump
+    #[pyo3(get, set)]
     pub fciqmc_dump: bool,
     // Kyewords for post scf analysis
+    #[pyo3(get, set)]
     pub output_wfn_in_real_space: usize,
+    #[pyo3(get, set)]
     pub output_cube: bool,
+    #[pyo3(get, set)]
     pub output_molden: bool,
+    #[pyo3(get, set)]
     pub output_fchk: bool,
     // Keywords for sad initial guess
+    #[pyo3(get, set)]
     pub atom_sad: bool,
     // Keywords for parallism
+    #[pyo3(get, set)]
     pub num_threads: Option<usize>
 }
 
 impl InputKeywords {
-    pub fn new() -> InputKeywords {
+    pub fn init_ctrl() -> InputKeywords {
         InputKeywords{
             // keywords for machine and debug info
             print_level: 0,
-            num_threads: None,
+            num_threads: Some(1),
             // Keywords for (aux)-basis sets
             basis_path: String::from("./STO-3G"),
             basis_type: String::from("spheric"),
             auxbas_path: String::from("./def2-SV(P)-JKFIT"),
             auxbas_type: String::from("spheric"),
             use_auxbas: true,
-            use_auxbas_symm: false,
+            auxbasis_response: false,
+            use_isdf: false,
+            isdf_k_mu: 8,
             // Keywords associated with the method employed
             xc: String::from("x3lyp"),
-            eri_type: String::from("ri-v"),
+            post_xc: vec![],
+            post_correlation: vec![],
+            eri_type: String::from("ri_v"),
+            use_ri_symm: false,
             charge: 0.0_f64,
             spin: 1.0_f64,
             spin_channel: 1_usize,
@@ -127,13 +205,13 @@ impl InputKeywords {
             etb_beta: 2.0,
             // Keywords for the scf procedures
             chkfile: String::from("none"),
-            chkfile_type: String::from("none"),
+            chkfile_type: String::from("hdf5"),
             guessfile: String::from("none"),
             guessfile_type: String::from("hdf5"),
-            mixer: String::from("direct"),
-            mix_param: 1.0,
-            num_max_diis: 2,
-            start_diis_cycle: 2,
+            mixer: String::from("diis"),
+            mix_param: 0.6,
+            num_max_diis: 8,
+            start_diis_cycle: 1,
             max_scf_cycle: 100,
             scf_acc_rho: 1.0e-6,
             scf_acc_eev: 1.0e-5,
@@ -143,6 +221,9 @@ impl InputKeywords {
             initial_guess: String::from("sad"),
             noiter: false,
             check_stab: false,
+            // Kyewords for the manner to evaluate the Vk (and also Vxc) potentials
+            // True:  using only density matrix in the evaluation
+            // False: use coefficients as well with higher efficiency
             use_dm_only: false,
             // Keywords for the fciqmc dump
             fciqmc_dump: false,
@@ -164,8 +245,8 @@ impl InputKeywords {
     pub fn parse_ctl_from_json(tmp_keys: &serde_json::Value) -> anyhow::Result<(InputKeywords,GeomCell)> {
         //let tmp_cont = fs::read_to_string(&filename[..])?;
         //let tmp_keys: serde_json::Value = serde_json::from_str(&tmp_cont[..])?;
-        let mut tmp_input = InputKeywords::new();
-        let mut tmp_geomcell = GeomCell::new();
+        let mut tmp_input = InputKeywords::init_ctrl();
+        let mut tmp_geomcell = GeomCell::init_geom();
 
         //==================================================================
         //
@@ -241,29 +322,39 @@ impl InputKeywords {
                             String::from("ri_v")
                         } else {tmp_eri.to_lowercase()}
                     },
+                    other => {String::from("ri_v")},
                     other => {String::from("analytic")},
+                    other => {String::from("ri_v")},
                 };
                 if tmp_input.eri_type.eq(&String::from("ri_v"))
                 {
-                    tmp_input.use_auxbas = true
+                    tmp_input.use_auxbas = true;
+                    tmp_input.use_isdf = false;
+                } else if tmp_input.eri_type.eq(&String::from("isdf_full")) {
+                    tmp_input.use_auxbas = true;
+                    tmp_input.use_isdf = true;
                 } else {
-                    tmp_input.use_auxbas = false
+                    tmp_input.use_auxbas = false;
+                    tmp_input.use_isdf = false;
                 };
                 if tmp_input.print_level>0 {println!("ERI Type: {}", tmp_input.eri_type)};
 
-                tmp_input.use_auxbas_symm = match tmp_ctrl.get("use_auxbas_symm").unwrap_or(&serde_json::Value::Null) {
+                tmp_input.use_ri_symm = match tmp_ctrl.get("use_ri_symm").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::Bool(tmp_str) => {*tmp_str},
                     other => {false},
                 };
                 if tmp_input.print_level>0 {
-                    if tmp_input.use_auxbas_symm {
+                    if tmp_input.use_ri_symm {
                         println!("Turn on the basis pair symmetry for RI 3D-tensors")
                     } else {
                         println!("Turn off the basis pair symmetry for RI 3D-tensors")
                     };
                 }
-                
-
+                tmp_input.isdf_k_mu = match tmp_ctrl.get("isdf_k_mu").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(8_usize)},
+                    serde_json::Value::Number(tmp_num) => {tmp_num.as_i64().unwrap_or(8) as usize},
+                    other => {8_usize},
+                };            
 
                 tmp_input.auxbas_type = match tmp_ctrl.get("auxbas_type").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_type) => {tmp_type.to_lowercase()},
@@ -295,6 +386,13 @@ impl InputKeywords {
                 if tmp_input.use_auxbas && tmp_input.print_level>0 {
                     println!("The {}-GTO auxiliary basis set is taken from {}", tmp_input.auxbas_type,tmp_input.auxbas_path)
                 };
+                // ===============================================
+                //  Keywords for Gradient calculation
+                // ==============================================
+                tmp_input.auxbasis_response = match tmp_ctrl.get("auxbasis_response").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::Bool(tmp_str) => {*tmp_str},
+                    other => {false},
+                };
                 // ==============================================
                 //  Keywords associated with the method employed
                 // ==============================================
@@ -303,7 +401,56 @@ impl InputKeywords {
                     other => {String::from("hf")},
                 };
                 if tmp_input.print_level>0 {println!("The exchange-correlation method: {}", tmp_input.xc)};
-
+                //let re0 = Regex::new(r"
+                //                    (?P<elem>\w{1,2})\s*,?    # the element
+                //                    \s+
+                //                    (?P<x>[\+-]?\d+.\d+)\s*,? # the 'x' position
+                //                    \s+
+                //                    (?P<y>[\+-]?\d+.\d+)\s*,? # the 'y' position
+                //                    \s+
+                //                    (?P<z>[\+-]?\d+.\d+)\s*,? # the 'z' position
+                //                    \s*").unwrap();
+                tmp_input.post_xc = match tmp_ctrl.get("post_xc").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_xc) => {vec![tmp_xc.to_lowercase()]},
+                    serde_json::Value::Array(tmp_xc) => {
+                        let mut tmp_vec:Vec<String> = vec![];
+                        tmp_xc.iter().for_each(|x| {
+                            let xc_method = x.to_string();
+                            let string_len = xc_method.len();
+                            tmp_vec.push(xc_method[1..string_len-1].to_string())
+                        });
+                        tmp_vec
+                    },
+                    other => {vec![]},
+                };
+                let post_corr = match tmp_ctrl.get("post_correlation").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_xc) => {vec![tmp_xc.to_lowercase()]},
+                    serde_json::Value::Array(tmp_xc) => {
+                        let mut tmp_vec:Vec<String> = vec![];
+                        tmp_xc.iter().for_each(|x| {
+                            let xc_method = x.to_string();
+                            let string_len = xc_method.len();
+                            tmp_vec.push(xc_method[1..string_len-1].to_string())
+                        });
+                        tmp_vec
+                    },
+                    other => {vec![]},
+                };
+                tmp_input.post_correlation = vec![];
+                post_corr.iter().for_each(|corr| {
+                    if corr.to_lowercase().eq("pt2") {
+                        tmp_input.post_correlation.push(DFAFamily::PT2)
+                    } else if corr.to_lowercase().eq("sbge2") {
+                        tmp_input.post_correlation.push(DFAFamily::SBGE2)
+                    } else if corr.to_lowercase().eq("rpa") {
+                        tmp_input.post_correlation.push(DFAFamily::RPA)
+                    } else if corr.to_lowercase().eq("scsrpa") {
+                        tmp_input.post_correlation.push(DFAFamily::SCSRPA)
+                    } else {
+                        println!("Unknown post-scf correlation method: {}", corr)
+                    }
+                    //if corr.to_lowercase().eq(&pt2) 
+                });
                 // ===============================================
                 //  Keywords to determine the spin channel, which 
                 //   is important to turn on RHF(RKS) or UHF(UKS)
@@ -542,6 +689,10 @@ impl InputKeywords {
                     println!("Grid generation level: {}", tmp_input.grid_gen_level);
                     println!("Even tempered basis generation: {}", tmp_input.even_tempered_basis);
                     if tmp_input.even_tempered_basis == true {
+                        if tmp_input.etb_beta<=1.0f64 {
+                            println!("WARNING: etb_beta cannot be below 1.0. REST will use etb_beta=2.0 instead in this calculation");
+                            tmp_input.etb_beta=2.0f64;
+                        }
                         println!("Even tempered basis generation starts at: {}", tmp_input.etb_start_atom_number);
                         println!("Even tempered basis beta is: {}", tmp_input.etb_beta);
                     }
@@ -622,6 +773,17 @@ impl InputKeywords {
                         tmp_geomcell.position = tmp3;
                         tmp_geomcell.nfree = tmp4;
                     },
+                    serde_json::Value::String(tmp_geom) => {
+                        let tmp_unit = tmp_geomcell.unit.clone();
+                        
+                        let (tmp1,tmp2,tmp3,tmp4) = GeomCell::parse_position_from_string(tmp_geom, &tmp_unit)?;
+
+                        tmp_geomcell.elem = tmp1;
+                        tmp_geomcell.fix = tmp2;
+                        tmp_geomcell.position = tmp3;
+                        tmp_geomcell.nfree = tmp4;
+
+                    }
                     other => {
                         panic!("Error in reading the geometry position")
                     }
