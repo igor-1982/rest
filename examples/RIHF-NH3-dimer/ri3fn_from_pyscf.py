@@ -4,7 +4,7 @@ import numpy
 from pyscf import gto, scf, ci,df,lib
 import scipy
 from time import ctime, time
-lib.num_threads(30)
+lib.num_threads(6)
 TimeStart = time()
 mol = gto.Mole(
         atom='''
@@ -19,7 +19,7 @@ mol = gto.Mole(
          charge=1,spin=1,basis='aug-cc-pv5z',verbose=4
       ).build()
 mf = scf.UHF(mol).density_fit(auxbasis="def2-tzvp-jkfit")
-mf.init_guess = '1e'
+#mf.init_guess = '1e'
 mf.diis = 'diis'
 print("Total energy:",mf.kernel())
 print("Total job time: %10.2f(wall)" %(time()-TimeStart))

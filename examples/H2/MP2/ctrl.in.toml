@@ -12,6 +12,7 @@
      spin =                 1.0
      spin_polarization =    false
      external_grids =       "none"
+     initial_guess=         "sad"
      mixer =                "diis"
      num_max_diis =         8
      start_diis_cycle =     3

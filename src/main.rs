@@ -15,8 +15,9 @@
 //!   5-1) cargo build (--release) 
 //! 
 //! ### Usage
-//!   Some examples are provided in the folder of `rest/examples/`.  
-//!   Detailed user manual is in preparation.
+//!   - Some examples are provided in the folder of `rest/examples/`.  
+//!   - Detailed user manual is in preparation.  
+//!   - Basic usage of varying keywords can be found on the page of [`InputKeywords`](crate::ctrl_io::InputKeywords).
 //! 
 //! ### Features
 //!   1) Use Gaussian Type Orbital (GTO) basis sets  
@@ -47,15 +48,14 @@
 //! 
 #![allow(unused)]
 extern crate rest_tensors as tensors;
+//extern crate rest_libxc as libxc;
 extern crate chrono as time;
 #[macro_use]
 extern crate lazy_static;
 use std::{f64, fs::File, io::Write};
 use std::path::PathBuf;
+use pyo3::prelude::*;
 
-use anyhow;
-use clap::{Command, Arg, ArgMatches};
-use time::{DateTime,Local};
 mod geom_io;
 mod basis_io;
 mod ctrl_io;
@@ -69,15 +69,23 @@ mod grad;
 mod ri_rpa;
 mod isdf;
 mod constants;
-pub mod post_scf_analysis;
+mod post_scf_analysis;
+mod external_libs;
 //use rayon;
 #[global_allocator]
 static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 //static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
 use crate::grad::rhf::Gradient;
-pub use crate::initial_guess::sap::*;
+use crate::initial_guess::sap::*;
 use crate::{post_scf_analysis::{rand_wf_real_space, cube_build, molden_build}, isdf::error_isdf, molecule_io::Molecule};
+use anyhow;
+use crate::dft::DFA4REST;
+use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa};
+use crate::scf_io::scf;
+use time::{DateTime,Local};
+
+//pub use crate::initial_guess::sap::*;
+//use crate::{post_scf_analysis::{rand_wf_real_space, cube_build, molden_build}, isdf::error_isdf, molecule_io::Molecule};
 
 fn main() -> anyhow::Result<()> {
     let mut time_mark = utilities::TimeRecords::new();
@@ -87,7 +95,7 @@ fn main() -> anyhow::Result<()> {
     time_mark.new_item("SCF", "the scf procedure");
     time_mark.count_start("SCF");
 
-    let ctrl_file = parse_input().value_of("input_file").unwrap_or("ctrl.in").to_string();
+    let ctrl_file = utilities::parse_input().value_of("input_file").unwrap_or("ctrl.in").to_string();
     if ! PathBuf::from(ctrl_file.clone()).is_file() {
         panic!("Input file ({:}) does not exist", ctrl_file);
     }
@@ -97,7 +105,10 @@ fn main() -> anyhow::Result<()> {
 
     let mut scf_data = scf_io::scf(mol).unwrap();
 
-    let mut grad_data = Gradient::build(&scf_data.mol);
+    let mut grad_data = Gradient::build(&scf_data.mol, &scf_data);
+
+    //grad_data.calc_j(&scf_data.density_matrix);
+    print!("occ, {:?}", scf_data.occupation);
 
     time_mark.count("SCF");
 
@@ -111,6 +122,13 @@ fn main() -> anyhow::Result<()> {
     }
 
     //====================================
+    // Now for post-xc calculations
+    //====================================
+    if scf_data.mol.ctrl.post_xc.len()>=1 {
+        print_out_dfa(&scf_data);
+    }
+
+    //====================================
     // Now for post-SCF analysis
     //====================================
     post_scf_analysis::post_scf_analysis(&scf_data);
@@ -121,7 +139,7 @@ fn main() -> anyhow::Result<()> {
 
     if let Some(dft_method) = &scf_data.mol.xc_data.dfa_family_pos {
         match dft_method {
-            dft::DFAFamily::XDH => {
+            dft::DFAFamily::PT2 | dft::DFAFamily::SBGE2 => {
                 time_mark.new_item("PT2", "the PT2 evaluation");
                 time_mark.count_start("PT2");
                 ri_pt2::xdh_calculations(&mut scf_data);
@@ -136,6 +154,14 @@ fn main() -> anyhow::Result<()> {
             _ => {}
         }
     }
+
+    //====================================
+    // Now for post-correlation calculations
+    //====================================
+    if scf_data.mol.ctrl.post_correlation.len()>=1 {
+        post_scf_correlation(&mut scf_data);
+    }
+
 
     time_mark.count("Overall");
 
@@ -154,16 +180,3 @@ fn main() -> anyhow::Result<()> {
 }
 
 
-fn parse_input() -> ArgMatches {
-    Command::new("fdqc")
-        .version("0.1")
-        .author("Igor Ying Zhang <igor_zhangying@fudan.edu.cn>")
-        .about("Rust-based Electronic-Structure Tool (REST)")
-        .arg(Arg::new("input_file")
-             .short('i')
-             .long("input-file")
-             .value_name("input_file")
-             .help("Input file including \"ctrl\" and \"geom\" block, in the format of either \"json\" or \"toml\"")
-             .takes_value(true))
-        .get_matches()
-}

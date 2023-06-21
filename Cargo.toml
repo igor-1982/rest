@@ -8,8 +8,6 @@ build = "build.rs"
 [build_dependencies]
 dunce = "1.0.0"
 
-
-
 [dependencies]
 rest_tensors = {path="../rest_tensors"}
 rest_libcint = {path="../rest_libcint"}
@@ -39,14 +37,12 @@ rand = "0.3"
 array_tool = "1.0.3"
 fuzzy-matcher = "0.3.7"
 #katex-doc = "0.1.0"
-#pyo3 = { version = "0.13", features = ["extension-module"] }
-# default-features = false because it by defaults includes default-tls which
 # seems to pull in libssl and libcrypto which is rejected by manylinux
 reqwest = { version = "0.10", default-features = false, features = ["blocking", "json"] }
-#blas-src = { version = "0.8", features=["openblas"] }
-#lapack-src = { version = "0.8", features=["openblas"] }
-#openblas-src = {version = "0.10", features=["static"]}
-#mimalloc = { version = "0.1.17", default-features = false }
+
+[dependencies.pyo3]
+version = "0.18.1"
+features = ["extension-module"]
 
 [package.metadata.docs.rs]
 rustdoc-args = [
@@ -62,3 +58,13 @@ criterion = "0.4"
 [[bench]]
 name = "bench_tensors"
 harness = false
+
+
+[[bin]]
+name = "rest"
+path = "src/main.rs"
+
+[lib]
+name = "pyrest"
+path = "src/lib.rs"
+crate-type=["cdylib","lib"]

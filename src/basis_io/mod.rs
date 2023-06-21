@@ -46,11 +46,11 @@ pub struct Basis4ElemRaw {
 
 /// #BasCell
 /// `BasCell` has the same organization structure of the basis set files from the basis set exchange (BSE) 
-/// BasCell.function_type:     "gto_spherical" or "gto"
-/// BasCell.region:            
-/// BasCell.angular_momentum:  The angular momentums of the GTOs in this cell
-/// BasCell.exponents:         The exponents 
-/// BasCell.coefficients:      The coefficients
+///  - BasCell.function_type:     "gto_spherical" or "gto"  
+///  - BasCell.region:  
+///  - BasCell.angular_momentum:  The angular momentums of the GTOs in this cell  
+///  - BasCell.exponents:         The exponents  
+///  - BasCell.coefficients:      The coefficients 
 #[derive(Debug,Clone)]
 pub struct BasCell {
     pub function_type: Option<String>,

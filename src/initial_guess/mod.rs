@@ -1,6 +1,8 @@
 use tensors::{MatrixFull, MatrixUpper};
 
-use crate::{molecule_io::Molecule, scf_io::SCF, dft::Grids, get_vsap};
+use crate::{molecule_io::Molecule, scf_io::SCF, dft::Grids};
+
+use crate::initial_guess::sap::get_vsap;
 
 use self::sad::initial_guess_from_sad;
 
@@ -17,7 +19,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
         // for DFT methods, it needs the eigenvectors to generate the hamiltoniam. In consequence, we use the hf method to prepare the eigenvectors from the guess dm
         scf_data.generate_hf_hamiltonian_for_guess();
         //scf_data.generate_hf_hamiltonian();
-        println!("Initial guess HF energy: {:16.8}", scf_data.evaluate_hf_total_energy());
+        if scf_data.mol.ctrl.print_level>0 {println!("Initial guess HF energy: {:16.8}", scf_data.evaluate_hf_total_energy())};
         scf_data.diagonalize_hamiltonian();
         scf_data.generate_density_matrix();
 
@@ -51,7 +53,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
         //}
         scf_data.generate_hf_hamiltonian_for_guess();
         //scf_data.generate_hf_hamiltonian();
-        println!("Initial guess HF energy: {:16.8}", scf_data.evaluate_hf_total_energy());
+        if scf_data.mol.ctrl.print_level>0 {println!("Initial guess HF energy: {:16.8}", scf_data.evaluate_hf_total_energy())};
         scf_data.diagonalize_hamiltonian();
         scf_data.generate_density_matrix();
     // generate the initial guess from hcore

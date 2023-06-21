@@ -4,6 +4,8 @@ mod cartesian_gto;
 
 use std::collections::HashMap;
 
+use lazy_static::lazy_static;
+
 pub use crate::constants::vsap::*;
 pub use crate::constants::c2s::*;
 pub use crate::constants::cartesian_gto::*;
@@ -74,6 +76,10 @@ lazy_static!{
         m
     };
 }
+
+// use for the inverse (sqrt inverse) of the auxiliary coulomb matrix
+pub const AUXBAS_THRESHOLD: f64 = 1.0e-8;
+pub const INVERSE_THRESHOLD: f64 = 1.0e-8;
 
 pub const CM: f64 = 8065.541;
 pub const ANG:f64 = 0.5291772083;

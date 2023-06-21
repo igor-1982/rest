@@ -1,4 +1,8 @@
+extern crate rest_tensors as tensors;
+
+mod pyrest_molecule_io;
 use array_tool::vec::Intersect;
+use pyo3::{pyclass, pymethods};
 use rayon::prelude::{IntoParallelRefIterator, IndexedParallelIterator, ParallelIterator};
 use rest_tensors::{ERIFull,RIFull,ERIFold4,TensorSlice,TensorSliceMut,TensorOptMut,TensorOpt, MatrixUpper, MatrixFull};
 use libc::regerror;
@@ -13,7 +17,7 @@ use std::sync::mpsc::channel;
 use std::thread::panicking;
 use std::path::PathBuf;
 use crate::basis_io::etb::{get_etb_elem, etb_gen_for_atom_list, InfoV2};
-use crate::constants::{ELEM1ST, ELEM2ND, ELEM3RD, ELEM4TH, ELEM5TH,ELEM6TH, ELEMTMS};
+use crate::constants::{ELEM1ST, ELEM2ND, ELEM3RD, ELEM4TH, ELEM5TH,ELEM6TH, ELEMTMS, AUXBAS_THRESHOLD};
 use crate::dft::DFA4REST;
 use crate::geom_io::{GeomCell,MOrC, GeomUnit, get_mass_charge};
 use crate::basis_io::{Basis4Elem,BasInfo};
@@ -48,6 +52,7 @@ pub fn get_basis_name(ang: usize, ctype: &CintType, index: usize) -> String {
 }
 
 #[derive(Clone)]
+#[pyclass]
 /// # Molecule
 /// `Molecule` contains all basic information of the molecule in the calculation task
 /// self.ctrl:         include the input keywords and many derived keywors to control the calculation task
@@ -64,18 +69,26 @@ pub fn get_basis_name(ang: usize, ctype: &CintType, index: usize) -> String {
 /// self.cint_*:       all these fields are the interface to ```libcint```
 /// self.cint_type:    CintType::Spheric or CintType::Cartesian
 pub struct Molecule {
+    #[pyo3(get, set)]
     pub ctrl: InputKeywords,
     //pub bas : Vec<Basis4Elem>,
     //pub auxbas : Vec<Basis4Elem>,
+    #[pyo3(get, set)]
     pub geom : GeomCell,
+    #[pyo3(get, set)]
     pub spin_channel: usize,
     // exchange-correlation functionals
     pub xc_data: DFA4REST,
+    #[pyo3(get, set)]
     pub num_state: usize,
+    #[pyo3(get, set)]
     pub num_basis: usize,
+    #[pyo3(get, set)]
     pub num_auxbas: usize,
+    #[pyo3(get, set)]
     pub num_elec : Vec<f64>,
     // for frozen-core pt2, rpa and so forth
+    #[pyo3(get, set)]
     pub start_mo : usize,
     pub basis4elem: Vec<Basis4Elem>,
     // fdqc_bas: store information of each basis functions
@@ -100,11 +113,11 @@ pub struct Molecule {
 }
 
 impl Molecule {
-    pub fn new() -> Molecule {
+    pub fn init_mol() -> Molecule {
         Molecule {
-            ctrl:InputKeywords::new(),
+            ctrl:InputKeywords::init_ctrl(),
             xc_data: DFA4REST::new("hf",1, 0),
-            geom: GeomCell::new(),
+            geom: GeomCell::init_geom(),
             num_elec: vec![0.0,0.0,0.0],
             num_state: 0,
             num_basis: 0,
@@ -684,7 +697,7 @@ impl Molecule {
     }
 
     #[inline]
-    pub fn int_ij_matrixupper(&mut self,op_name: String) -> MatrixUpper<f64> {
+    pub fn int_ij_matrixupper(&self,op_name: String) -> MatrixUpper<f64> {
         let mut cur_op = op_name.clone();
         let mut cint_data = self.initialize_cint(false);
         if op_name == String::from("ovlp") {
@@ -1080,7 +1093,7 @@ impl Molecule {
 
         // we calculate the square roote of the inversion matrix: V^{-1/2}
         time_records.count_start("sqrt_matr");
-        aux_v = aux_v.lapack_power(-0.5, 1.0E-6).unwrap();
+        aux_v = aux_v.lapack_power(-0.5, AUXBAS_THRESHOLD).unwrap();
         time_records.count("sqrt_matr");
 
         // println!("Print out {} 2-center auxiliary coulomb integral elements", tmp_num);
@@ -1140,7 +1153,7 @@ impl Molecule {
 
         time_records.count_start("sqrt_matr");
         //// we calculate the square roote of the inversion matrix: V^{-1/2}
-        aux_v = aux_v.lapack_power(-0.5, 1.0E-6).unwrap();
+        aux_v = aux_v.lapack_power(-0.5, AUXBAS_THRESHOLD).unwrap();
         // we calculate the Cholesky decomposition L of the inversion matrix: L*L^{T}=V^{-1}
         //aux_v = aux_v.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
         time_records.count("sqrt_matr");
@@ -1243,7 +1256,7 @@ impl Molecule {
         // First the Cholesky decomposition `L` of the inverse of the auxiliary 2-center coulumb matrix: V=(\nu|\mu)
         time_records.count_start("aux_ij");
         let mut aux_v = self.int_ij_aux_columb();
-        aux_v = aux_v.lapack_power(-0.5, 1.0E-6).unwrap();
+        aux_v = aux_v.lapack_power(-0.5, AUXBAS_THRESHOLD).unwrap();
         //aux_v = aux_v.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
         time_records.count("aux_ij");
 
@@ -1363,8 +1376,8 @@ impl Molecule {
         utilities::omp_set_num_threads_wrapper(1);
         time_records.count_start("aux_ij");
         let mut aux_v = self.int_ij_aux_columb();
-        //aux_v = aux_v.lapack_power(-0.5, 1.0E-6).unwrap();
-        aux_v = aux_v.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
+        aux_v = aux_v.lapack_power(-0.5, AUXBAS_THRESHOLD).unwrap();
+        //aux_v = aux_v.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
         time_records.count("aux_ij");
 
         // Then, prepare the 3-center integrals: O_V = (ij|\nu), and multiple with `L`
@@ -1542,33 +1555,33 @@ pub fn count_frozen_core_states(n_frozen_shell: i32, elem: &Vec<String>) -> usiz
 
     elem.iter().for_each(|sn| {
         let formated_elem = crate::geom_io::formated_element_name(&sn);
-        let flag_first_row  = ELEM1ST.iter().fold(true, |acc, elem| acc || elem.eq(&formated_elem));
+        let flag_first_row  = ELEM1ST.iter().fold(false, |acc, elem| acc || elem.eq(&formated_elem));
         let flag_second_row = if flag_first_row {
             false
         } else {
-            ELEM2ND.iter().fold(true, |acc, elem| acc || elem.eq(&formated_elem))
+            ELEM2ND.iter().fold(false, |acc, elem| acc || elem.eq(&formated_elem))
         };
         let flag_third_row  = if flag_first_row || flag_second_row {
             false
         } else {
-            ELEM3RD.iter().fold(true, |acc, elem| acc || elem.eq(&formated_elem))
+            ELEM3RD.iter().fold(false, |acc, elem| acc || elem.eq(&formated_elem))
         };
         let flag_fourth_row = if flag_first_row || flag_second_row || flag_third_row {
             false
         } else {
-            ELEM4TH.iter().fold(true, |acc, elem| acc || elem.eq(&formated_elem))
+            ELEM4TH.iter().fold(false, |acc, elem| acc || elem.eq(&formated_elem))
         };
         let flag_fifth_row  = if flag_first_row || flag_second_row || flag_third_row || flag_fourth_row {
             false
         } else {
-            ELEM5TH.iter().fold(true, |acc, elem| acc || elem.eq(&formated_elem))
+            ELEM5TH.iter().fold(false, |acc, elem| acc || elem.eq(&formated_elem))
         };
         let flag_sixth_row  = if flag_first_row || flag_second_row || flag_third_row || flag_fourth_row || flag_fifth_row {
             false
         } else {
-            ELEM6TH.iter().fold(true, |acc, elem| acc || elem.eq(&formated_elem))
+            ELEM6TH.iter().fold(false, |acc, elem| acc || elem.eq(&formated_elem))
         };
-        let flag_tm = ELEMTMS.iter().fold(true, |acc, elem| acc || elem.eq(&formated_elem));
+        let flag_tm = ELEMTMS.iter().fold(false, |acc, elem| acc || elem.eq(&formated_elem));
 
         let n_frozen_shell_curr = if flag_tm {
             n_tm += 1;
