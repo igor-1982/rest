@@ -4,12 +4,13 @@
      # 设置Rayon和OpenMP的并行数，缺省为1
      num_threads =               4
      # 设置使用的电子结构方法，缺省为HF
-     xc =                        "rpa@pbe" 
+     xc =                        "b3lyp" 
+     post_correlation =         ["pt2", "sbge2", "rpa", "scsrpa"]
      frozen_core_postscf =       0
      frequency_points =          40
      # 设置（辅助）基组的路径。如果找不到该路径，则创建该路径，并从BSE下载
      # 注意：计算节点需支持连接外网。
-     basis_path =                "./cc-pVTZ"
+     basis_path =                "./cc-pVDZ"
      auxbas_path =               "./def2-SV(P)-JKFIT" 
      # 辅助基函数自动生成设置
      even_tempered_basis =       false
@@ -21,7 +22,7 @@
      use_dm_only =               true
      charge =                    0.0
      spin =                      1.0
-     spin_polarization =         true
+     spin_polarization =         false
      mixer =                     "diis"
      num_max_diis =              8
      start_diis_cycle =          1

@@ -2,7 +2,7 @@ use crate::molecule_io::Molecule;
 use crate::geom_io;
 use crate::basis_io;
 use crate::scf_io::SCF;
-use rest_tensors::{MatrixFull};
+use rest_tensors::MatrixFull;
 use rest_libcint::CINTR2CDATA;
 use rest_libcint::CintType;
 use std::borrow::BorrowMut;
@@ -83,28 +83,28 @@ pub fn gen_header(mol: &Molecule) -> String{
     header
 }
 
- pub fn gen_mo_info(scf_data: &SCF) -> String {
+pub fn gen_mo_info(scf_data: &SCF) -> String {
     let mut mo_info = "[MO]\n".to_owned();
     let energy = &scf_data.eigenvalues[0];
     let coeff = &scf_data.eigenvectors[0];
     let occup = &scf_data.occupation[0];
     coeff.iter_columns_full().zip(energy.iter().zip(occup.iter())).for_each(|(mo_co,(eig,occ))|{
         mo_info +=  " Sym=     1a\n Ene= ";
-        mo_info += &eig.to_string();
+        mo_info += &format!("{:16.8}",&eig);
         mo_info += "\n Spin= Alpha\n Occup= ";
-        mo_info += &occ.to_string();
+        mo_info += &format!("{:16.8}",&occ);
         mo_info += "\n";
         let num_ao = mo_co.len();
         mo_co.iter().zip(1..(num_ao+1)).for_each(|(ao_co,index)|{
             mo_info += " ";
-            mo_info += &index.to_string();
+            mo_info += &format!("{:5}",&index);
             mo_info += "      ";
-            mo_info += &ao_co.to_string();
+            mo_info += &format!("{:16.8}",&ao_co);;
             mo_info += "\n";
         });   
     });
     mo_info
- }
+}
 
 pub fn gen_molden(scf_data: &SCF) -> String {
     let mol = &scf_data.mol;
@@ -112,8 +112,9 @@ pub fn gen_molden(scf_data: &SCF) -> String {
     text += &gen_mo_info(scf_data);
     //println!("{}",&text);
 
-    let mut path = "src/post_scf_analysis/generated_file/".to_owned();
-    path +=  &mol.geom.name;
+    //let mut path = "src/post_scf_analysis/generated_file/".to_owned();
+    //let mut path = format!("{}.molden",scf_data.mol.ctrl.chkfile);
+    let mut path = mol.geom.name.clone();
     path += ".molden";
     let file = File::create(path);
     let mut file = LineWriter::new(file.unwrap());

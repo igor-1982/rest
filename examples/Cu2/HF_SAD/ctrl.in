@@ -1,19 +1,19 @@
 [ctrl]
      print_level =               1
-     xc =                        "hf"
-     basis_path =                "../../../basis-set-pool/cc-pVTZ"
+     xc =                        "x3lyp"
+     basis_path =                "../../../basis-set-pool/def2-SVP"
      basis_type =                "spheric"
      auxbas_path =               "../../../basis-set-pool/def2-SV(P)-JKFIT"
+     auxbas_type =               "spheric"
+     use_ri_symm =               true
      even_tempered_basis =       false
      etb_start_atom_number =     "1"
      etb_beta =                  "2.0"
      eri_type =                  "ri-v"
-     auxbas_type =               "spheric"
      initial_guess =             "hcore"
      # import the initial guess from a HDF5 file
-     guessfile =                 "none"
-     guessfile_type =            "hdf5"
-     chkfile =                   "none"
+     #chkfile =                   "init_guess.chk"
+     #chkfile_type =              "hdf5"
      charge =                    0.0
      spin =                      1.0
      spin_polarization =         false
@@ -21,22 +21,20 @@
      radial_grid_method =        "treutler"
      external_grids =            "none"
      mixer =                     "diis"
-     num_max_diis =              10
+     num_max_diis =              8
      start_diis_cycle =          1
-     mix_param =                 0.2
+     mix_param =                 0.01
      max_scf_cycle =             1000
-     scf_acc_rho =               1.0e-4
-     scf_acc_eev =               1.0e-3
-     scf_acc_etot =              1.0e-6
-     num_threads =               1
+     scf_acc_rho =               1.0e-6
+     scf_acc_eev =               1.0e-4
+     scf_acc_etot =              1.0e-8
+     num_threads =               4
 [geom]
      name = "Cu2"
      unit = "angstrom"
-     position = [
-                 '''
-                 Cu                 6.64063000    1.27799000    6.15738000
-                 Cu                 8.11653000    1.27763000    4.11665000
-                 '''
-     ]
+     position = '''
+ Cu                 6.64063000    1.27799000    6.15738000
+ Cu                 8.11653000    1.27763000    4.11665000
+  '''
 
 

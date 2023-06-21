@@ -336,6 +336,8 @@ pub fn etbs_gen_primitive(input: Vec<(usize, usize, f64, f64)>) -> Basis4Elem {
     let mut bas = Basis4Elem {
         electron_shells: vec![],
         references: None,
+        ecp_electrons: None,
+        ecp_potentials: None,
         global_index: (0,0),
     };
     
@@ -361,6 +363,8 @@ pub fn etbs_gen_contracted(input: Vec<(usize, usize, f64, f64)>) -> Basis4Elem {
     let mut bas = Basis4Elem {
         electron_shells: vec![],
         references: None,
+        ecp_electrons: None,
+        ecp_potentials: None,
         global_index: (0,0),
     };
 

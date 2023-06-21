@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":[["close_shell_eij_serial",""],["close_shell_sbge2_rayon",""],["iterator_close_shell_eij_serial",""],["iterator_open_shell_eij_serial",""],["open_shell_eij_serial",""],["open_shell_sbge2_rayon",""]]};

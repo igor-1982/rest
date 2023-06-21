@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":[["coordinates","Lebedev grid coordinates."],["offsets","Determine the offset according to the given Lebedev grid number."],["weights","Lebedev grid weights."]]};

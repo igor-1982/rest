@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":[["gen_box",""],["gen_coords",""],["gen_delta",""],["gen_xs",""],["get_cube",""],["tabulated_ao_fig",""]]};

@@ -14,8 +14,11 @@ use std::collections::HashMap;
 use std::fmt::format;
 use std::fs::{File, self, create_dir_all, read_dir};
 use std::io::{Write, copy, Cursor};
+use crate::basis_io::Basis4Elem;
 use crate::geom_io::{GeomCell, get_mass_charge};
 use array_tool::vec::{self, Intersect};
+
+use super::Basis4ElemRaw;
 
 //use super::Basis4Elem;
 
@@ -24,37 +27,38 @@ use array_tool::vec::{self, Intersect};
 /// stores basis set information for certain elements.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Info {
-    pub elements: HashMap<String, Basis>,
+    //pub elements: HashMap<String, Basis>,
+    pub elements: HashMap<String, Basis4ElemRaw>,
  }
 
 
-/// This structure works to hold basis set information for certain elements. It contains two fields, 
-/// 'electron_shells' and 'references'. Similar to Structure [`crate::basis_io::Basis4Elem`].
- #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Basis {
-    electron_shells: Vec<Shell>,
-    references: Vec<Refs>,
- }
+///// This structure works to hold basis set information for certain elements. It contains two fields, 
+///// 'electron_shells' and 'references'. Similar to Structure [`crate::basis_io::Basis4Elem`].
+// #[derive(Serialize, Deserialize, Debug, Clone)]
+//pub struct Basis {
+//    electron_shells: Vec<Shell>,
+//    references: Vec<Refs>,
+// }
+//
+///// This structure works to hold certain electron shell information for certain elements. It contains five fields, 
+///// 'function_type', 'region', 'angular_momentum', 'exponents' and 'coefficients'. Typically one Shell only holds the electron
+///// shell for only one angular momentum. Similar to Structure [`crate::basis_io::BasCell`].
+// #[derive(Serialize, Deserialize, Debug, Clone)]
+//pub struct Shell {
+//    function_type: String,
+//    region: String,
+//    angular_momentum: Vec<usize>,
+//    exponents: Vec<String>,
+//    coefficients: Vec<Vec<String>>,
+//}
 
-/// This structure works to hold certain electron shell information for certain elements. It contains five fields, 
-/// 'function_type', 'region', 'angular_momentum', 'exponents' and 'coefficients'. Typically one Shell only holds the electron
-/// shell for only one angular momentum. Similar to Structure [`crate::basis_io::BasCell`].
- #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Shell {
-    function_type: String,
-    region: String,
-    angular_momentum: Vec<usize>,
-    exponents: Vec<String>,
-    coefficients: Vec<Vec<String>>,
-}
-
-/// This structure works to hold certain reference information for certain elements. It contains two fields, 
-/// reference_description and reference_keys. Similar to Structure [`crate::basis_io::RefCell`].
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Refs {
-    reference_description: String,
-    reference_keys: Vec<String>,
-}
+///// This structure works to hold certain reference information for certain elements. It contains two fields, 
+///// reference_description and reference_keys. Similar to Structure [`crate::basis_io::RefCell`].
+//#[derive(Serialize, Deserialize, Debug, Clone)]
+//pub struct Refs {
+//    reference_description: String,
+//    reference_keys: Vec<String>,
+//}
 
 /// This function returns the matching atom number to the input element name. Deprecated due to low efficiency.
 /// Alternative method is [`crate::geom_io::get_mass_charge`].
@@ -381,7 +385,7 @@ pub fn bse_auxbas_getter_v2(basis_set: &String, cell: &GeomCell, path: &String, 
 #[deprecated(note = "Not stable for basis sets other than cc type")]
 pub fn basis_modifier(basis_path: &String) {
     let file_content = fs::read_to_string(basis_path).unwrap();
-    let origin_basis = serde_json::from_str::<Basis>(&file_content).unwrap();
+    let origin_basis = serde_json::from_str::<Basis4ElemRaw>(&file_content).unwrap();
     let mut modified_basis = origin_basis.clone();
 
     let mut modify_coord: Vec<(usize, usize, usize)> = vec![]; // (shell number, row number, line number)
@@ -488,9 +492,10 @@ fn identifier() {
 
 #[test]
 fn final_test1() {
-    let tmp_path = String::from("/share/home/tygao/REST/BasisSets/cc-pVTZ");
+    //let tmp_path = String::from("/share/home/tygao/REST/BasisSets/cc-pVTZ");
+    let tmp_path = String::from("/home/igor/Documents/Package-Pool/rest_workspace/rest/basis-set-pool/def2-TZVP");
     let cint_type = CintType::Spheric;
-    let atm_elem = String::from("Cl");
+    let atm_elem = String::from("Au");
     let re = Regex::new(r"/{1}[^/]*$").unwrap();
     let cap = re.captures(&tmp_path).unwrap();
     let basis_name = cap[0][1..].to_string();

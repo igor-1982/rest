@@ -1,0 +1,47 @@
+[ctrl]
+     # 设置程序输出的程度，缺省为1
+     print_level =               1
+     # 设置Rayon和OpenMP的并行数，缺省为1
+     num_threads =               6
+     # 设置使用的电子结构方法，缺省为HF
+     xc =                        "x3lyp" 
+     # 设置（辅助）基组的路径。如果找不到该路径，则创建该路径，并从BSE下载
+     # 注意：计算节点需支持连接外网。
+     basis_path =                "./cc-pVDZ"
+     basis_type =                "spheric"
+     auxbas_path =               "./cc-pVDZ-RIFIT" 
+     auxbas_type =               "spheric"
+     # 辅助基函数自动生成设置
+     even_tempered_basis =       false
+     etb_start_atom_number =     1
+     etb_beta =                  1.0
+     # 使用resolution-of-identity (RI)技术处理四中心积分（缺省）
+     eri_type =                  "isdf_full"
+     isdf_k_mu =                 15
+     use_ri_symm =               false
+     use_dm_only =               true
+     charge =                    0.0
+     spin =                      1.0
+     spin_polarization =         false
+     mixer =                     "diis"
+     num_max_diis =              8
+     start_diis_cycle =          1
+     mix_param =                 0.6
+     max_scf_cycle =             100
+     scf_acc_rho =               1.0e-5
+     scf_acc_eev =               1.0e-5
+     scf_acc_etot =              1.0e-8
+     initial_guess =             "vsap"
+     chkfile =                   "none"
+     fchk =                      false
+     pruning =                   "nwchem"
+     radial_grid_method =        "treutler"
+     external_grids =            "external_2_0_a.json"
+
+[geom]
+     name = "CO"
+     unit = "angstrom"
+     position = '''
+        C 0.00000 0.0000  0.0000 
+        O 0.00000 0.0000  1.3000 '''
+

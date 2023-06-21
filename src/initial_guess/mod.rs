@@ -1,4 +1,4 @@
-use tensors::{MatrixFull, MatrixUpper};
+use tensors::{MatrixFull, MatrixUpper, BasicMatrix};
 
 use crate::{molecule_io::Molecule, scf_io::SCF, dft::Grids};
 
@@ -19,7 +19,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
         // for DFT methods, it needs the eigenvectors to generate the hamiltoniam. In consequence, we use the hf method to prepare the eigenvectors from the guess dm
         scf_data.generate_hf_hamiltonian_for_guess();
         //scf_data.generate_hf_hamiltonian();
-        if scf_data.mol.ctrl.print_level>0 {println!("Initial guess HF energy: {:16.8}", scf_data.evaluate_hf_total_energy())};
+        if scf_data.mol.ctrl.print_level>0 {println!("Initial guess energy: {:16.8}", scf_data.evaluate_hf_total_energy())};
         scf_data.diagonalize_hamiltonian();
         scf_data.generate_density_matrix();
 
@@ -45,6 +45,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
         scf_data.generate_hf_hamiltonian();
     } else if scf_data.mol.ctrl.initial_guess.eq(&"sad") {
         scf_data.density_matrix = initial_guess_from_sad(&scf_data.mol);
+        //println!("debug: dm size: {:?}", scf_data.density_matrix[0].size());
         // for DFT methods, it needs the eigenvectors to generate the hamiltoniam. In consequence, we use the hf method to prepare the eigenvectors from the guess dm
         //for i in 0..scf_data.mol.spin_channel {
         //    println!("debug {}", if i==0 {"Alpha"} else {"Beta"});
@@ -53,7 +54,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
         //}
         scf_data.generate_hf_hamiltonian_for_guess();
         //scf_data.generate_hf_hamiltonian();
-        if scf_data.mol.ctrl.print_level>0 {println!("Initial guess HF energy: {:16.8}", scf_data.evaluate_hf_total_energy())};
+        if scf_data.mol.ctrl.print_level>0 {println!("Initial guess energy: {:16.8}", scf_data.evaluate_hf_total_energy())};
         scf_data.diagonalize_hamiltonian();
         scf_data.generate_density_matrix();
     // generate the initial guess from hcore
@@ -112,7 +113,7 @@ pub fn initial_guess_from_hdf5chk(mol: &Molecule) -> ([MatrixFull<f64>;2],[Vec<f
 
         tmp_eigenvalues[i]=buf02[ (0+i)*mol.num_state..(1+i)*mol.num_state].to_vec();
     });
-    if mol.ctrl.print_level>1 {
+    if mol.ctrl.print_level>3 {
         (0..mol.spin_channel).into_iter().for_each(|i| {
             tmp_eigenvectors[i].formated_output(5, "full");
             println!("eigenval {:?}", &tmp_eigenvalues[i]);

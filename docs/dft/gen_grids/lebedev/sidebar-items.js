@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":[["angular_grid",""],["get_closest_num_angular",""],["valid_input_values",""]]};

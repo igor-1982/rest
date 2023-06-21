@@ -1,15 +1,11 @@
 Cargo.lock                                                                                                                                                                   
-<<<<<<< HEAD
-basis-set-pool/
-python_tests/
-debug_logs/
-.gitignore
+/basis-set-pool/
+/python_tests/
+/debug_logs/
 *.log
-examples/
+/examples/
 *.py
-=======
 *.so
 bse_pool
 /examples/WFA/fchk/*chk
 /examples/WFA/fchk/*log
->>>>>>> 68dea511e07c8fe2c4eddcb603a9bed8fd1a67a1

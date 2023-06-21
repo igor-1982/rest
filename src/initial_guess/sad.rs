@@ -1,31 +1,23 @@
-use tensors::MatrixFull;
+use tensors::{MatrixFull, BasicMatrix};
 use crate::molecule_io::Molecule;
 use crate::ctrl_io::InputKeywords;
 use crate::geom_io::{GeomCell, formated_element_name};
 use crate::scf_io::scf;
+use std::collections::HashMap;
 
 pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
-    let mut elem_name: Vec<String> = vec![];
-    let mut dms_alpha: Vec<MatrixFull<f64>> = vec![];
-    let mut dms_beta: Vec<MatrixFull<f64>> = vec![];
+    //let mut elem_name: Vec<String> = vec![];
+    //let mut dms_alpha: Vec<MatrixFull<f64>> = vec![];
+    //let mut dms_beta: Vec<MatrixFull<f64>> = vec![];
+    let mut atom_dms: HashMap<String, Vec<MatrixFull<f64>>> = HashMap::new();
+
     mol.geom.elem.iter().for_each(|ielem| {
-        let mut index = 0;
+        if let None = &mut atom_dms.get(&ielem.clone()) {
 
-        //check if the dm of the given element available.
-        let flag =  elem_name.iter().enumerate()
-        .fold(false, |flag, (j,jelem)| {
-            if jelem.eq(ielem) {
-                index = j;
-                true
-            } else {
-                flag
-            }
-        });
 
-        if ! flag {
             if mol.ctrl.print_level>0 {println!("Generate SAD of {}", &ielem)};
 
-            elem_name.push(ielem.to_string());
+            //elem_name.push(ielem.to_string());
 
             let mut atom_ctrl = InputKeywords::init_ctrl();
             atom_ctrl.xc = String::from("hf");
@@ -37,7 +29,7 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
             atom_ctrl.num_threads = Some(1);
             atom_ctrl.mixer = "diis".to_string();
             atom_ctrl.initial_guess = "hcore".to_string();
-            atom_ctrl.print_level = 0;
+            atom_ctrl.print_level = 1;
             atom_ctrl.atom_sad = true;
             atom_ctrl.charge = 0.0_f64;
             let (spin, spin_channel, spin_polarization) = ctrl_setting_atom_sad(ielem);
@@ -47,7 +39,6 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
             //atom_ctrl.spin = 1.0;
             //atom_ctrl.spin_channel = 1;
             //atom_ctrl.spin_polarization = false;
-
             let mut atom_geom = GeomCell::init_geom();
             atom_geom.name = ielem.to_string();
             atom_geom.position = MatrixFull::from_vec([3,1], vec![0.000,0.000,0.000]).unwrap();
@@ -57,30 +48,72 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
 
             let mut atom_scf = scf(atom_mol).unwrap();
 
+            println!("debug: elem prepared in this loop: {}, size: {:?}", ielem, atom_scf.density_matrix[0].size());
+
+
+            let mut dms: Vec<MatrixFull<f64>> = vec![];
+
             if atom_scf.mol.spin_channel == 1 {
                 let dm = atom_scf.density_matrix[0].clone()*0.5;
-                dms_alpha.push(dm.clone());
-                dms_beta.push(dm);
+                dms.push(dm.clone());
+                dms.push(dm);
             } else {
-                dms_alpha.push(atom_scf.density_matrix[0].clone());
-                dms_beta.push(atom_scf.density_matrix[1].clone());
+                dms.push(atom_scf.density_matrix[0].clone());
+                dms.push(atom_scf.density_matrix[1].clone());
             }
-        } else {
-            let dm = dms_alpha[index].clone();
-            dms_alpha.push(dm);
-            let dm = dms_beta[index].clone();
-            dms_beta.push(dm);
-        }
 
+            atom_dms.insert(ielem.clone(),dms);
+        }
     });
 
-    if mol.spin_channel == 1{
-        vec![block_diag(&dms_alpha)+block_diag(&dms_beta), MatrixFull::empty()]
+    let (dms_alpha, dms_beta) = block_diag_specific(&atom_dms, &mol.geom.elem);
+
+    if mol.spin_channel == 1 {
+        vec![dms_alpha+dms_beta, MatrixFull::empty()]
+    } else if mol.spin_channel == 2 {
+        vec![dms_alpha, dms_beta]
     } else {
-        vec![block_diag(&dms_alpha), block_diag(&dms_beta)]
+        vec![]
     }
 
+    //if mol.spin_channel == 1{
+    //    vec![block_diag(&dms_alpha)+block_diag(&dms_beta), MatrixFull::empty()]
+    //} else {
+    //    vec![block_diag(&dms_alpha), block_diag(&dms_beta)]
+    //}
 
+
+}
+
+pub fn block_diag_specific(atom_dms: &HashMap<String,Vec<MatrixFull<f64>>>,elem: &Vec<String>) -> (MatrixFull<f64>, MatrixFull<f64>) {
+    let mut atom_size = 0;
+    elem.iter().for_each(|ielem| {
+        if let Some(dm) = &atom_dms.get(ielem) {
+            atom_size += &dm[0].size[0];
+        } else {
+            panic!("Error: Unknown elemement ({}), for which the density matrix is not yet prepared", ielem);
+        }
+    });
+    let mut dms_alpha = MatrixFull::new([atom_size;2], 0.0);
+    let mut dms_beta = MatrixFull::new([atom_size;2], 0.0);
+    //let dms_alpha = dms.get_mut(0).unwrap();
+    //let dms_beta = dms.get_mut(1).unwrap();
+    let mut ao_index = 0;
+    elem.iter().for_each(|ielem| {
+        if let Some(dm_atom_vec) = &atom_dms.get(ielem) {
+            let dm_atom_alpha = dm_atom_vec.get(0).unwrap();
+            let dm_atom_beta  = dm_atom_vec.get(1).unwrap();
+            let loc_length = dm_atom_alpha.size[0];
+
+            dms_alpha.copy_from_matr(ao_index..ao_index+loc_length, ao_index..ao_index+loc_length,
+                dm_atom_alpha, 0..loc_length, 0..loc_length);
+            dms_beta.copy_from_matr(ao_index..ao_index+loc_length, ao_index..ao_index+loc_length,
+                dm_atom_beta, 0..loc_length, 0..loc_length);
+            ao_index += loc_length;
+        }
+    });
+
+    (dms_alpha, dms_beta)
 }
 
 pub fn block_diag(dms: &Vec<MatrixFull<f64>>) -> MatrixFull<f64>{

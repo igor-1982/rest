@@ -10,6 +10,7 @@ use tensors::BasicMatrix;
 use tensors::matrix_blas_lapack::{_dsymm, _dgemm};
 
 use crate::ri_pt2::sbge2::{close_shell_sbge2_rayon,open_shell_sbge2_rayon};
+use crate::ri_rpa::scsrpa::evaluate_osrpa_correlation_rayon;
 use crate::scf_io::determine_ri3mo_size_for_pt2_and_rpa;
 use crate::molecule_io::Molecule;
 use crate::scf_io::SCF;
@@ -39,7 +40,7 @@ pub fn xdh_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
         crate::dft::DFAFamily::PT2 => "PT2".to_string(),
         crate::dft::DFAFamily::SBGE2 => "SBGE2".to_string(),
         crate::dft::DFAFamily::RPA => "RPA".to_string(),
-        crate::dft::DFAFamily::SCSRPA => "RPA".to_string(),
+        crate::dft::DFAFamily::SCSRPA => "SCSRPA".to_string(),
         _ => panic!("Error: No post-scf calculation is needed"),
     };
     println!("==========================================");
@@ -55,31 +56,49 @@ pub fn xdh_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
         0.0_f64
     ];
 
+    let mut timerecords = TimeRecords::new();
+
+    timerecords.new_item("xc_energy", "for x_hf, xc_scf, xc_xdh");
+    timerecords.new_item("c_r5dft", "for advanced correlations");
+    timerecords.new_item("ao2mo", "for the generation of RI3MO");
+
+
+    timerecords.count_start("xc_energy");
     let x_energy = scf_data.evaluate_exact_exchange_ri_v();
     let xc_energy_scf = scf_data.evaluate_xc_energy(0);
     let xc_energy_xdh = scf_data.evaluate_xc_energy(1);
+    timerecords.count("xc_energy");
+    let dfa_family_pos = scf_data.mol.xc_data.dfa_family_pos.clone().unwrap();
 
     if scf_data.mol.ctrl.use_ri_symm {
+        timerecords.count_start("ao2mo");
         let (occ_range, vir_range) = determine_ri3mo_size_for_pt2_and_rpa(&scf_data);
+        timerecords.count("ao2mo");
         if scf_data.mol.ctrl.print_level>1 {
             println!("generate RI3MO only for occ_range:{:?}, vir_range:{:?}", &occ_range, &vir_range)
         };
         scf_data.generate_ri3mo_rayon(vir_range, occ_range);
-        let dfa_family_pos = scf_data.mol.xc_data.dfa_family_pos.clone().unwrap();
+        timerecords.count_start("c_r5dft");
         pt2_c = if scf_data.mol.spin_channel == 1 {
             match  dfa_family_pos {
                 crate::dft::DFAFamily::PT2 => close_shell_pt2_rayon(&scf_data).unwrap(),
                 crate::dft::DFAFamily::SBGE2 => close_shell_sbge2_rayon(scf_data).unwrap(),
+                crate::dft::DFAFamily::SCSRPA => evaluate_osrpa_correlation_rayon(scf_data).unwrap(),
                 _ => [0.0,0.0,0.0]
             }
         } else {
             match  dfa_family_pos {
                 crate::dft::DFAFamily::PT2 => open_shell_pt2_rayon(&scf_data).unwrap(),
                 crate::dft::DFAFamily::SBGE2 => open_shell_sbge2_rayon(scf_data).unwrap(),
+                crate::dft::DFAFamily::SCSRPA => {
+                    let c_rpa = evaluate_osrpa_correlation_rayon(scf_data).unwrap();
+                    //[c_rpa[0], c_rpa[1], c_rpa[0]-c_rpa[1]]
+                    c_rpa
+                },
                 _ => [0.0,0.0,0.0]
             }
-            
-        }
+        };
+        timerecords.count("c_r5dft");
     } else {
         pt2_c = if scf_data.mol.spin_channel == 1 {
             close_shell_pt2(&scf_data).unwrap()
@@ -87,6 +106,17 @@ pub fn xdh_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
             open_shell_pt2(&scf_data).unwrap()
         };
     };
+
+    if scf_data.mol.ctrl.xc.eq(&"scsrpa") {
+        let pt2_c_old = pt2_c.clone();
+        pt2_c[2] = pt2_c[0] - pt2_c[1];
+    };
+    println!("----------------------------------------------------------------------");
+    println!("{:16}: {:>16}, {:>16}, {:>16}","Methods","Total Corr", "OS Corr", "SS Corr");
+    println!("----------------------------------------------------------------------");
+    println!("{:16}: {:16.8}, {:16.8}, {:16.8}", 
+        dfa_family_pos.to_name(), pt2_c[0], pt2_c[1], pt2_c[2]);
+    println!("----------------------------------------------------------------------");
     //println!("{:?}",&pt2_c);
     let hy_coeffi_scf = scf_data.mol.xc_data.dfa_hybrid_scf;
     let hy_coeffi_xdh = if let Some(coeff) = scf_data.mol.xc_data.dfa_hybrid_pos {coeff} else {0.0};
@@ -98,11 +128,15 @@ pub fn xdh_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
                             x_energy * (hy_coeffi_xdh-hy_coeffi_scf) +
                             xc_energy_xdh-xc_energy_scf +
                             xdh_pt2_energy;
-    println!("E[{:5}]=: {:16.8} Ha, Ex[HF]: {:16.8} Ha, Ec[PT2]: {:16.8} Ha", 
+    println!("E[{:5}]=: {:16.8} Ha, Ex[HF]: {:16.8} Ha, Ec[{:5}]: {:16.8} Ha", 
         scf_data.mol.ctrl.xc.to_uppercase(), 
         total_energy, 
         x_energy, 
+        postscf_method,
         pt2_c[0]);
+
+    if scf_data.mol.ctrl.print_level>1 {timerecords.report_all()};
+
     Ok(total_energy)
 }
 

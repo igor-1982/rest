@@ -168,6 +168,29 @@ pub fn balancing(num_tasks:usize, num_threads: usize) -> Vec<Range<usize>> {
     distribute_vec
 }
 
+/// To balance the parallel tasks for preparing the symmetric data, like rimatr, ovlp (matrixupper), and so forth
+//pub fn balancing_2(num_bas_shell: usize, num_threads: usize) {
+//    let mut reset = false;
+//    let mut num_tasks = 0;
+//    let mut task_start = 0;
+//    let mut task_len = 0;
+//    let mut tasks: Vec<Range<usize>> = vec![];
+//    (0..num_bas_shell).for_each(|i| {
+//        if num_tasks <=num_bas_shell {
+//            num_tasks += i;
+//        } else {
+//            num_tasks = 0;
+//
+//        }
+//
+//    });
+//
+//  //let n_baspair = (num_basis+1)*num_basis/2;
+//  //let num_loc_tasks = n_baspair/num_threads;
+//  //let num_left = n_baspair%num_threads;
+//
+//}
+
 pub fn convert_scientific_notation_to_fortran_format(n: &String) -> String {
     let re = Regex::new(r"(?P<num> *-?\d.\d*)[E|e](?P<exp>-?\d{1,2})").unwrap();
     let o_len = n.len();

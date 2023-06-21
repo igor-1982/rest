@@ -1,3 +1,5 @@
+pub mod scsrpa;
+
 use std::num;
 use std::sync::mpsc::channel;
 
@@ -7,7 +9,7 @@ use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use rest_tensors::{TensorOpt,RIFull, MatrixFull, TensorSlice};
 use rest_tensors::matrix_blas_lapack::{_dgemm_nn,_dgemm_tn};
 use libm::{exp,cos};
-use serde::__private::de;
+//use serde::__private::de;
 use tensors::ParMathMatrix;
 use tensors::matrix_blas_lapack::_dgemm;
 
@@ -56,7 +58,8 @@ pub fn rpa_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
         };
         scf_data.generate_ri3mo_rayon(vir_range, occ_range);
 
-        rpa_c_energy = evaluate_rpa_correlation(scf_data).unwrap();
+        rpa_c_energy = evaluate_rpa_correlation_rayon(scf_data).unwrap();
+        //rpa_c_energy = evaluate_rpa_correlation(scf_data).unwrap();
 
     } else {
         let mut rimo: Vec<RIFull<f64>> = if let Some(riao)=&scf_data.ri3fn {
@@ -81,9 +84,10 @@ pub fn rpa_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
             rpa_c_energy += rpa_c_integrand*weight
 
         });
+
+        rpa_c_energy = rpa_c_energy*0.5/PI;
     }
 
-    rpa_c_energy = rpa_c_energy*0.5/PI;
 
     let hy_coeffi_scf = scf_data.mol.xc_data.dfa_hybrid_scf;
     let hy_coeffi_pot = if let Some(coeff) = scf_data.mol.xc_data.dfa_hybrid_pos {coeff} else {0.0};
@@ -347,51 +351,35 @@ fn evaluate_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Result<MatrixF
             //let mut rimo = riao.ao2mo(eigenvector).unwrap();
             let mut elec_pair: Vec<[usize;2]> = vec![];
             for j_state in start_mo..num_occu {
-                for k_state in lumo..num_state {
-                    elec_pair.push([j_state,k_state])
+                    let j_state_eigen = eigenvalues[j_state];
+                    let j_state_occ = occ_numbers[j_state];
+                    let j_loc_state = j_state - occ_range.start;
+                    let rimo_j = ri3mo.get_reducing_matrix(j_loc_state).unwrap();
+
+                    let mut tmp_matrix = MatrixFull::new([num_auxbas,vir_range.len()],0.0);
+
+                    for k_state in lumo..num_state {
+
+                    let k_state_eigen = eigenvalues.get(k_state).unwrap();
+                    let k_state_occ = occ_numbers.get(k_state).unwrap();
+                    let zeta = num_spin*(j_state_eigen-k_state_eigen) /
+                        ((j_state_eigen-k_state_eigen).powf(2.0) + freq*freq)*
+                        (j_state_occ-k_state_occ);
+
+                    let k_loc_state = k_state - vir_range.start;
+                    let from_iter = ri3mo.get_slices(0..num_auxbas, k_loc_state..k_loc_state+1, j_loc_state..j_loc_state+1);
+                    let to_iter = tmp_matrix.iter_submatrix_mut(0..num_auxbas,k_loc_state..k_loc_state+1);
+                    to_iter.zip(from_iter).for_each(|(to, from)| {
+                        *to = from * zeta
+                    });
                 }
-            };
-            //let (sender,receiver) = channel();
-            elec_pair.iter().for_each(|i_pair| {
-
-                //let mut loc_polar_freq = MatrixFull::new([num_auxbas,num_auxbas],0.0);
-                let j_state = i_pair[0];
-                let k_state = i_pair[1];
-
-                let j_state_eigen = eigenvalues[j_state];
-                let j_state_occ = occ_numbers[j_state];
-                let mut tmp_matrix = MatrixFull::new([num_auxbas,vir_range.len()],0.0);
-
-                let j_loc_state = j_state - occ_range.start;
-                let rimo_j = ri3mo.get_reducing_matrix(j_loc_state).unwrap();
-
-                let k_state_eigen = eigenvalues.get(k_state).unwrap();
-                let k_state_occ = occ_numbers.get(k_state).unwrap();
-                let zeta = num_spin*(j_state_eigen-k_state_eigen) /
-                    ((j_state_eigen-k_state_eigen).powf(2.0) + freq*freq)*
-                    (j_state_occ-k_state_occ);
-
-                let k_loc_state = k_state - vir_range.start;
-                let from_iter = ri3mo.get_slices(0..num_auxbas, k_loc_state..k_loc_state+1, j_loc_state..j_loc_state+1);
-                let to_iter = tmp_matrix.iter_submatrix_mut(0..num_auxbas,k_loc_state..k_loc_state+1);
-                to_iter.zip(from_iter).for_each(|(to, from)| {
-                    *to = from * zeta
-                });
                 _dgemm(
                     &tmp_matrix, (0..num_auxbas, 0..vir_range.len()), 'N',
                     &rimo_j, (0..num_auxbas, 0..vir_range.len()), 'T',
                     &mut polar_freq, (0..num_auxbas, 0..num_auxbas),
                     1.0, 1.0
                 );
-
-                //s.send(loc_polar_freq).unwrap()
-
-            });
-
-            //receiver.into_iter().for_each(|loc_polar_freq| {
-            //    polar_freq += loc_polar_freq
-            //})
-
+            }
         }
     } else {
         panic!("RI3MO should be initialized before the RPA calculations")

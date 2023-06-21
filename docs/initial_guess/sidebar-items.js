@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":[["initial_guess",""],["initial_guess_from_hdf5chk",""],["initial_guess_from_hdf5guess",""],["initial_guess_from_vsap",""]],"mod":[["sad",""],["sap",""]]};
