@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":[["F",""]],"static":[["COORDINATES","Lebedev grid coordinates."]]};

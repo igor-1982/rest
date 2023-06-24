@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":[["BOHR","Bohr radius."],["SMALL",""]],"static":[["BRAGG0","Bragg radii for elements."],["LEBEDEV_NGRID","Lebedev angular grid number."],["SG1RADII","SG-1 radii for the first three periods."]]};

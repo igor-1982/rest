@@ -220,3 +220,16 @@ pub const ATOM_CONFIGURATION: [[usize; 4]; 119] = [
     [14,35,40,28],     //117  Ts
     [14,36,40,28],     //118  Og
 ];
+
+// for the bas index - libcint
+pub const BAS_ATM: usize = 0;
+pub const BAS_ANG: usize = 1;
+pub const BAS_PRM: usize = 2;
+pub const BAS_CTR: usize = 3;
+
+// for the atm index - libcint 
+pub const ATM_NUC: usize = 0;
+pub const ATM_ENV: usize = 1;
+
+// for ECP
+pub const ECP_LMAX: i32 = 5;

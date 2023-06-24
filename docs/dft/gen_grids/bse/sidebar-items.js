@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":[["ang_min_and_max","Download basis set information from www.basissetexchange.org to determine alpha_max and alpha_min."]],"struct":[["Basis",""],["ElementInfo",""],["Shell",""]]};

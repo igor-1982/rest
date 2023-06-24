@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":[["get_bragg_angstrom","Get bragg radius of the given atom."]]};

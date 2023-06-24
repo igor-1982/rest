@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":[["offsets","Determine the offset according to the given Lebedev grid number."]]};

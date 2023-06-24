@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":[["nwchem_prune","Pruning method provided by NWChem."],["sg1_prune","Standard Grid 1 according to P. M. W. Gill, B. G. Johnson, J. A. Pople. Chemical Physics Letters 209, 506-512 (1993). Reference can be found here."]]};

@@ -107,10 +107,10 @@ fn main() -> anyhow::Result<()> {
 
     let mut scf_data = scf_io::scf(mol).unwrap();
 
-    let mut grad_data = Gradient::build(&scf_data.mol, &scf_data);
+    //let mut grad_data = Gradient::build(&scf_data.mol, &scf_data);
 
     //grad_data.calc_j(&scf_data.density_matrix);
-    print!("occ, {:?}", scf_data.occupation);
+    //print!("occ, {:?}", scf_data.occupation);
 
     time_mark.count("SCF");
 

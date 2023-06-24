@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":[["fciqmc_dump",""],["post_scf_correlation","NOTE: only support symmetric RI-V tensors"],["post_scf_output",""],["print_out_dfa",""],["save_chkfile",""],["save_geometry",""],["save_hamiltonian",""],["save_overlap",""]],"mod":[["cube_build",""],["molden_build",""],["rand_wf_real_space",""]]};

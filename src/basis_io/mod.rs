@@ -19,6 +19,7 @@ use crate::utilities;
 pub mod bse_downloader;
 pub mod basis_list;
 pub mod etb;
+pub mod ecp;
 use self::basic_math::{double_factorial, specific_double_factorial};
 
 //use crate::geom_io::GeomCell;
