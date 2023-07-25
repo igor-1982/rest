@@ -8,7 +8,7 @@ use super::becke_partitioning;
 use super::bragg;
 use super::bse;
 use super::lebedev;
-use super::prune::{nwchem_prune, sg1_prune};
+use super::prune::*;
 use super::radial;
 use super::parameters::LEBEDEV_NGRID;
 
@@ -130,15 +130,18 @@ pub fn atom_grid(
     let cz = center_coordinates_bohr[center_index].2;
 
     //get prune parameter
-    let prune_method: usize = {    
+    let prune_method: usize = {
         if pruning == String::from("sg1"){
             1
         }
         else if pruning == String::from("nwchem"){
             2
         }
-        else {
+        else if pruning == String::from("none") {
             0
+        } 
+        else {
+            3
         }
     };
 
@@ -146,16 +149,14 @@ pub fn atom_grid(
     //rs: radial grid coordinate 
     //let mut ang_array = vec![0usize; rs.len()];
 
-    let ang_array = 
-    if prune_method == 1 {
-        sg1_prune(proton_charges[center_index].try_into().unwrap(), &rs, rs.len())
-    }
-    else if prune_method == 2 {
-        let n_ang = default_angular_num(proton_charges[center_index].try_into().unwrap(), level);
-        nwchem_prune(proton_charges[center_index].try_into().unwrap(), &rs, n_ang, rs.len())
-    }
-    else {
-        vec![0usize; rs.len()]
+    let ang_array = match prune_method 
+        {
+        1 => sg1_prune(proton_charges[center_index].try_into().unwrap(), &rs, rs.len()),
+        2 => {let n_ang = default_angular_num(proton_charges[center_index].try_into().unwrap(), level);
+             nwchem_prune(proton_charges[center_index].try_into().unwrap(), &rs, n_ang, rs.len())
+        },
+        0 => none_prune(proton_charges[center_index].try_into().unwrap(), rs.len(),level),
+        _ => vec![0usize; rs.len()],
     };
 
     //println!("ang array is {:?}", ang_array);

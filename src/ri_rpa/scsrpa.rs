@@ -3,11 +3,11 @@ use std::{sync::mpsc::channel, num};
 use num_traits::{abs, Float};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator, IndexedParallelIterator};
 use statrs::statistics::Max;
-use tensors::{MatrixFull, MathMatrix, BasicMatrix, matrix_blas_lapack::_dgemm_full};
+use tensors::{MatrixFull, MathMatrix, BasicMatrix};
 
 use crate::{scf_io::{SCF,scf}, utilities::{self, TimeRecords}};
 use crate::constants::{PI, E, INVERSE_THRESHOLD};
-use tensors::matrix_blas_lapack::{_dgemm,_dsyev};
+use tensors::matrix_blas_lapack::{_dgemm,_dsyev,_dgemm_full};
 
 use super::{trans_gauss_legendre_grids, gauss_legendre_grids, logarithmic_grid};
 

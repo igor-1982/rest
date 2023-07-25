@@ -5,7 +5,7 @@
 //! 
 //! [^1]: [P. M. W. Gill, B. G. Johnson, J. A. Pople. Chemical Physics Letters 209, 506-512 (1993)](https://doi.org/10.1016/0009-2614(93)80125-9).
 
-use super::parameters::{SG1RADII, BOHR, BRAGG0, LEBEDEV_NGRID};
+use super::{parameters::{SG1RADII, BOHR, BRAGG0, LEBEDEV_NGRID}, atom::default_angular_num};
 
 /// Standard Grid 1 according to _P. M. W. Gill, B. G. Johnson, J. A. Pople. Chemical Physics Letters 209, 506-512 (1993)_.<br>
 /// Reference can be found [here](https://doi.org/10.1016/0009-2614(93)80125-9).
@@ -162,3 +162,7 @@ pub fn nwchem_prune(nuc: usize, rads: &Vec<f64>, n_ang: usize, n_rad: usize) -> 
 
 }
 
+pub fn none_prune(nuc: usize, n_rad: usize, level: usize) -> Vec<usize> { 
+    let n_ang = default_angular_num(nuc, level);
+    return vec![n_ang;n_rad]
+}

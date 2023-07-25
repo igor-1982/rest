@@ -335,6 +335,9 @@ impl Molecule {
         let nbas = final_cint_bas.len() as i32;
         let mut cint_data = CINTR2CDATA::new();
         cint_data.set_cint_type(&self.cint_type);
+        println!("final atm = {:?}",final_cint_atm);
+        println!("final bas = {:?}",final_cint_bas);
+        println!("final env = {:?}",final_cint_env);
         cint_data.initial_r2c(&final_cint_atm, natm, &final_cint_bas, nbas, &final_cint_env);
 
         cint_data
