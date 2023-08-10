@@ -93,7 +93,7 @@ pub fn gen_header(mol: &Molecule) -> String{
         mo_info += &eig.to_string();
         mo_info += "\n Spin= Alpha\n Occup= ";
         mo_info += &occ.to_string();
-        mo_info += "\n";
+        mo_info += ".0\n";
         let num_ao = mo_co.len();
         mo_co.iter().zip(1..(num_ao+1)).for_each(|(ao_co,index)|{
             mo_info += " ";

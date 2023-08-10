@@ -78,6 +78,7 @@ static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 use anyhow;
 use crate::isdf::error_isdf;
 use crate::dft::DFA4REST;
+use crate::post_scf_analysis::mulliken::mulliken_pop;
 use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa};
 use crate::scf_io::scf;
 use time::{DateTime,Local};
@@ -101,6 +102,7 @@ fn main() -> anyhow::Result<()> {
 
 
     let mut mol = Molecule::build(ctrl_file)?;
+    println!("Molecule_name: {}", &mol.geom.name);
 
     let mut scf_data = scf_io::scf(mol).unwrap();
 
@@ -127,9 +129,10 @@ fn main() -> anyhow::Result<()> {
     //====================================
     post_scf_analysis::post_scf_analysis(&scf_data);
 
-    //let error_isdf = error_isdf(8..9, &scf_data);
+    //let error_isdf = error_isdf(12..20, &scf_data);
     //println!("k_mu:{:?}, abs_error: {:?}, rel_error: {:?}", error_isdf.0, error_isdf.1, error_isdf.2);
-
+    /* let mulliken = mulliken_pop(&scf_data);
+    println!("The result of mulliken population analysis is: {:?}", &mulliken); */
 
     if let Some(dft_method) = &scf_data.mol.xc_data.dfa_family_pos {
         match dft_method {

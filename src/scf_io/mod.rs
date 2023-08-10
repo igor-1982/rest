@@ -13,7 +13,7 @@ use std::{vec, fs};
 use rest_libcint::{CINTR2CDATA, CintType};
 use crate::geom_io::{GeomCell,MOrC, GeomUnit};
 use crate::basis_io::{Basis4Elem,BasInfo};
-use crate::isdf::prepare_for_ri_isdf;
+use crate::isdf::{prepare_for_ri_isdf, init_by_rho};
 //use crate::initial_guess::sad::sad_dm;
 use crate::molecule_io::{Molecule, generate_ri3fn_from_rimatr};
 use crate::tensors::{TensorOpt,TensorOptMut,TensorSlice};
@@ -28,6 +28,7 @@ use std::sync::{Mutex, Arc,mpsc};
 use std::thread;
 use crossbeam::{channel::{unbounded,bounded},thread::{Scope,scope}};
 use std::sync::mpsc::{channel, Receiver};
+use crate::dft::gen_grids::prune::prune_by_rho;
 //use blas_src::openblas::dgemm;
 mod addons;
 mod fchk;
@@ -48,6 +49,7 @@ pub struct SCF {
     //pub ijkl: Option<ERIFull<f64>>,
     pub ijkl: Option<ERIFold4<f64>>,
     pub ri3fn: Option<RIFull<f64>>,
+    pub ri3fn_isdf: Option<RIFull<f64>>,
     pub rimatr: Option<(MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>)>,
     pub ri3mo: Option<Vec<(RIFull<f64>,std::ops::Range<usize> , std::ops::Range<usize>)>>,
     #[pyo3(get,set)]
@@ -90,6 +92,7 @@ impl SCF {
             h_core: MatrixUpper::new(1,0.0),
             ijkl: None,
             ri3fn: None,
+            ri3fn_isdf: None,
             rimatr: None,
             ri3mo: None,
             eigenvalues: [vec![],vec![]],
@@ -245,7 +248,7 @@ impl SCF {
 
         time_mark.new_item("DFT Grids", "the generation of DFT grids");
         time_mark.count_start("DFT Grids");
-        new_scf.grids = if new_scf.mol.xc_data.is_dfa_scf() {
+        new_scf.grids = if new_scf.mol.xc_data.is_dfa_scf() || new_scf.mol.ctrl.use_isdf || new_scf.mol.ctrl.initial_guess == "vsap" {
             let grids = Grids::build(&new_scf.mol);
             if new_scf.mol.ctrl.print_level>0 {
                 println!("Grid size: {:}", grids.coordinates.len());
@@ -262,14 +265,57 @@ impl SCF {
         time_mark.count("Grids AO");
         
         // determine what kind of ri3fn is generated.
+
+        //// for debug
+        //if let Some(ri3fn) = &new_scf.rimatr {
+        //    //println!("debug ri3fn_symm 02");
+        //    //println!("generate ri3fn from rimatr");
+        //    new_scf.ri3fn = Some(generate_ri3fn_from_rimatr(&ri3fn.0,&ri3fn.1,&ri3fn.2))
+        //};
+
+        
+        // now prepare initial guess from different methods
+        initial_guess(&mut new_scf);
+
+        if ! new_scf.mol.ctrl.atom_sad && new_scf.mol.ctrl.print_level>4 {
+            println!("Initial density matrix:");
+            new_scf.density_matrix[0].formated_output(5, "full");
+            //println!("Occupation: {:?}", tmp_scf.occupation);
+        }
+
+
+        //1E-07: default
+        if new_scf.mol.ctrl.use_isdf {
+            new_scf.grids = Some(prune_by_rho(&mut new_scf.grids.unwrap(), &new_scf.density_matrix, new_scf.mol.spin_channel));
+            
+        };
+
         let isdf_full = new_scf.mol.ctrl.eri_type.eq("ri_v") && new_scf.mol.ctrl.use_isdf;
         let ri3fn_full = new_scf.mol.ctrl.use_auxbas && !new_scf.mol.ctrl.use_ri_symm;
         let ri3fn_symm = new_scf.mol.ctrl.use_auxbas && new_scf.mol.ctrl.use_ri_symm;
 
         time_mark.count_start("CInt");
-        new_scf.ri3fn = if ri3fn_full && !isdf_full {
+        /* new_scf.ri3fn = if ri3fn_full && !isdf_full {
             Some(new_scf.mol.prepare_ri3fn_for_ri_v_full_rayon())
         } else if ri3fn_full && isdf_full {
+            if let Some(grids) = &new_scf.grids {
+                Some(prepare_for_ri_isdf(new_scf.mol.ctrl.isdf_k_mu, &new_scf.mol, &grids))
+            } else {
+                None
+            }
+        } else {
+            None
+        }; */
+
+        new_scf.ri3fn = if ri3fn_full && !isdf_full {
+            Some(new_scf.mol.prepare_ri3fn_for_ri_v_full_rayon())
+        }else if isdf_full && new_scf.mol.ctrl.isdf_k_only{
+            Some(new_scf.mol.prepare_ri3fn_for_ri_v_full_rayon())
+        }else {
+            None
+        };
+        
+        new_scf.ri3fn_isdf = if ri3fn_full && isdf_full {
             if let Some(grids) = &new_scf.grids {
                 Some(prepare_for_ri_isdf(new_scf.mol.ctrl.isdf_k_mu, &new_scf.mol, &grids))
             } else {
@@ -290,27 +336,11 @@ impl SCF {
         };
         time_mark.count("CInt");
 
-        //// for debug
-        //if let Some(ri3fn) = &new_scf.rimatr {
-        //    //println!("debug ri3fn_symm 02");
-        //    //println!("generate ri3fn from rimatr");
-        //    new_scf.ri3fn = Some(generate_ri3fn_from_rimatr(&ri3fn.0,&ri3fn.1,&ri3fn.2))
-        //};
-
-        
-        // now prepare initial guess from different methods
-        initial_guess(&mut new_scf);
-
-        if ! new_scf.mol.ctrl.atom_sad && new_scf.mol.ctrl.print_level>4 {
-            println!("Initial density matrix:");
-            new_scf.density_matrix[0].formated_output(5, "full");
-            //println!("Occupation: {:?}", tmp_scf.occupation);
-        }
-
         time_mark.count("Overall");
         if new_scf.mol.ctrl.print_level>=2 {
             time_mark.report_all();
         }
+
 
         new_scf
     }
@@ -318,47 +348,15 @@ impl SCF {
     pub fn generate_occupation(&mut self) {
         if self.mol.ctrl.atom_sad {
             //self.generate_occupation_sad()
-            self.generate_occupation_integer()
+            //self.generate_occupation_integer()
+            let (occ,homo,lumo) = crate::initial_guess::sad::generate_occupation(self.mol.geom.elem.get(0).unwrap(),self.mol.num_state);
+            self.occupation = occ;
+            self.homo = homo;
+            self.lumo = lumo;
+            //println!("{:?}",self.occupation)
         } else {
             self.generate_occupation_integer()
         }
-    }
-
-    pub fn generate_occupation_sad(&mut self) {
-        let num_state = self.mol.num_state;
-        let spin_channel = self.mol.ctrl.spin_channel;
-        let num_elec = &self.mol.num_elec;
-        let mut occupation:[Vec<f64>;2] = [vec![],vec![]];
-        let mut lumo:[usize;2] = [0,0];
-        let mut homo:[usize;2] = [0,0];
-        //println!("{:?}", num_elec);
-
-        // by default, it should be spin unpolarization with RHF
-        let occ_num = 2.0;
-        let i_spin = 0_usize;
-        occupation[i_spin] = vec![0.0;num_state];
-        let mut left_elec_spin = num_elec[i_spin+1];
-        let mut index_i = 0_usize;
-        while  left_elec_spin > 0.0 && index_i<=num_state {
-            occupation[i_spin][index_i] = (left_elec_spin*occ_num).min(occ_num);
-            index_i += 1;
-            left_elec_spin -= 1.0;
-        }
-        // make sure there is at least one LUMO
-        if index_i > num_state-1 && left_elec_spin>0.0 {
-            panic!("Error:: the number of molecular orbitals is smaller than the number of electrons in the {}-spin channel\n num_state: {}; num_elec_alpha: {}", 
-                   i_spin,num_state, num_elec[i_spin]);
-        } else {
-            lumo[i_spin] = index_i;
-            homo[i_spin] = index_i-1;
-        }; 
-
-        //println!("{:?}", num_elec);
-        //println!("{:?}", &occupation);
-        self.occupation = occupation;
-        self.lumo = lumo;
-        self.homo = homo;
-
     }
 
     pub fn generate_occupation_integer(&mut self) {
@@ -1349,7 +1347,11 @@ impl SCF {
             _ => -1.0,
         };
         let use_dm_only = self.mol.ctrl.use_dm_only;
-        let vk = self.generate_vk_with_ri_v(scaling_factor, use_dm_only);
+        let vk = if self.mol.ctrl.use_isdf{
+            self.generate_vk_with_isdf(scaling_factor, use_dm_only)
+        }else{
+            self.generate_vk_with_ri_v(scaling_factor, use_dm_only)
+        };
         let dt3 = time::Local::now();
         let timecost1 = (dt2.timestamp_millis()-dt1.timestamp_millis()) as f64 /1000.0;
         let timecost2 = (dt3.timestamp_millis()-dt2.timestamp_millis()) as f64 /1000.0;
@@ -1497,7 +1499,11 @@ impl SCF {
         }*self.mol.xc_data.dfa_hybrid_scf ;
         if ! scaling_factor.eq(&0.0) {
             let use_dm_only = self.mol.ctrl.use_auxbas;
-            let vk = self.generate_vk_with_ri_v(scaling_factor, use_dm_only);
+            let vk = if self.mol.ctrl.use_isdf{
+                self.generate_vk_with_isdf(scaling_factor, use_dm_only)
+            }else{
+                self.generate_vk_with_ri_v(scaling_factor, use_dm_only)
+            };
             for i_spin in (0..spin_channel) {
                 self.hamiltonian[i_spin].data
                     .par_iter_mut()
@@ -1556,7 +1562,12 @@ impl SCF {
                 SCFType::RHF => -0.5,
                 _ => -1.0,
             };
-            let vk = self.generate_vk_with_ri_v(scaling_factor, true);
+            //let vk = self.generate_vk_with_ri_v(scaling_factor, true);
+            let vk = if self.mol.ctrl.use_isdf{
+                self.generate_vk_with_isdf(scaling_factor, true)
+            }else{
+                self.generate_vk_with_ri_v(scaling_factor, true)
+            };
             let dt3 = time::Local::now();
             for i_spin in (0..spin_channel) {
                 self.hamiltonian[i_spin] = self.h_core.clone();
@@ -1716,7 +1727,12 @@ impl SCF {
     pub fn evaluate_exact_exchange_ri_v(&mut self) -> f64 {
         let mut x_energy = 0.0;
         let use_dm_only = self.mol.ctrl.use_dm_only;
-        let mut vk = self.generate_vk_with_ri_v(1.0, use_dm_only);
+        //let mut vk = self.generate_vk_with_ri_v(1.0, use_dm_only);
+        let mut vk = if self.mol.ctrl.use_isdf{
+            self.generate_vk_with_isdf(1.0, use_dm_only)
+        }else{
+            self.generate_vk_with_ri_v(1.0, use_dm_only)
+        };
         let spin_channel = self.mol.spin_channel;
         for i_spin in 0..spin_channel {
             let dm_s = &self.density_matrix[i_spin];
@@ -1920,6 +1936,7 @@ impl SCF {
 
         vj_upper_with_ri_v(&self.ri3fn, dm, spin_channel, scaling_factor)
     }
+
     pub fn generate_vj_with_ri_v_sync(&mut self, scaling_factor: f64) -> Vec<MatrixUpper<f64>> {
 
         let spin_channel = self.mol.spin_channel;
@@ -1928,8 +1945,21 @@ impl SCF {
         if self.mol.ctrl.use_ri_symm {
             vj_upper_with_rimatr_v_sync(&self.rimatr, dm, spin_channel, scaling_factor)
         } else {
-            vj_upper_with_ri_v_sync(&self.ri3fn, dm, spin_channel, scaling_factor)
+            //vj_upper_with_ri_v_sync(&self.ri3fn, dm, spin_channel, scaling_factor)
+            if self.mol.ctrl.use_isdf && !self.mol.ctrl.isdf_k_only{
+                vj_upper_with_ri_v_sync(&self.ri3fn_isdf, dm, spin_channel, scaling_factor)
+            }else{
+                vj_upper_with_ri_v_sync(&self.ri3fn, dm, spin_channel, scaling_factor)
+            }
         }
+    }
+
+    pub fn generate_vj_with_isdf(&mut self, scaling_factor: f64) -> Vec<MatrixUpper<f64>> {
+
+        let spin_channel = self.mol.spin_channel;
+        let dm = &self.density_matrix;
+
+        vj_upper_with_ri_v(&self.ri3fn_isdf, dm, spin_channel, scaling_factor)
     }
 
     pub fn generate_vk_with_ri_v(&mut self, scaling_factor: f64, use_dm_only: bool) -> Vec<MatrixUpper<f64>> {
@@ -1949,6 +1979,29 @@ impl SCF {
             } else {
                 let eigv = &self.eigenvectors;
                 vk_upper_with_ri_v_sync(&mut self.ri3fn, eigv, self.homo, &self.occupation, 
+                                        spin_channel, scaling_factor)
+            }
+        }
+
+    }
+
+    pub fn generate_vk_with_isdf(&mut self, scaling_factor: f64, use_dm_only: bool) -> Vec<MatrixUpper<f64>> {
+        //let num_basis = self.mol.num_basis;
+        //let num_state = self.mol.num_state;
+        //let num_auxbas = self.mol.num_auxbas;
+        //let npair = num_basis*(num_basis+1)/2;
+        let spin_channel = self.mol.spin_channel;
+
+        if self.mol.ctrl.use_ri_symm {
+            let dm = &self.density_matrix;
+            vk_upper_with_rimatr_use_dm_only_sync(&mut self.rimatr, dm, spin_channel, scaling_factor)
+        } else {
+            if use_dm_only {
+                let dm = &self.density_matrix;
+                vk_upper_with_ri_v_use_dm_only_sync(&mut self.ri3fn_isdf, dm, spin_channel, scaling_factor)
+            } else {
+                let eigv = &self.eigenvectors;
+                vk_upper_with_ri_v_sync(&mut self.ri3fn_isdf, eigv, self.homo, &self.occupation, 
                                         spin_channel, scaling_factor)
             }
         }

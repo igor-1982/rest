@@ -7,6 +7,7 @@ use crate::scf_io::SCF;
 pub mod rand_wf_real_space;
 pub mod cube_build;
 pub mod molden_build;
+pub mod mulliken;
 
 use crate::ri_pt2::{close_shell_pt2_rayon, open_shell_pt2_rayon};
 

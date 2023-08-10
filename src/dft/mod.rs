@@ -1,5 +1,5 @@
 mod libxc;
-mod gen_grids;
+pub mod gen_grids;
 
 use rest_tensors::{MatrixFull, MatrixFullSliceMut, TensorSliceMut, RIFull, MatrixFullSlice};
 use rest_tensors::matrix_blas_lapack::{_dgemm_nn,_dgemm_tn, _einsum_01_serial, _einsum_02_serial, _einsum_01_rayon, _einsum_02_rayon};
@@ -1398,6 +1398,20 @@ impl Grids {
             weights.extend(ws_atom);
         });
 
+       /*  let ngrids = weights.len();
+        let mut x = vec![0.0; ngrids];
+        let mut y = vec![0.0; ngrids];
+        let mut z = vec![0.0; ngrids];
+        x.iter_mut().zip(y.iter_mut()).zip(z.iter_mut()).zip(coordinates.iter()).for_each(|(((x,y),z), p)|{
+            *x = p[0];
+            *y = p[1];
+            *z = p[2];
+        });
+        println!("x_is: {:?}", &x);
+        println!("y_is: {:?}", &y);
+        println!("z_is: {:?}", &z);
+        println!("w_is: {:?}", &weights); */
+
 
         utilities::timing(&dt0, Some("Generating the grids"));
         let parallel_balancing = balancing(coordinates.len(), rayon::current_num_threads());
@@ -1408,6 +1422,7 @@ impl Grids {
             aop: None, 
             parallel_balancing
         }
+
     }
     pub fn build_nonstd(center_coordinates_bohr:Vec<(f64,f64,f64)>, proton_charges:Vec<i32>, alpha_min: Vec<HashMap<usize,f64>>, alpha_max:Vec<f64>) -> Grids {
         let radial_precision = 1.0e-12;
@@ -1725,7 +1740,7 @@ impl Grids {
                         acc + a*b
                     })
                 });
-                println!("{:?}", &cur_rho.data[num_grids*i_spin..num_grids*i_spin+100]);
+                //println!("{:?}", &cur_rho.data[num_grids*i_spin..num_grids*i_spin+100]);
                 let dt2 = utilities::timing(&dt1, Some("Contracting ao*wao"));
             };
         };

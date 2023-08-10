@@ -64,6 +64,8 @@ pub struct InputKeywords {
     #[pyo3(get, set)]
     pub use_isdf: bool,
     #[pyo3(get, set)]
+    pub isdf_k_only: bool,
+    #[pyo3(get, set)]
     pub isdf_k_mu: usize,
     // Keywords for systems
     #[pyo3(get, set)]
@@ -176,7 +178,8 @@ impl InputKeywords {
             auxbas_type: String::from("spheric"),
             use_auxbas: true,
             use_isdf: false,
-            isdf_k_mu: 8,
+            isdf_k_only: false,
+            isdf_k_mu: 17,
             // Keywords associated with the method employed
             xc: String::from("x3lyp"),
             post_xc: vec![],
@@ -340,6 +343,13 @@ impl InputKeywords {
                     //====================================================
                     tmp_input.use_auxbas = true;
                     tmp_input.use_isdf = true;
+                }else if eri_type.eq(&String::from("isdf_k")) {
+                    // =========== for debug use by IGOR =================
+                    tmp_input.eri_type = String::from("ri_v");
+                    //====================================================
+                    tmp_input.use_auxbas = true;
+                    tmp_input.use_isdf = true;
+                    tmp_input.isdf_k_only = true;
                 } else {
                     tmp_input.use_auxbas = false;
                     tmp_input.use_isdf = false;
