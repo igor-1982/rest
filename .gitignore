@@ -1,4 +1,10 @@
 Cargo.lock                                                                                                                                                                   
+/basis-set-pool/
+/python_tests/
+/debug_logs/
+*.log
+/examples/
+*.py
 *.so
 bse_pool
 /examples/WFA/fchk/*chk

@@ -1,8 +1,9 @@
-use tensors::MatrixFull;
+use tensors::{MatrixFull, BasicMatrix};
 use crate::molecule_io::Molecule;
 use crate::ctrl_io::InputKeywords;
 use crate::geom_io::{GeomCell, formated_element_name};
 use crate::scf_io::scf;
+use std::collections::HashMap;
 
 pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
     let mut elem_name: Vec<String> = vec![];
@@ -85,6 +86,38 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
     }
 
 
+
+}
+
+pub fn block_diag_specific(atom_dms: &HashMap<String,Vec<MatrixFull<f64>>>,elem: &Vec<String>) -> (MatrixFull<f64>, MatrixFull<f64>) {
+    let mut atom_size = 0;
+    elem.iter().for_each(|ielem| {
+        if let Some(dm) = &atom_dms.get(ielem) {
+            atom_size += &dm[0].size[0];
+        } else {
+            panic!("Error: Unknown elemement ({}), for which the density matrix is not yet prepared", ielem);
+        }
+    });
+    let mut dms_alpha = MatrixFull::new([atom_size;2], 0.0);
+    let mut dms_beta = MatrixFull::new([atom_size;2], 0.0);
+    //let dms_alpha = dms.get_mut(0).unwrap();
+    //let dms_beta = dms.get_mut(1).unwrap();
+    let mut ao_index = 0;
+    elem.iter().for_each(|ielem| {
+        if let Some(dm_atom_vec) = &atom_dms.get(ielem) {
+            let dm_atom_alpha = dm_atom_vec.get(0).unwrap();
+            let dm_atom_beta  = dm_atom_vec.get(1).unwrap();
+            let loc_length = dm_atom_alpha.size[0];
+
+            dms_alpha.copy_from_matr(ao_index..ao_index+loc_length, ao_index..ao_index+loc_length,
+                dm_atom_alpha, 0..loc_length, 0..loc_length);
+            dms_beta.copy_from_matr(ao_index..ao_index+loc_length, ao_index..ao_index+loc_length,
+                dm_atom_beta, 0..loc_length, 0..loc_length);
+            ao_index += loc_length;
+        }
+    });
+
+    (dms_alpha, dms_beta)
 }
 
 pub fn block_diag(dms: &Vec<MatrixFull<f64>>) -> MatrixFull<f64>{

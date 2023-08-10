@@ -7,7 +7,8 @@
      xc =                        "x3lyp" 
      # 设置（辅助）基组的路径。如果找不到该路径，则创建该路径，并从BSE下载
      # 注意：计算节点需支持连接外网。
-     basis_path =                "../../../basis-set-pool/cc-pVQZ"
+     #basis_path =                "../../../basis-set-pool/cc-pVDZ"
+     basis_path =                "./cc-pVDZ"
      auxbas_path =               "../../../basis-set-pool/def2-SV(P)-JKFIT" 
      # 辅助基函数自动生成设置
      even_tempered_basis =       true
@@ -22,17 +23,19 @@
      mixer =                     "diis"
      num_max_diis =              8
      start_diis_cycle =          1
-     mix_param =                 0.6
+     mix_param =                 1.1
      max_scf_cycle =             100
      scf_acc_rho =               1.0e-5
      scf_acc_eev =               1.0e-5
      scf_acc_etot =              1.0e-8
      initial_guess =             "sad"
      chkfile =                   "none"
+     chkfile_type =              "hdf5"
      fchk =                      false
      pruning =                   "nwchem"
      radial_grid_method =        "treutler"
      external_grids =            "none"
+     #outputs =                   ["multiwfn"]
 
 [geom]
      name = "NH3"

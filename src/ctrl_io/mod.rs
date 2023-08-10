@@ -19,13 +19,6 @@ use toml;
 
 mod pyrest_ctrl_io;
 
-#[pyclass]
-pub enum SCFType {
-    RHF,
-    ROHF,
-    UHF
-}
-
 /// **InputKeywords** for a specific calculation
 ///  ### System dependent keywords
 ///  - `print_level`:  default (1). `0` dose not print anything. larger number with more output information  
@@ -60,6 +53,9 @@ pub struct InputKeywords {
     pub etb_start_atom_number: usize,
     #[pyo3(get, set)]
     pub etb_beta: f64,
+    // Keywords for Gradient
+    #[pyo3(get, set)]
+    pub auxbasis_response: bool,
     // Keywords for IDSF
     #[pyo3(get, set)]
     pub use_isdf: bool,
@@ -87,6 +83,8 @@ pub struct InputKeywords {
     pub frozen_core_postscf: i32,
     #[pyo3(get, set)]
     pub frequency_points: usize,
+    #[pyo3(get, set)]
+    pub lambda_points: usize,
     #[pyo3(get, set)]
     pub freq_grid_type: usize,
     #[pyo3(get, set)]
@@ -117,6 +115,7 @@ pub struct InputKeywords {
     pub num_max_diis: usize,
     #[pyo3(get, set)]
     pub start_diis_cycle: usize,
+    pub start_check_oscillation: usize,
     #[pyo3(get, set)]
     pub max_scf_cycle: usize,
     #[pyo3(get, set)]
@@ -149,14 +148,11 @@ pub struct InputKeywords {
     #[pyo3(get, set)]
     pub fciqmc_dump: bool,
     // Kyewords for post scf analysis
-    #[pyo3(get, set)]
-    pub output_wfn_in_real_space: usize,
-    #[pyo3(get, set)]
-    pub output_cube: bool,
-    #[pyo3(get, set)]
-    pub output_molden: bool,
-    #[pyo3(get, set)]
-    pub output_fchk: bool,
+    pub outputs: Vec<String>,
+    //pub output_wfn_in_real_space: usize,
+    //pub output_cube: bool,
+    //pub output_molden: bool,
+    //pub output_fchk: bool,
     // Keywords for sad initial guess
     #[pyo3(get, set)]
     pub atom_sad: bool,
@@ -177,6 +173,7 @@ impl InputKeywords {
             auxbas_path: String::from("./def2-SV(P)-JKFIT"),
             auxbas_type: String::from("spheric"),
             use_auxbas: true,
+            auxbasis_response: false,
             use_isdf: false,
             isdf_k_only: false,
             isdf_k_mu: 17,
@@ -185,7 +182,7 @@ impl InputKeywords {
             post_xc: vec![],
             post_correlation: vec![],
             eri_type: String::from("ri_v"),
-            use_ri_symm: false,
+            use_ri_symm: true,
             charge: 0.0_f64,
             spin: 1.0_f64,
             spin_channel: 1_usize,
@@ -196,13 +193,15 @@ impl InputKeywords {
             frequency_points: 20_usize,
             freq_grid_type: 0_usize,
             freq_cut_off: 10.0_f64,
+            // Keywords for scsRPA lambda tabulation
+            lambda_points: 20_usize,
             // Keywords for DFT numerical integration
             radial_precision: 1.0e-12,
             min_num_angular_points: 110,
             max_num_angular_points: 110,
             hardness: 3,
             grid_gen_level: 3,
-            pruning: String::from("sg1"),
+            pruning: String::from("nwchem"),
             rad_grid_method: String::from("treutler"),
             external_grids: "none".to_string(),
             // ETB for autogen the auxbasis
@@ -218,6 +217,7 @@ impl InputKeywords {
             mix_param: 0.6,
             num_max_diis: 8,
             start_diis_cycle: 1,
+            start_check_oscillation: 20,
             max_scf_cycle: 100,
             scf_acc_rho: 1.0e-6,
             scf_acc_eev: 1.0e-5,
@@ -234,10 +234,11 @@ impl InputKeywords {
             // Keywords for the fciqmc dump
             fciqmc_dump: false,
             // Kyewords for post scf
-            output_wfn_in_real_space: 0,
-            output_cube: false,
-            output_molden: false,
-            output_fchk: false,
+            outputs: vec![],
+            //output_wfn_in_real_space: 0,
+            //output_cube: false,
+            //output_molden: false,
+            //output_fchk: false,
             // Keyword to turn on atom calculations for the SAD initial guess
             atom_sad: false,
             // Derived keywords of identifying the method used
@@ -371,9 +372,7 @@ impl InputKeywords {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(8_usize)},
                     serde_json::Value::Number(tmp_num) => {tmp_num.as_i64().unwrap_or(8) as usize},
                     other => {8_usize},
-                };
-                
-
+                };            
 
                 tmp_input.auxbas_type = match tmp_ctrl.get("auxbas_type").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_type) => {tmp_type.to_lowercase()},
@@ -404,6 +403,13 @@ impl InputKeywords {
                 };
                 if tmp_input.use_auxbas && tmp_input.print_level>0 {
                     println!("The {}-GTO auxiliary basis set is taken from {}", tmp_input.auxbas_type,tmp_input.auxbas_path)
+                };
+                // ===============================================
+                //  Keywords for Gradient calculation
+                // ==============================================
+                tmp_input.auxbasis_response = match tmp_ctrl.get("auxbasis_response").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::Bool(tmp_str) => {*tmp_str},
+                    other => {false},
                 };
                 // ==============================================
                 //  Keywords associated with the method employed
@@ -515,6 +521,11 @@ impl InputKeywords {
                     serde_json::Value::Number(tmp_fg) => {tmp_fg.as_f64().unwrap_or(10.0)},
                     other => {10.0},
                 };
+                tmp_input.lambda_points = match tmp_ctrl.get("lambda_points").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_fp) => {tmp_fp.to_lowercase().parse().unwrap_or(20_usize)},
+                    serde_json::Value::Number(tmp_fp) => {tmp_fp.as_i64().unwrap_or(20) as usize},
+                    other => {20_usize},
+                };
                 //===============================================
                 // Keywords for fciqmc dump
                 //===============================================
@@ -621,6 +632,11 @@ impl InputKeywords {
                     serde_json::Value::Number(tmp_num) => {tmp_num.as_i64().unwrap_or(2) as usize},
                     other => {2_usize}
                 };
+                tmp_input.start_check_oscillation = match tmp_ctrl.get("start_check_oscillation").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(20_usize)},
+                    serde_json::Value::Number(tmp_num) => {tmp_num.as_i64().unwrap_or(20) as usize},
+                    other => {20_usize}
+                };
 
                 // Initial guess relevant keywords
                 tmp_input.guessfile = match tmp_ctrl.get("guessfile").unwrap_or(&serde_json::Value::Null) {
@@ -669,29 +685,41 @@ impl InputKeywords {
                 // ================================================
                 //  Keywords associated with the post-SCF analyais
                 // ================================================
-                tmp_input.output_wfn_in_real_space = match tmp_ctrl.get("output_wfn_in_real_space").unwrap_or(&serde_json::Value::Null) {
-                    serde_json::Value::String(tmp_wfn) => {tmp_wfn.to_lowercase().parse().unwrap_or(0)},
-                    serde_json::Value::Number(tmp_wfn) => {tmp_wfn.as_i64().unwrap_or(0) as usize},
-                    other => {0_usize},
+                tmp_input.outputs = match tmp_ctrl.get("outputs").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_op) => {vec![tmp_op.to_lowercase()]},
+                    serde_json::Value::Array(tmp_op) => {
+                        let mut tmp_vec:Vec<String> = vec![];
+                        tmp_op.iter().for_each(|x| {
+                            let op_type = x.to_string();
+                            let string_len = op_type.len();
+                            tmp_vec.push(op_type[1..string_len-1].to_lowercase().to_string())
+                        });
+                        tmp_vec
+                    },
+                    other => {vec![]},
                 };
+                //tmp_input.output_wfn_in_real_space = match tmp_ctrl.get("output_wfn_in_real_space").unwrap_or(&serde_json::Value::Null) {
+                //    serde_json::Value::String(tmp_wfn) => {tmp_wfn.to_lowercase().parse().unwrap_or(0)},
+                //    serde_json::Value::Number(tmp_wfn) => {tmp_wfn.as_i64().unwrap_or(0) as usize},
+                //    other => {0_usize},
+                //};
 
-                tmp_input.output_cube = match tmp_ctrl.get("output_cube").unwrap_or(&serde_json::Value::Null) {
-                    serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
-                    serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
-                    other => false,
-                }; 
+                //tmp_input.output_cube = match tmp_ctrl.get("output_cube").unwrap_or(&serde_json::Value::Null) {
+                //    serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
+                //    serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
+                //    other => false,
+                //}; 
 
-                tmp_input.output_molden = match tmp_ctrl.get("output_molden").unwrap_or(&serde_json::Value::Null) {
-                    serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
-                    serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
-                    other => false,
-                }; 
-
-                tmp_input.output_fchk = match tmp_ctrl.get("output_fchk").unwrap_or(&serde_json::Value::Null) {
-                    serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
-                    serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
-                    other => false,
-                };
+                //tmp_input.output_molden = match tmp_ctrl.get("output_molden").unwrap_or(&serde_json::Value::Null) {
+                //    serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
+                //    serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
+                //    other => false,
+                //}; 
+                //tmp_input.output_fchk = match tmp_ctrl.get("output_fchk").unwrap_or(&serde_json::Value::Null) {
+                //    serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
+                //    serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
+                //    other => false,
+                //};
 
                 if tmp_input.print_level>0 {
                     println!("Charge: {:3}; Spin: {:3}",tmp_input.charge,tmp_input.spin);

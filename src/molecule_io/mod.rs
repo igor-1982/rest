@@ -90,6 +90,9 @@ pub struct Molecule {
     // for frozen-core pt2, rpa and so forth
     #[pyo3(get, set)]
     pub start_mo : usize,
+    // for effective core potential in SCF
+    pub ecp_electrons : usize,
+
     pub basis4elem: Vec<Basis4Elem>,
     // fdqc_bas: store information of each basis functions
     pub fdqc_bas : Vec<BasInfo>,
@@ -123,6 +126,7 @@ impl Molecule {
             num_basis: 0,
             num_auxbas: 0,
             start_mo: 0,   // all-electron pt2, rpa and so forth
+            ecp_electrons: 0,
             spin_channel: 1,
             basis4elem: vec![],
             fdqc_bas: vec![],
@@ -159,6 +163,7 @@ impl Molecule {
 
     pub fn build_native(mut ctrl: InputKeywords, mut geom: GeomCell) -> anyhow::Result<Molecule> {
 
+        let spin_channel = ctrl.spin_channel;
         let cint_type = if ctrl.basis_type.to_lowercase()==String::from("spheric") {
             CintType::Spheric
         } else if ctrl.basis_type.to_lowercase()==String::from("cartesian") {
@@ -167,16 +172,20 @@ impl Molecule {
             panic!("Error:: Unknown basis type '{}'. Please use either 'spheric' or 'Cartesian'", 
                    ctrl.basis_type);
         };
+
         let (mut bas,mut cint_atm,mut cint_bas,cint_env,
             fdqc_bas,cint_fdqc,num_elec,num_basis,num_state) 
             = Molecule::collect_basis(&mut ctrl, &mut geom);
-        let env = cint_env.clone();
 
+        let ecp_electrons = bas.iter().fold(0, |acc, i| {
+            let ecp_electrons = if let Some(num_ecp) = i.ecp_electrons {num_ecp} else {0};
+            acc + ecp_electrons
+        });
+
+        
+        let env = cint_env.clone();
         let natm = cint_atm.len() as i32;
         let nbas = cint_bas.len() as i32;
-        
-        let spin_channel = ctrl.spin_channel;
-
         let (mut auxbas , mut cint_aux_atm,mut cint_aux_bas,cint_aux_env,
                 mut fdqc_aux_bas,mut cint_aux_fdqc,num_auxbas) 
             =(bas.clone(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),0);
@@ -195,7 +204,13 @@ impl Molecule {
         let xc_data = DFA4REST::new(&ctrl.xc,spin_channel, ctrl.print_level);
 
         // frozen-core pt2 and rpa are not yet implemented.
-        let start_mo = count_frozen_core_states(ctrl.frozen_core_postscf, &geom.elem);
+        let mut start_mo = count_frozen_core_states(ctrl.frozen_core_postscf, &geom.elem);
+
+        if start_mo < ecp_electrons {
+            println!("The counted start_mo for the frozen-core post-scf methods {} is smaller than the number of ecp electrons {}. Take the start_mo = ecp_electrons",
+                    start_mo, ecp_electrons);
+            start_mo = ecp_electrons;
+        }
 
         if ctrl.print_level>0 {
             xc_data.xc_version();
@@ -211,6 +226,7 @@ impl Molecule {
             num_basis,
             num_auxbas,
             start_mo,
+            ecp_electrons,
             spin_channel,
             basis4elem,
             fdqc_bas,
@@ -230,7 +246,6 @@ impl Molecule {
         if mol.ctrl.print_level>0 {
             println!("numbasis: {:2}, num_auxbas: {:2}", mol.num_basis,mol.num_auxbas)
         };
-
         if mol.ctrl.print_level>4 {mol.print_auxbas()};
 
         Ok(mol)
@@ -562,7 +577,7 @@ impl Molecule {
         let ctrl_elem = ctrl_element_checker(geom);
         let local_elem = local_element_checker(&ctrl.basis_path);
         //println!("local elements are {:?}", local_elem);
-        //println!("ctrl elements are {:?}", ctrl_elem);
+        println!("ctrl elements are {:?}", ctrl_elem);
         let elem_intersection = ctrl_elem.intersect(local_elem.clone());
         let mut required_elem = vec![];
         for ctrl_item in ctrl_elem {
@@ -572,16 +587,12 @@ impl Molecule {
         }
     
         if required_elem.len() != 0 {
-                    //function inserted here
-
-            
             let re = Regex::new(r"/?(?P<basis>[^/]*)/?$").unwrap();
             let cap = re.captures(&ctrl.basis_path).unwrap();
             let basis_name = cap.name("basis").unwrap().to_string();
             if check_basis_name(&basis_name) {
                 bse_downloader::bse_basis_getter_v2(&basis_name,&geom, &ctrl.basis_path, &required_elem);
-            }
-            else {
+            }  else {
                 println!("Error: Missing local basis sets for {:?}", &required_elem);
                 let matched = basis_fuzzy_matcher(&basis_name);
                 match matched {
@@ -1036,6 +1047,10 @@ impl Molecule {
     }
 
     pub fn int_ij_aux_columb(&self) -> MatrixFull<f64> {
+        self.int_ij_aux_columb_rayon()
+    }
+
+    pub fn int_ij_aux_columb_serial(&self) -> MatrixFull<f64> {
         let mut cint_data = self.initialize_cint(true);
         let n_auxbas = self.num_auxbas;
         let n_basis_shell = self.cint_bas.len();
@@ -1061,6 +1076,39 @@ impl Molecule {
             }
         }
         cint_data.final_c2r();
+        //aux_v.formated_output_e(4, "full");
+        aux_v
+    }
+    
+    pub fn int_ij_aux_columb_rayon(&self) -> MatrixFull<f64> {
+        let n_auxbas = self.num_auxbas;
+        let n_basis_shell = self.cint_bas.len();
+        let n_auxbas_shell = self.cint_aux_bas.len();
+        let mut aux_v = MatrixFull::new([n_auxbas,n_auxbas],0.0);
+        let (sender, receiver) = channel();
+        self.cint_aux_fdqc.par_iter().enumerate().for_each_with(sender,|s,(l,fdqc)| {
+            let mut cint_data = self.initialize_cint(true);
+            cint_data.cint2c2e_optimizer_rust();
+            let basis_start_l = fdqc[0];
+            let basis_len_l = fdqc[1];
+            let gl  = l + n_basis_shell;
+            let mut loc_aux_v = MatrixFull::new([n_auxbas,basis_len_l],0.0);
+            for k in 0..n_auxbas_shell {
+                let basis_start_k = self.cint_aux_fdqc[k][0];
+                let basis_len_k = self.cint_aux_fdqc[k][1];
+                let gk  = k + n_basis_shell;
+                let buf = cint_data.cint_2c2e(gk as i32, gl as i32);
+                let mut tmp_slices = loc_aux_v.iter_submatrix_mut(
+                    basis_start_k..basis_start_k+basis_len_k,
+                    0..basis_len_l);
+                tmp_slices.zip(buf.iter()).for_each(|value| {*value.0 = *value.1});
+            }
+            cint_data.final_c2r();
+            s.send((loc_aux_v, basis_start_l, basis_len_l)).unwrap()
+        });
+        receiver.into_iter().for_each(|(loc_aux_v, basis_start_l, basis_len_l)| {
+            aux_v.copy_from_matr(0..n_auxbas, basis_start_l..basis_start_l+basis_len_l, &loc_aux_v, 0..n_auxbas, 0..basis_len_l);
+        });
         //aux_v.formated_output_e(4, "full");
         aux_v
     }
@@ -1531,6 +1579,7 @@ impl Molecule {
 
         time_records.new_item("prim ri", "for the pure three-center integrals");
         time_records.new_item("aux_ij", "for the coulomb matrix of auxiliary basis");
+        time_records.new_item("inv_sqrt", "for the sqrt inverse of aux_ij");
 
         let n_basis = self.num_basis;
         let n_auxbas = self.num_auxbas;
@@ -1539,9 +1588,11 @@ impl Molecule {
         // First the Cholesky decomposition `L` of the inverse of the auxiliary 2-center coulumb matrix: V=(\nu|\mu)
         time_records.count_start("aux_ij");
         let mut aux_v = self.int_ij_aux_columb();
+        time_records.count("aux_ij");
+        time_records.count_start("inv_sqrt");
         aux_v = aux_v.lapack_power(-0.5, AUXBAS_THRESHOLD).unwrap();
         //aux_v = aux_v.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
-        time_records.count("aux_ij");
+        time_records.count("inv_sqrt");
 
         // Then, prepare the 3-center integrals: O_V = (ij|\nu), and multiple with `L`
         time_records.count_start("prim ri");
@@ -1871,11 +1922,9 @@ fn test_get_slices_mut() {
 
 #[test]
 fn test_regex() {
-
     let re = Regex::new(r"/?(?P<basis>[^/]*)/?$").unwrap();
     let cap = re.captures("./p1/p2/p3").unwrap();
     println!("{:?}",cap.name("basis").unwrap());
 }
-
 
 

@@ -117,6 +117,13 @@ pub fn get_mass_charge(elem_list: &Vec<String>) -> Vec<(f64,f64)> {
     final_list
 }
 
+pub fn get_charge(elem_list: &Vec<String>) -> Vec<f64> {
+    let mass_charge = get_mass_charge(&elem_list);
+    let charge: Vec<f64> = mass_charge.into_iter().map(|(m,c)| c).collect();
+
+    charge
+}
+
 impl GeomCell {
     pub fn init_geom() -> GeomCell {
         GeomCell{
@@ -177,9 +184,62 @@ impl GeomCell {
         });
         nuc_energy
     }
+
+    pub fn calc_nuc_energy_deriv(&self) -> MatrixFull<f64> {
+        let natm = self.elem.len();
+        //let mut gs = vec![vec![0.0_f64;3];natm];
+        let mut gs = MatrixFull::new([3,natm], 0.0_f64);
+        for j in 0..natm {
+            let q2 = get_mass_charge(&vec![self.elem[j].clone()])[0].1;
+            let r2 = &self.position[(..,j)];
+            for i in 0..natm {
+                if i != j {
+                    let q1 = get_mass_charge(&vec![self.elem[i].clone()])[0].1;
+                    let r1 = &self.position[(..,i)];
+                    let rdiff: Vec<f64> = r2.iter().zip(r1).map(|(r2,r1)| r1 - r2).collect();
+                    let r = rdiff.iter().fold(0.0, |acc, rdiff| acc + rdiff*rdiff).sqrt();
+                    //gs[j] -= q1 * q2 * (r2-r1) / r**3
+                    //gs[j] += q1 * q2 * (r1-r2) / r**3
+                    gs.iter_column_mut(j).zip(rdiff).for_each(|(gs,rdiff)| *gs += q1*q2*rdiff / r.powf(3.0) );
+                }
+            }
+        }
+        gs
+    }
+    
+/*
+    pub fn calc_nuc_energy_deriv(&self) -> Vec<Vec<f64>> {
+        let natm = self.elem.len();
+        let mut gs = vec![vec![0.0_f64;3];natm];
+        for j in 0..natm {
+            let q2 = get_mass_charge(&vec![self.elem[j].clone()])[0].1;
+            let r2 = &self.position[(..,j)];
+            for i in 0..natm {
+                if i != j {
+                    let q1 = get_mass_charge(&vec![self.elem[i].clone()])[0].1;
+                    let r1 = &self.position[(..,i)];
+                    let rdiff: Vec<f64> = r2.iter().zip(r1).map(|(r2,r1)| r1 - r2).collect();
+                    let r = rdiff.iter().fold(0.0, |acc, rdiff| acc + rdiff*rdiff).sqrt();
+                    //gs[j] -= q1 * q2 * (r2-r1) / r**3
+                    //gs[j] += q1 * q2 * (r1-r2) / r**3
+                    gs[j].iter_mut().zip(rdiff).for_each(|(gs,rdiff)| *gs += q1*q2*rdiff / r.powf(3.0) );
+                }
+            }
+        }
+        gs
+    }
+ */
+
     //pub fn get_elems_(&mut self,Vec<T>) ->  std::iter::Enumerate<std::slice::Iter<'_, std::string::String>> {
     //    self.elem.iter().enumerate()
     //}
+    
+    /// Get atom postion(coordinates) of the given atom index (eg. 1, 2, 3...).
+    pub fn get_coord(&self, atm_id: usize) -> Vec<f64> {
+        let coord = &self.position[(..,atm_id)];
+        coord.to_vec()
+    }
+
     pub fn get_fix(&self, index_a:usize) -> anyhow::Result<bool> {
         Ok(self.fix[index_a])
     }

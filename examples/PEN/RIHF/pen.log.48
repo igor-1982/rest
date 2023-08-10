@@ -1,0 +1,38 @@
+Print level:                3
+The number of threads used for parallelism:      48
+The spheric-GTO basis set is taken from ../../../basis-set-pool/cc-pVDZ
+ERI Type: ri_v
+The spheric-GTO auxiliary basis set is taken from ../../../basis-set-pool/def2-SVP-JKFIT
+The exchange-correlation method: x3lyp
+Charge:   0; Spin:   1
+Spin polarization: Off
+min_num_angular_points: 110
+max_num_angular_points: 302
+hardness: 3
+SCF convergency thresholds: 1e-5 for density matrix
+                            1e-5 Ha. for sum of eigenvalues
+                            1e-8 Ha. for total energy
+Max. SCF cycle number:      100
+The diis mixing with (param, max_vec_len) = (0.8, 8) is employed for the SCF procedure
+Turn on the diis mixing after 100 step(s) of SCF iteractions with the linear mixing
+WARNING: The specified external initial guess file (guessfile) is missing 
+(init_guess.chk.0). 
+ The external initial guess will not be imported.
+
+The specified checkfile exists but is not loaded because of 'external_init_guess
+It will be updated after the SCF procedure 
+(none)
+It is a cluster calculation for finite molecules
+nbas: 108, natm: 36 for standard basis sets
+The density functional 'X3LYP' belongs to the 'Hybrid GGA' family and is defined in the reference(s):
+(0): X. Xu and W. A. Goddard, Proc. Natl. Acad. Sci. U. S. A. 101, 2673 (2004)
+Libxc version used in REST: 5.2.3
+Nuc_energy: 1491.1045142738824
+The evaluation of 2D-tensors spends             0.07 seconds
+num_basis: 378,num_auxbas: 1902
+final nbas: 742,final natm: 72
+The evaluation of 3D-tensors spends            22.60 seconds
+Overlap matrix is nonsigular:
+  Lowest eigenvalue:       0.00008319 with the total number of basis functions:    378
+Restricted Hartree-Fock (or Kohn-Sham) algorithm is invoked.
+Size of generated grids: 347684

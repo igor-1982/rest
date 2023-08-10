@@ -1,7 +1,7 @@
 [ctrl]
-     print_level =          1            # print level: 1 for the simplest output
-     xc =                   "hf"        # indicating that the MP2 method is invoked
-     basis_path =           "../../../basis-set-pool/cc-pVDZ"
+     print_level =          1                                        # print level: 1 for the simplest output
+     xc =                   "hf"                                     # indicating that the MP2 method is invoked
+     basis_path =           "../../../basis-set-pool/cc-pV5Z"
      auxbas_path =          "../../../basis-set-pool/cc-pVQZ-RIFIT"
      basis_type =           "spheric"    # spheric or cartesian
      eri_type =             "ri-v"

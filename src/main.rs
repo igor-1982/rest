@@ -65,6 +65,7 @@ mod molecule_io;
 mod scf_io;
 mod initial_guess;
 mod ri_pt2;
+mod grad;
 mod ri_rpa;
 mod isdf;
 mod constants;
@@ -74,15 +75,19 @@ mod external_libs;
 #[global_allocator]
 static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 //static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+use crate::grad::rhf::Gradient;
+use crate::initial_guess::sap::*;
 
 use anyhow;
-use crate::isdf::error_isdf;
 use crate::dft::DFA4REST;
 use crate::post_scf_analysis::mulliken::mulliken_pop;
-use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa};
 use crate::scf_io::scf;
 use time::{DateTime,Local};
 use crate::molecule_io::Molecule;
+//use crate::isdf::error_isdf;
+//use crate::dft::DFA4REST;
+use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa, save_chkfile, rand_wf_real_space, cube_build, molden_build};
+
 
 //pub use crate::initial_guess::sap::*;
 //use crate::{post_scf_analysis::{rand_wf_real_space, cube_build, molden_build}, isdf::error_isdf, molecule_io::Molecule};
@@ -106,7 +111,14 @@ fn main() -> anyhow::Result<()> {
 
     let mut scf_data = scf_io::scf(mol).unwrap();
 
+    //let mut grad_data = Gradient::build(&scf_data.mol, &scf_data);
+
+    //grad_data.calc_j(&scf_data.density_matrix);
+    //print!("occ, {:?}", scf_data.occupation);
+
     time_mark.count("SCF");
+
+    if scf_data.mol.ctrl.restart {save_chkfile(&scf_data)};
 
     if scf_data.mol.ctrl.check_stab {
         time_mark.new_item("Stability", "the scf stability check");
@@ -127,7 +139,7 @@ fn main() -> anyhow::Result<()> {
     //====================================
     // Now for post-SCF analysis
     //====================================
-    post_scf_analysis::post_scf_analysis(&scf_data);
+    post_scf_analysis::post_scf_output(&scf_data);
 
     //let error_isdf = error_isdf(12..20, &scf_data);
     //println!("k_mu:{:?}, abs_error: {:?}, rel_error: {:?}", error_isdf.0, error_isdf.1, error_isdf.2);
@@ -147,6 +159,12 @@ fn main() -> anyhow::Result<()> {
                 time_mark.count_start("RPA");
                 ri_rpa::rpa_calculations(&mut scf_data);
                 time_mark.count("RPA");
+            }
+            dft::DFAFamily::SCSRPA => {
+                time_mark.new_item("SCS-RPA", "the SCS-RPA evaluation");
+                time_mark.count_start("SCS-RPA");
+                ri_pt2::xdh_calculations(&mut scf_data);
+                time_mark.count("SCS-RPA");
             }
             _ => {}
         }
