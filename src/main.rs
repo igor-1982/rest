@@ -66,7 +66,7 @@ mod molecule_io;
 mod scf_io;
 mod initial_guess;
 mod ri_pt2;
-mod grad;
+//mod grad;
 mod ri_rpa;
 mod isdf;
 mod constants;
@@ -75,7 +75,7 @@ mod external_libs;
 #[global_allocator]
 static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 //static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-use crate::grad::rhf::Gradient;
+//use crate::grad::rhf::Gradient;
 use crate::initial_guess::sap::*;
 use crate::{post_scf_analysis::{rand_wf_real_space, cube_build, molden_build}, isdf::error_isdf, molecule_io::Molecule};
 use anyhow;
