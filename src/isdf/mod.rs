@@ -90,10 +90,6 @@ pub fn cvt_update_cmu(rgrids: &Vec<[f64;3]>, lambda_r: &Vec<f64>, c_mu_old: &Vec
         c_mu_tmp[*ind_r_i].iter_mut().zip(c_mu_tmp_i.iter()).for_each(|(x,y)| {*x += y});
         weight_sum[*ind_r_i] += lambda_i;
     });
-    //============================debug==================================
-    //println!("c_mu_tmp:{:?}", &c_mu_tmp);
-    //println!("weight_sum:{:?}", &weight_sum);
-    //===================================================================
 
     //Renew c_mu
     let non_zero_ind = weight_sum.iter()
@@ -461,24 +457,7 @@ pub fn fourcenter_after_isdf(k_mu: usize, mol: &Molecule, grids: &dft::Grids) ->
             *y = weight * ao;
         });
     });
-    //=======================v1=========================
-    /* let (ind_mu, loss_function) = cvt_isdf(&rgrids, &lambda_r_for_isdf, n_mu);
-    let mut varphi = MatrixFull::new([nao,n_mu],0.0);
-    varphi.iter_columns_full_mut().zip(ind_mu.iter()).for_each(|(new_phi,index)|{
-        new_phi.iter_mut().zip(phi.iter_column(*index)).for_each(|(new_ao,ao)|{
-            *new_ao = *ao;
-        });
-    });
-
-
-    let mut lambda_varphi = MatrixFull::new([nao,n_mu],0.0);
-    lambda_varphi.iter_columns_full_mut().zip(ind_mu.iter()).for_each(|(new_lambda,index)|{
-        new_lambda.iter_mut().zip(lambda_phi.iter_column(*index)).for_each(|(new_ao,ao)|{
-            *new_ao = *ao;
-        });
-    }); */
     //====================================================
-    //&lambda_varphi.formated_output_e(5, "full");
     //C1 = (lambda_phi.T \cdot lambda_varphi) \times (phi.T \cdot varphi.T)  \times: Hadmard
     //C2 = (lambda_varphi.T \cdot lambda_varphi) \times (varphi.T \cdot varphi)
     /* let mut c11 = MatrixFull::new([ngrids, ind_mu.len()], 0.0);
@@ -695,8 +674,6 @@ pub fn index_of_min(nets: &mut Vec<f64>) -> usize{
 
 pub fn tabulated_ao (mol: &Molecule, rand_p: &Vec<[f64; 3]>) -> MatrixFull<f64>{
     let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
-    //println!("debug: default_omp_num_threads: {}", default_omp_num_threads);
-    //unsafe{utilities::openblas_set_num_threads(1)};
     utilities::omp_set_num_threads_wrapper(1);
 
     let num_grids = rand_p.len();
@@ -775,15 +752,6 @@ pub fn prepare_for_ri_isdf(k_mu: usize, mol: &Molecule, grids: &dft::Grids) -> R
     let ngrids = lambda_r.len();
     let rgrids = &grids.coordinates;
 
-    /* let mut pri = vec![[0.0;4]; ngrids];
-    pri.iter_mut().zip(rgrids.iter()).zip(lambda_r.iter()).for_each(|(((x,y),z))|{
-        x[0]=y[0];
-        x[1]=y[1];
-        x[2]=y[2];
-        x[3]=*z;
-    });
-    println!{"Grids:\n {:?}", &pri}; */
-    //println!("rest points: {:?}", &rgrids);
     let mut phi = tabulated_ao(&mol, &rgrids);
 
     time_mark.new_item("ISDF", "Getting Interpolation points & vectors");
@@ -793,8 +761,7 @@ pub fn prepare_for_ri_isdf(k_mu: usize, mol: &Molecule, grids: &dft::Grids) -> R
     lambda_r_for_isdf.iter_mut().zip(lambda_r.iter()).for_each(|(x,y)|{
         *x = y.abs();
     });
-    
-    
+     
     let (ip, ip_weights) = cvt_isdf_v2(&rgrids, &lambda_r_for_isdf, n_mu);
     let mut varphi = tabulated_ao(&mol, &ip);
     let mut lambda_varphi = MatrixFull::new([nao,n_mu],0.0);
@@ -976,6 +943,75 @@ pub fn prepare_for_ri_isdf(k_mu: usize, mol: &Molecule, grids: &dft::Grids) -> R
 }
 
 //==============================================================================
+pub fn prepare_g_isdf(k_mu: usize, mol: &Molecule, grids: &dft::Grids) -> MatrixFull<f64> {
+
+    let nao = mol.num_basis;
+    let nri = mol.num_auxbas;
+    let lambda_r = &grids.weights;
+    let ngrids = lambda_r.len();
+    let rgrids = &grids.coordinates;
+    let mut phi = tabulated_ao(&mol, &rgrids);
+    let n_mu = k_mu * nri;
+    let mut lambda_r_for_isdf = vec![0.0; ngrids];
+    lambda_r_for_isdf.iter_mut().zip(lambda_r.iter()).for_each(|(x,y)|{
+        *x = y.abs();
+    });
+    
+    
+    let (ip, ip_weights) = cvt_isdf_v2(&rgrids, &lambda_r_for_isdf, n_mu);
+    let mut varphi = tabulated_ao(&mol, &ip);
+    let mut lambda_varphi = MatrixFull::new([nao,n_mu],0.0);
+    lambda_varphi.iter_columns_full_mut().zip(ip_weights.iter().zip(varphi.iter_columns_full()))
+    .for_each(|(x, (weight,aos))|{
+        x.iter_mut().zip(aos.iter()).for_each(|(y,ao)|{
+            *y = weight * ao;
+        });
+    });
+    
+    //========================================================================================================
+    //C2 = (lambda_varphi.T \cdot lambda_varphi) \times (varphi.T \cdot varphi)
+    // c2就是S_{KL}，见公式17
+    let mut c21 = MatrixFull::new([n_mu, n_mu], 0.0);
+    let mut lambda_varphi_mid = lambda_varphi.clone();
+    c21.lapack_dgemm(&mut lambda_varphi, &mut lambda_varphi_mid, 'T', 'N', 1.0, 0.0);
+    let mut c22 = MatrixFull::new([n_mu, n_mu], 0.0);
+    let mut varphi_mid = varphi.clone();
+    c22.lapack_dgemm(&mut varphi, &mut varphi_mid, 'T', 'N', 1.0, 0.0);
+    let mut c2 = MatrixFull::new([n_mu, n_mu], 0.0);
+    c2.iter_columns_full_mut().zip(c21.iter_columns_full()).zip(c22.iter_columns_full())
+        .for_each(|((x,a),b)|{
+            x.iter_mut().zip(a.iter()).zip(b.iter()).for_each(|((x1,a1),b1)|{
+                *x1 = a1 * b1;
+            });
+        });
+
+    // c就是C_{\mu\nu}^{L}*\lambda(r_L)， 见公式22,24
+    let mut c = prod_states_gw(&lambda_varphi.transpose(), &varphi.transpose());
+    //&c.formated_output_e(5, "full");
+    utilities::omp_set_num_threads_wrapper(mol.ctrl.num_threads.unwrap());
+    let omp_num = utilities::omp_get_num_threads_wrapper();
+    let mut s_t = c2.pinv(1.0e-12);
+
+    let mut g_ik = MatrixFull::new([nao, nao], 0.0);
+    for i in (0..nao){
+        for j in (0..nao){
+            let mut sum = 0.0;
+            let mut column_i = nao*i + j ;
+            for k in (0..n_mu){
+                for l in (0..n_mu){
+
+                    sum += s_t.data[k*n_mu+l] * c.data[column_i * n_mu + k] * c.data[column_i * n_mu + l];
+                }
+            }
+
+            g_ik.data[column_i] = sum;
+        }
+    }
+
+    g_ik
+}
+
+
 
 pub fn gen_atom_grids_for_isdf(mol:&Molecule) -> Vec<dftgrids>{
     let radial_precision = mol.ctrl.radial_precision;
@@ -1409,7 +1445,7 @@ pub fn init_by_rho(grids: &mut dftgrids, dm: &Vec<MatrixFull<f64>>, spin_channel
         new_rho = rho.data.clone();
     }
     let mut varrho = vec![0.0; ngrids];
-    varrho.iter_mut().zip(new_rho.iter()).zip(grids.weights.iter())
+    varrho.iter_mut().zip(new_rho.iter()).zip(grids.weights.iter()) 
         .for_each(|((x_w,x),w)|{
             *x_w = *x * w
         });
@@ -1430,4 +1466,139 @@ pub fn init_by_rho(grids: &mut dftgrids, dm: &Vec<MatrixFull<f64>>, spin_channel
 
     new_grids
 
+}
+
+pub fn prepare_m_isdf(k_mu: usize, mol: &Molecule, grids: &dft::Grids) -> (MatrixFull<f64>, MatrixFull<f64>) {
+    let nao = mol.num_basis;
+    let nri = mol.num_auxbas;
+
+    let lambda_r = &grids.weights;
+    let ngrids = lambda_r.len();
+    let rgrids = &grids.coordinates;
+
+    //println!("rest points: {:?}", &rgrids);
+    let mut phi = tabulated_ao(&mol, &rgrids);
+
+    let n_mu = k_mu * nri;
+    let mut lambda_r_for_isdf = vec![0.0; ngrids];
+    lambda_r_for_isdf.iter_mut().zip(lambda_r.iter()).for_each(|(x,y)|{
+        *x = y.abs();
+    });
+    let mut lambda_phi = MatrixFull::new([nao,ngrids],0.0);
+    lambda_phi.iter_columns_full_mut().zip(lambda_r.iter().zip(phi.iter_columns_full()))
+    .for_each(|(x, (weight,aos))|{
+        x.iter_mut().zip(aos.iter()).for_each(|(y,ao)|{
+            *y = weight * ao;
+        });
+    });
+
+    let (ip, ip_weights) = cvt_isdf_v2(&rgrids, &lambda_r_for_isdf, n_mu);
+    let mut varphi = tabulated_ao(&mol, &ip);
+    let mut lambda_varphi = MatrixFull::new([nao,n_mu],0.0);
+    lambda_varphi.iter_columns_full_mut().zip(ip_weights.iter().zip(varphi.iter_columns_full()))
+    .for_each(|(x, (weight,aos))|{
+        x.iter_mut().zip(aos.iter()).for_each(|(y,ao)|{
+            *y = weight * ao;
+        });
+    });
+
+    let mut c21 = MatrixFull::new([n_mu, n_mu], 0.0);
+    let mut lambda_varphi_mid = lambda_varphi.clone();
+    c21.lapack_dgemm(&mut lambda_varphi, &mut lambda_varphi_mid, 'T', 'N', 1.0, 0.0);
+    let mut c22 = MatrixFull::new([n_mu, n_mu], 0.0);
+    let mut varphi_mid = varphi.clone();
+    c22.lapack_dgemm(&mut varphi, &mut varphi_mid, 'T', 'N', 1.0, 0.0);
+    let mut c2 = MatrixFull::new([n_mu, n_mu], 0.0);
+    c2.iter_columns_full_mut().zip(c21.iter_columns_full()).zip(c22.iter_columns_full())
+        .for_each(|((x,a),b)|{
+            x.iter_mut().zip(a.iter()).zip(b.iter()).for_each(|((x1,a1),b1)|{
+                *x1 = a1 * b1;
+            });
+        });
+
+    let mut cint_data = mol.initialize_cint(true);
+    let n_basis_shell = mol.cint_bas.len();
+    let n_auxbas_shell = mol.cint_aux_bas.len();
+    let mut ri3fn = RIFull::new([nao,nao,nri],0.0);
+    cint_data.cint2c2e_optimizer_rust();
+    let mut ri_v_ri = MatrixFull::new([nri,nri],0.0);
+    for l in 0..n_auxbas_shell {
+        let basis_start_l = mol.cint_aux_fdqc[l][0];
+        let basis_len_l = mol.cint_aux_fdqc[l][1];
+        let gl  = l + n_basis_shell;
+        for k in 0..n_auxbas_shell {
+            let basis_start_k = mol.cint_aux_fdqc[k][0];
+            let basis_len_k = mol.cint_aux_fdqc[k][1];
+            let gk  = k + n_basis_shell;
+            let buf = cint_data.cint_2c2e(gk as i32, gl as i32);
+            
+            let mut tmp_slices = ri_v_ri.iter_submatrix_mut(
+                basis_start_k..basis_start_k+basis_len_k,
+                basis_start_l..basis_start_l+basis_len_l);
+            tmp_slices.zip(buf.iter()).for_each(|value| {*value.0 = *value.1});
+
+        }
+    }
+    cint_data.cint3c2e_optimizer_rust();
+    for k in 0..n_auxbas_shell {
+        let basis_start_k = mol.cint_aux_fdqc[k][0];
+        let basis_len_k = mol.cint_aux_fdqc[k][1];
+        let gk  = k + n_basis_shell;
+        for j in 0..n_basis_shell {
+            let basis_start_j = mol.cint_fdqc[j][0];
+            let basis_len_j = mol.cint_fdqc[j][1];
+            // can be optimized with "for i in 0..(j+1)"
+            for i in 0..n_basis_shell {
+                let basis_start_i = mol.cint_fdqc[i][0];
+                let basis_len_i = mol.cint_fdqc[i][1];
+                let buf = RIFull::from_vec([basis_len_i, basis_len_j,basis_len_k], 
+                    cint_data.cint_3c2e(i as i32, j as i32, gk as i32)).unwrap();
+                ri3fn.copy_from_ri(
+                    basis_start_i..basis_start_i+basis_len_i,
+                    basis_start_j..basis_start_j+basis_len_j,
+                    basis_start_k..basis_start_k+basis_len_k,
+                    & buf, 
+                    0..basis_len_i, 
+                    0..basis_len_j, 
+                    0..basis_len_k);
+            }
+        }
+    }
+        cint_data.final_c2r();
+
+    let mut ri_v_ao_t = MatrixFull::from_vec([nao*nao, nri],ri3fn.data).unwrap();
+   
+    println!("int2c2e,int3c2e finished");
+
+    let mut c = prod_states_gw(&lambda_varphi.transpose(), &varphi.transpose());
+    let mut tmp1 = MatrixFull::new([nri, n_mu],0.0);
+    tmp1.lapack_dgemm(&mut ri_v_ao_t, &mut c, 'T', 'T', 1.0, 0.0);
+
+    let mut tmp0 = MatrixFull::new([nri,n_mu],0.0);
+
+    //=====================test_pinv_time==========================
+    let mut time_mark = utilities::TimeRecords::new();
+    time_mark.new_item("test pinv", "");
+    time_mark.count_start("test pinv");
+    let mut inv_cctrans = c2.pinv(1.0e-12);
+    time_mark.count("test pinv");
+    time_mark.report_all();
+    //=============================================================
+
+    tmp0.lapack_dgemm(&mut tmp1, &mut inv_cctrans, 'N', 'N', 1.0, 0.0);
+    println!("prepared for dgesv");
+
+    let mut tmp01 = tmp0.clone();
+    let mut tmp = ri_v_ri.lapack_dgesv(&mut tmp01, nri as i32);
+    //println!("tmp:{:?}", &tmp);
+    let mut kernel_part = MatrixFull::new([n_mu,n_mu], 0.0);
+    kernel_part.lapack_dgemm(&mut tmp0, &mut tmp, 'T', 'N', 1.0, 0.0);
+    //&kernel_part.formated_output_e(5, "full");
+    //&varphi.formated_output_e(5,"full");
+    for i in 0..n_mu{
+        for j in 0..n_mu{
+            kernel_part[[i,j]] *= ip_weights[i] * ip_weights[j]
+        }
+    }
+    (varphi, kernel_part)
 }

@@ -13,7 +13,7 @@ use std::{vec, fs};
 use rest_libcint::{CINTR2CDATA, CintType};
 use crate::geom_io::{GeomCell,MOrC, GeomUnit};
 use crate::basis_io::{Basis4Elem,BasInfo};
-use crate::isdf::{prepare_for_ri_isdf, init_by_rho};
+use crate::isdf::{prepare_for_ri_isdf, init_by_rho, prepare_m_isdf};
 //use crate::initial_guess::sad::sad_dm;
 use crate::molecule_io::{Molecule, generate_ri3fn_from_rimatr};
 use crate::tensors::{TensorOpt,TensorOptMut,TensorSlice};
@@ -49,6 +49,8 @@ pub struct SCF {
     pub ijkl: Option<ERIFold4<f64>>,
     pub ri3fn: Option<RIFull<f64>>,
     pub ri3fn_isdf: Option<RIFull<f64>>,
+    pub tab_ao: Option<MatrixFull<f64>>,
+    pub m: Option<MatrixFull<f64>>,
     pub rimatr: Option<(MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>)>,
     pub ri3mo: Option<Vec<(RIFull<f64>,std::ops::Range<usize> , std::ops::Range<usize>)>>,
     #[pyo3(get,set)]
@@ -72,6 +74,7 @@ pub struct SCF {
     #[pyo3(get,set)]
     pub scf_energy: f64,
     pub grids: Option<Grids>,
+    
 }
 
 #[derive(Clone,Copy)]
@@ -92,13 +95,15 @@ impl SCF {
             ijkl: None,
             ri3fn: None,
             ri3fn_isdf: None,
+            tab_ao: None,
+            m: None,
             rimatr: None,
             ri3mo: None,
             eigenvalues: [vec![],vec![]],
             hamiltonian: [MatrixUpper::new(1,0.0),
                               MatrixUpper::new(1,0.0)],
             eigenvectors: [MatrixFull::new([1,1],0.0),
-                              MatrixFull::new([1,1],0.0)],
+                           MatrixFull::new([1,1],0.0)],
             //density_matrix: [MatrixFull::new([1,1],0.0),
             //                     MatrixFull::new([1,1],0.0)],
             density_matrix: vec![MatrixFull::empty(),
@@ -187,6 +192,7 @@ impl SCF {
             } else {
                 None
             }
+            //Some(new_scf.mol.int_ijkl_erifold4())
         } else {
             Some(new_scf.mol.int_ijkl_erifold4())
             //None
@@ -231,7 +237,10 @@ impl SCF {
 
         time_mark.count("CInt");
 
+        // initial eigenvectors and eigenvalues
         let (eigenvectors, eigenvalues,n_found)=new_scf.ovlp.to_matrixupperslicemut().lapack_dspevx().unwrap();
+        //let (eigenvectors, eigenvalues,n_found)=new_scf.h_core.to_matrixupperslicemut().lapack_dspevx().unwrap();
+        //println!("eigenvectors are: {:?}", eigenvectors);
 
         if (n_found as usize) < new_scf.mol.fdqc_bas.len() {
             println!("Overlap matrix is singular:");
@@ -274,7 +283,6 @@ impl SCF {
 
         
         // now prepare initial guess from different methods
-        initial_guess(&mut new_scf);
 
         if ! new_scf.mol.ctrl.atom_sad && new_scf.mol.ctrl.print_level>4 {
             println!("Initial density matrix:");
@@ -285,36 +293,35 @@ impl SCF {
 
         //1E-07: default
         if new_scf.mol.ctrl.use_isdf {
+            let init_fock = new_scf.h_core.clone();
+            if new_scf.mol.spin_channel==1 {
+                new_scf.hamiltonian = [init_fock,MatrixUpper::new(1,0.0)];
+            } else {
+                let init_fock_beta = init_fock.clone();
+                new_scf.hamiltonian = [init_fock,init_fock_beta];
+            };
+            new_scf.diagonalize_hamiltonian();
+            new_scf.generate_density_matrix();
+
             new_scf.grids = Some(prune_by_rho(&mut new_scf.grids.unwrap(), &new_scf.density_matrix, new_scf.mol.spin_channel));
             
         };
 
-        let isdf_full = new_scf.mol.ctrl.eri_type.eq("ri_v") && new_scf.mol.ctrl.use_isdf;
+        let isdf = new_scf.mol.ctrl.eri_type.eq("ri_v") && new_scf.mol.ctrl.use_isdf;
         let ri3fn_full = new_scf.mol.ctrl.use_auxbas && !new_scf.mol.ctrl.use_ri_symm;
         let ri3fn_symm = new_scf.mol.ctrl.use_auxbas && new_scf.mol.ctrl.use_ri_symm;
 
         time_mark.count_start("CInt");
-        /* new_scf.ri3fn = if ri3fn_full && !isdf_full {
-            Some(new_scf.mol.prepare_ri3fn_for_ri_v_full_rayon())
-        } else if ri3fn_full && isdf_full {
-            if let Some(grids) = &new_scf.grids {
-                Some(prepare_for_ri_isdf(new_scf.mol.ctrl.isdf_k_mu, &new_scf.mol, &grids))
-            } else {
-                None
-            }
-        } else {
-            None
-        }; */
 
-        new_scf.ri3fn = if ri3fn_full && !isdf_full {
+        new_scf.ri3fn = if ri3fn_full && !isdf {
             Some(new_scf.mol.prepare_ri3fn_for_ri_v_full_rayon())
-        }else if isdf_full && new_scf.mol.ctrl.isdf_k_only{
+        }else if new_scf.mol.ctrl.isdf_k_only{ 
             Some(new_scf.mol.prepare_ri3fn_for_ri_v_full_rayon())
         }else {
             None
         };
         
-        new_scf.ri3fn_isdf = if ri3fn_full && isdf_full {
+        new_scf.ri3fn_isdf = if ri3fn_full && isdf && !new_scf.mol.ctrl.isdf_new{
             if let Some(grids) = &new_scf.grids {
                 Some(prepare_for_ri_isdf(new_scf.mol.ctrl.isdf_k_mu, &new_scf.mol, &grids))
             } else {
@@ -324,22 +331,34 @@ impl SCF {
             None
         };
 
-        new_scf.rimatr = if ri3fn_symm  && ! isdf_full {
+        (new_scf.tab_ao, new_scf.m) = if isdf && new_scf.mol.ctrl.isdf_new{
+            if let Some(grids) = &new_scf.grids {
+                let isdf = prepare_m_isdf(new_scf.mol.ctrl.isdf_k_mu, &new_scf.mol, &grids);
+                (Some(isdf.0), Some(isdf.1))
+            } else {
+                (None,None)
+            }
+        } else {
+            (None,None)
+        };
+
+        new_scf.rimatr = if ri3fn_symm  && ! isdf {
             //println!("generate ri3fn from rimatr");
             let (rimatr, basbas2baspar, baspar2basbas) = new_scf.mol.prepare_rimatr_for_ri_v_rayon();
             Some((rimatr, basbas2baspar, baspar2basbas))
-        } else if ri3fn_symm  && isdf_full {
+        } else if ri3fn_symm  && isdf {
             None
         } else {
             None
         };
+
+        initial_guess(&mut new_scf);
         time_mark.count("CInt");
 
         time_mark.count("Overall");
         if new_scf.mol.ctrl.print_level>=2 {
             time_mark.report_all();
         }
-
 
         new_scf
     }
@@ -487,7 +506,9 @@ impl SCF {
             *dm_s = MatrixFull::new([num_basis,num_basis],0.0);
             let mut eigv_s = &mut self.eigenvectors[i_spin];
             let occ_s =  &self.occupation[i_spin];
+
             let nw =  self.homo[i_spin]+1;
+            //println!("number of occupied orbitals from dm generation: {}", nw);
 
             let mut weight_eigv = MatrixFull::new([num_basis, num_state],0.0_f64);
             //let mut weight_eigv = eigv_s.clone();
@@ -505,7 +526,7 @@ impl SCF {
 
             // dm = wC*C^{T}
             dm_s.lapack_dgemm(&mut weight_eigv, eigv_s, 'N', 'T', 1.0, 0.0);
-            //dm_s.formated_output(5, "lower".to_string());
+            //dm_s.formated_output(5, "full");
         });
         //if let SCFType::ROHF = self.scftype {dm[1]=dm[0].clone()};
         self.density_matrix = dm;
@@ -663,6 +684,58 @@ impl SCF {
 
         vj
     }
+
+    pub fn generate_vj_on_the_fly(&mut self) -> Vec<MatrixUpper<f64>>{
+        let num_shell = self.mol.cint_bas.len();
+        //let num_shell = self.mol.cint_fdqc.len();
+        let num_basis = self.mol.num_basis;
+        let spin_channel = self.mol.spin_channel;
+        let dm = &self.density_matrix;
+        let mut vj: Vec<MatrixUpper<f64>> = vec![];
+        let mol = &self.mol;
+        for i_spin in 0..spin_channel{
+            let mut vj_i = MatrixFull::new([num_basis, num_basis], 0.0);
+            let mut dm_s = &self.density_matrix[i_spin];
+            for k in 0..num_shell{
+                let bas_start_k = mol.cint_fdqc[k][0];
+                let bas_len_k = mol.cint_fdqc[k][1];
+
+                for l in 0..num_shell{
+                    let bas_start_l = mol.cint_fdqc[l][0];
+                    let bas_len_l = mol.cint_fdqc[l][1];
+                    let mut klij = &mol.int_ijkl_given_kl(k, l);
+                    
+                    // ao_k & ao_l are index of ao
+                    let mut sum =0.0;
+                    for ao_k in bas_start_k..bas_start_k+bas_len_k{
+                        for ao_l in bas_start_l..bas_start_l+bas_len_l{
+                            let mut sum =0.0;
+                            let mut index_k = ao_k-bas_start_k;
+                            let mut index_l = ao_l-bas_start_l;
+                            let mut eri_cd = &klij[index_l * bas_len_k + index_k];
+                            let eri_full = eri_cd.to_matrixupper().to_matrixfull().unwrap();
+                            let mut v_cd = MatrixFull::new([num_basis, num_basis], 0.0);
+                            v_cd.data.iter_mut().zip(dm_s.data.iter()).zip(eri_full.data.iter()).for_each(|((v,p),eri)|{
+                                *v = *p * *eri
+                            });
+
+                            v_cd.data.iter().for_each(|x|{
+                                sum += *x
+                            });
+                            vj_i[(ao_k,ao_l)] = sum;
+                        }
+                    }
+                }
+            }
+
+            vj.push(vj_i.to_matrixupper());
+        }
+        if spin_channel == 1{
+            vj.push(MatrixUpper::new(1, 0.0));       
+        }
+        vj
+    }
+
     pub fn generate_vk_with_erifold4(&mut self, scaling_factor: f64) -> Vec<MatrixFull<f64>> {
         let num_basis = self.mol.num_basis;
         let npair = num_basis*(num_basis+1)/2;
@@ -815,7 +888,7 @@ impl SCF {
                         //            .zip(dm_jc[..k].par_iter()).map(|(i,j)| i*j).sum::<f64>();
                         //        kl += k;
                         //        vk_ic[k] += reduce_ij[kl] *dm_jc[k];
-                        //        kl += 1;
+                        //        kl += 1;我们的描述子是1*10
                         //    } else {
                         //        vk_ic[..ic+1].iter_mut()
                         //            .zip(reduce_ij[kl..kl+ic+1].iter())
@@ -1318,6 +1391,101 @@ impl SCF {
         };
         vk
     }
+
+    pub fn generate_vk_with_isdf_new(&mut self, scaling_factor: f64) -> Vec<MatrixUpper<f64>>{
+        let num_basis = self.mol.num_basis;
+        let num_state = self.mol.num_state;
+        //let npair = num_basis*(num_basis+1)/2;
+        let spin_channel = self.mol.spin_channel;
+        let mut vk: Vec<MatrixUpper<f64>> = vec![];
+        let spin_channel = self.mol.spin_channel;
+        let m = self.m.clone().unwrap();
+        let tab_ao = self.tab_ao.clone().unwrap();
+        let n_ip = m.size[0];
+
+        for i_spin in 0..spin_channel{
+            let mut dm_s = &self.density_matrix[i_spin];
+            let nw =  self.homo[i_spin]+1;
+            let mut kernel_mid = MatrixFull::new([n_ip,num_basis], 0.0);
+            _dgemm(&tab_ao,(0..num_basis, 0..n_ip),'T',
+                dm_s,(0..num_basis,0..num_basis),'N',
+                &mut kernel_mid, (0..n_ip, 0..num_basis),
+                1.0,0.0);
+
+            let mut kernel = MatrixFull::new([n_ip,n_ip], 0.0);
+            _dgemm(&kernel_mid,(0..n_ip, 0..num_basis),'N',
+            &tab_ao, (0..num_basis, 0..n_ip),'N',
+            &mut kernel, (0..n_ip,0..n_ip),
+            1.0, 0.0);
+
+            kernel.data.iter_mut().zip(m.data.iter()).for_each(|(x,y)|{
+                *x *= *y * scaling_factor
+            });
+
+            let mut tmp = MatrixFull::new([num_basis, n_ip], 0.0);
+            _dgemm(&tab_ao,(0..num_basis,0..n_ip),'N',
+            &kernel,(0..n_ip,0..n_ip),'N',
+            &mut tmp, (0..num_basis,0..n_ip),
+            1.0, 0.0);
+            let mut vk_i = MatrixFull::new([num_basis, num_basis], 0.0);
+            _dgemm(&tmp,(0..num_basis,0..n_ip),'N',
+            &tab_ao,(0..num_basis,0..n_ip),'T',
+            &mut vk_i, (0..num_basis,0..num_basis),
+            1.0, 0.0);
+            vk.push(vk_i.to_matrixupper());
+        }
+        vk
+    }
+
+    pub fn generate_vk_with_isdf_new_v2(&mut self) -> Vec<MatrixUpper<f64>>{
+        let num_basis = self.mol.num_basis;
+        let num_state = self.mol.num_state;
+        //let npair = num_basis*(num_basis+1)/2;
+        let spin_channel = self.mol.spin_channel;
+        let mut vk: Vec<MatrixUpper<f64>> = vec![];
+        let eigv = &self.eigenvectors;
+        let spin_channel = self.mol.spin_channel;
+        let m = self.m.clone().unwrap();
+        let tab_ao = self.tab_ao.clone().unwrap();
+        let n_ip = m.size[0];
+
+        for i_spin in 0..spin_channel{
+            let occ_s =  &self.occupation[i_spin];
+            let nw =  self.homo[i_spin]+1;
+
+            let mut tab_mo = MatrixFull::new([nw,n_ip], 0.0);
+            _dgemm(&eigv[i_spin],(0..num_basis, 0..nw),'T',
+                &tab_ao,(0..num_basis,0..n_ip),'N',
+                &mut tab_mo, (0..nw, 0..n_ip),
+                1.0,0.0);
+
+            let mut zip_m_mo = MatrixFull::new([n_ip,n_ip], 0.0);
+            _dgemm(&tab_mo,(0..nw, 0..n_ip),'T',
+            &tab_mo, (0..nw, 0..n_ip),'N',
+            &mut zip_m_mo, (0..n_ip,0..n_ip),
+            1.0, 0.0);
+
+            zip_m_mo.data.iter_mut().zip(m.data.iter()).for_each(|(x,y)|{
+                *x *= *y * (-1.0)
+            });
+
+            let mut tmp = MatrixFull::new([num_basis, n_ip], 0.0);
+            _dgemm(&tab_ao,(0..num_basis,0..n_ip),'N',
+            &zip_m_mo,(0..n_ip,0..n_ip),'N',
+            &mut tmp, (0..num_basis,0..n_ip),
+            1.0, 0.0);
+
+            let mut vk_i = MatrixFull::new([num_basis, num_basis], 0.0);
+            _dgemm(&tmp,(0..num_basis,0..n_ip),'N',
+            &tab_ao,(0..num_basis,0..n_ip),'T',
+            &mut vk_i, (0..num_basis,0..num_basis),
+            1.0, 0.0);
+
+            vk.push(vk_i.to_matrixupper());
+
+        }
+        vk
+    }
     pub fn generate_hf_hamiltonian_erifold4(&mut self) {
         let num_basis = self.mol.num_basis;
         let num_state = self.mol.num_state;
@@ -1376,18 +1544,42 @@ impl SCF {
         let spin_channel = self.mol.spin_channel;
         //let homo = &self.homo;
         let dt1 = time::Local::now();
-        let vj = self.generate_vj_with_ri_v_sync(1.0);
+        //let vj = self.generate_vj_with_ri_v_sync(1.0);
+        let vj = if self.mol.ctrl.isdf_new{
+            self.generate_vj_on_the_fly()
+            //self.generate_vj_with_ri_v_sync(1.0)
+            //self.generate_vj_with_erifold4_sync(1.0)
+        }else{
+            self.generate_vj_with_ri_v_sync(1.0)
+        };
+        /* println!("vj alpha:");
+        &vj[0].formated_output(5, "upper");
+        println!("vj beta:");
+        &vj[1].formated_output(5, "upper"); */
         let dt2 = time::Local::now();
         let scaling_factor = match self.scftype {
             SCFType::RHF => -0.5,
             _ => -1.0,
         };
+        //&self.eigenvectors[0].formated_output_e(5, "full");
         let use_dm_only = self.mol.ctrl.use_dm_only;
-        let vk = if self.mol.ctrl.use_isdf{
+        //println!("use_isdf: {:?}; isdf_new: {:?}", self.mol.ctrl.use_isdf, self.mol.ctrl.isdf_new);
+        let vk = if self.mol.ctrl.use_isdf && !self.mol.ctrl.isdf_new{
+            //println!("debug: isdf_k");
             self.generate_vk_with_isdf(scaling_factor, use_dm_only)
+        }else if self.mol.ctrl.isdf_new{
+            //println!("debug: isdf_k_new");
+            self.generate_vk_with_isdf_new(scaling_factor)
         }else{
+            //println!("debug: ri_v");
             self.generate_vk_with_ri_v(scaling_factor, use_dm_only)
         };
+        /* println!("debug: vk");
+        &vk[0].formated_output(5, "upper");
+        println!("second:");
+        &vk[1].formated_output(5, "full"); */
+
+
         let dt3 = time::Local::now();
         let timecost1 = (dt2.timestamp_millis()-dt1.timestamp_millis()) as f64 /1000.0;
         let timecost2 = (dt3.timestamp_millis()-dt2.timestamp_millis()) as f64 /1000.0;
@@ -2067,7 +2259,7 @@ impl SCF {
             vj_upper_with_rimatr_v_sync(&self.rimatr, dm, spin_channel, scaling_factor)
         } else {
             //vj_upper_with_ri_v_sync(&self.ri3fn, dm, spin_channel, scaling_factor)
-            if self.mol.ctrl.use_isdf && !self.mol.ctrl.isdf_k_only{
+            if self.mol.ctrl.use_isdf && !self.mol.ctrl.isdf_k_only && !self.mol.ctrl.isdf_new{
                 vj_upper_with_ri_v_sync(&self.ri3fn_isdf, dm, spin_channel, scaling_factor)
             }else{
                 vj_upper_with_ri_v_sync(&self.ri3fn, dm, spin_channel, scaling_factor)
@@ -2093,7 +2285,9 @@ impl SCF {
         if self.mol.ctrl.use_ri_symm {
             let dm = &self.density_matrix;
             vk_upper_with_rimatr_use_dm_only_sync(&mut self.rimatr, dm, spin_channel, scaling_factor)
-        } else {
+        } else if self.mol.ctrl.isdf_new{
+            self.generate_vk_with_isdf_new(scaling_factor)
+        }else{
             if use_dm_only {
                 let dm = &self.density_matrix;
                 vk_upper_with_ri_v_use_dm_only_sync(&mut self.ri3fn, dm, spin_channel, scaling_factor)
@@ -2103,6 +2297,8 @@ impl SCF {
                                         spin_channel, scaling_factor)
             }
         }
+
+    
 
     }
 
@@ -2118,7 +2314,9 @@ impl SCF {
             vk_upper_with_rimatr_use_dm_only_sync(&mut self.rimatr, dm, spin_channel, scaling_factor)
         } else {
             if use_dm_only {
+                //println!("use isdf to generate k");
                 let dm = &self.density_matrix;
+                //&dm[0].formated_output_e(5, "full");
                 vk_upper_with_ri_v_use_dm_only_sync(&mut self.ri3fn_isdf, dm, spin_channel, scaling_factor)
             } else {
                 let eigv = &self.eigenvectors;
@@ -2126,6 +2324,7 @@ impl SCF {
                                         spin_channel, scaling_factor)
             }
         }
+        
 
     }
 
@@ -2738,6 +2937,10 @@ pub fn vk_upper_with_ri_v_use_dm_only_sync(
     //let mut bm = RIFull::new([num_state,num_basis,num_auxbas], 0.0f64);
     let mut vk: Vec<MatrixUpper<f64>> = vec![MatrixUpper::new(1,0.0f64),MatrixUpper::new(1,0.0f64)];
 
+    //============================debug===================================
+    //&dm[0].formated_output_e(5, "full");
+    //====================================================================
+
     if let Some(ri3fn) = ri3fn {
         let num_basis = dm[0].size()[0];
         let num_baspair = (num_basis+1)*num_basis/2;
@@ -2746,6 +2949,7 @@ pub fn vk_upper_with_ri_v_use_dm_only_sync(
             let mut vk_s = &mut vk[i_spin];
             *vk_s = MatrixUpper::new(num_baspair,0.0_f64);
             let dm_s = &dm[i_spin];
+            //dm_s.formated_output(5, "upper");
             let (sender, receiver) = channel();
             ri3fn.par_iter_auxbas(0..num_auxbas).unwrap().for_each_with(sender,|s, m| {
                 let mut tmp_mat = MatrixFull::new([num_basis,num_basis],0.0_f64);
@@ -2761,8 +2965,10 @@ pub fn vk_upper_with_ri_v_use_dm_only_sync(
                 //_dgemm(&tmp_mat, (0..num_basis,0..num_basis), 'N', 
                 //       &reduced_ri3fn, (0..num_basis,0..num_basis), 'T', 
                 //       &mut vk_sm, (0..num_basis,0..num_basis), 1.0, 0.0);
+                //tmp_mat = ri3fn \cdot dm
                 _dsymm(&reduced_ri3fn, dm_s, &mut tmp_mat, 'L', 'U', 1.0, 0.0);
                 let mut vk_sm = MatrixFull::new([num_basis,num_basis],0.0_f64);
+                //vk_sm = ri3fn \cdot dm \cdot ri3fn
                 _dsymm(&reduced_ri3fn, &tmp_mat, &mut vk_sm, 'R', 'U', 1.0, 0.0);
 
                 s.send(vk_sm.to_matrixupper()).unwrap();
@@ -2786,6 +2992,15 @@ pub fn vk_upper_with_ri_v_use_dm_only_sync(
     // reuse the default omp_num_threads setting
     utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
 
+    //============================debug==================================
+
+    /* let mut data = vec![0.0; vk[0].data.len()];
+    for i in 0..vk[0].data.len(){
+        data[i] = vk[0].data[i] * 2.0;
+    }
+    let final_vk = MatrixUpper{size: vk[0].size, data: data};
+    &final_vk.formated_output(5, "upper"); */
+    //===================================================================
     vk
 }
 
@@ -2844,6 +3059,7 @@ pub fn vk_upper_with_rimatr_use_dm_only_sync(
     vk
 }
 
+//==========================need to be checked=============================
 pub fn vk_upper_with_ri_v_sync(
                 ri3fn: &mut Option<RIFull<f64>>,
                 eigv: &[MatrixFull<f64>;2], 
@@ -2857,7 +3073,7 @@ pub fn vk_upper_with_ri_v_sync(
 
     //let mut bm = RIFull::new([num_state,num_basis,num_auxbas], 0.0f64);
     let mut vk: Vec<MatrixUpper<f64>> = vec![MatrixUpper::new(1,0.0f64),MatrixUpper::new(1,0.0f64)];
-
+    
     if let Some(ri3fn) = ri3fn {
         let num_basis = eigv[0].size[0];
         let num_state = eigv[0].size[1];
@@ -2875,20 +3091,25 @@ pub fn vk_upper_with_ri_v_sync(
                 let mut tmp_mat = MatrixFull::new([num_basis,nw],0.0_f64);
                 tmp_mat.data.iter_mut().zip(eigv_s.iter_submatrix(0..num_basis,0..nw))
                     .for_each(|value| {*value.0 = *value.1});
+
                 let mut reduced_ri3fn = MatrixFullSlice {
-                    size:  &[num_basis,num_basis],
+                    size:  &[num_basis,num_basis], 
                     indicing: &[1,num_basis],
                     data: m,
                 };
+                //tmp_mat: copy of related eigenvalue; reduced_ri3fn: certain part of ri3fn
                 let mut tmp_mc = MatrixFull::new([num_basis,nw],0.0_f64);
+                //tmp_mc = ri3fn \cdot eigv
                 tmp_mc.to_matrixfullslicemut().lapack_dgemm(&reduced_ri3fn, &tmp_mat.to_matrixfullslice(), 'N', 'N', 1.0, 0.0);
-
+                //tmp_mat = tmp_mc (ri3fn \cdot eigv)
                 let mut tmp_mat = tmp_mc.clone();
+                //tmp_mat = tmp_mc * occ
                 tmp_mat.data.chunks_exact_mut(tmp_mat.size[0]).zip(occ_s.iter()).for_each(|(to_value, from_value)| {
                     to_value.iter_mut().for_each(|to_value| {*to_value = *to_value*from_value});
                 });
 
                 let mut vk_mu = MatrixFull::new([num_basis,num_basis],0.0_f64);
+                // vk_mu = tmp_mat \cdot tmp_mc.T  ((ri3fn \cdot eigv * occ) \cdot (ri3fn \cdot eigv)^T)
                 vk_mu.lapack_dgemm(&mut tmp_mat, &mut tmp_mc, 'N', 'T', 1.0, 0.0);
 
                 // filter out the upper part of vk_mu
@@ -2919,9 +3140,19 @@ pub fn vk_upper_with_ri_v_sync(
     // reuse the default omp_num_threads setting
     utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
 
+    //============================debug==================================
+
+    /* let mut data = vec![0.0; vk[0].data.len()];
+    for i in 0..vk[0].data.len(){
+        data[i] = vk[0].data[i] * 2.0;
+    }
+    let final_vk = MatrixUpper{size: vk[0].size, data: data};
+    &final_vk.formated_output(5, "upper"); */
+    //===================================================================
+
     vk
 }
-
+//=============================================================================
 
 #[derive(Clone)]
 pub struct ScfTraceRecord {

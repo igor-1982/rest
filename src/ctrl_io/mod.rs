@@ -65,6 +65,8 @@ pub struct InputKeywords {
     pub isdf_k_mu: usize,
     // Keywords for systems
     #[pyo3(get, set)]
+    pub isdf_new: bool,
+    #[pyo3(get, set)]
     pub eri_type: String,
     #[pyo3(get, set)]
     pub use_ri_symm: bool,
@@ -177,6 +179,7 @@ impl InputKeywords {
             use_isdf: false,
             isdf_k_only: false,
             isdf_k_mu: 17,
+            isdf_new: false,
             // Keywords associated with the method employed
             xc: String::from("x3lyp"),
             post_xc: vec![],
@@ -344,14 +347,20 @@ impl InputKeywords {
                     //====================================================
                     tmp_input.use_auxbas = true;
                     tmp_input.use_isdf = true;
-                }else if eri_type.eq(&String::from("isdf_k")) {
-                    // =========== for debug use by IGOR =================
-                    tmp_input.eri_type = String::from("ri_v");
-                    //====================================================
-                    tmp_input.use_auxbas = true;
-                    tmp_input.use_isdf = true;
-                    tmp_input.isdf_k_only = true;
-                } else {
+                }else if eri_type.eq(&String::from("isdf_k_new")){
+                        tmp_input.use_auxbas = true;
+                        tmp_input.use_isdf = true;
+                        tmp_input.isdf_k_only = true;
+                        tmp_input.eri_type = String::from("ri_v");
+                        tmp_input.isdf_new = true;
+                }else if  eri_type.eq(&String::from("isdf_k")){
+                        tmp_input.use_auxbas = true;
+                        tmp_input.use_isdf = true;
+                        tmp_input.isdf_k_only = true;
+                        tmp_input.eri_type = String::from("ri_v");
+                        tmp_input.isdf_new = false;
+                        //println!("Initial use_isdf: {}", tmp_input.use_isdf);
+                }else {
                     tmp_input.use_auxbas = false;
                     tmp_input.use_isdf = false;
                 };

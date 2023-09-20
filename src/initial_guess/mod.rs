@@ -45,23 +45,18 @@ pub fn initial_guess(scf_data: &mut SCF) {
         //scf_data.generate_hf_hamiltonian();
     } else if scf_data.mol.ctrl.initial_guess.eq(&"sad") {
         scf_data.density_matrix = initial_guess_from_sad(&scf_data.mol);
-
-        //for DFT methods, it needs the eigenvectors to generate the hamiltoniam. In consequence, we use the hf method to prepare the eigenvectors from the guess dm
-       /*  for i in 0..scf_data.mol.spin_channel {
-            println!("debug {}", if i==0 {"Alpha"} else {"Beta"});
-            scf_data.density_matrix[i].formated_output(5, "full");
-            scf_data.hamiltonian[i] = scf_data.h_core.clone();
-        } */
-        //scf_data.generate_hf_hamiltonian_for_guess();
-
-        //======================================check====================================
+        //for DFT methods, it needs the eigenvectors to generate the hamiltoniam. In consequence, we use the hf method to prepare the eigenvectors from the guess dmß
         //scf_data.generate_hf_hamiltonian_for_guess();
         //if scf_data.mol.ctrl.print_level>0 {println!("Initial guess HF energy: {:16.8}", scf_data.evaluate_hf_total_energy())};
-        /* scf_data.generate_hf_hamiltonian();
+        scf_data.generate_hf_hamiltonian();
+        //println!("{:?}",scf_data.);
         if scf_data.mol.ctrl.print_level>0 {println!("Initial guess HF energy: {:16.8}", scf_data.scf_energy)};
 
         scf_data.diagonalize_hamiltonian();
-        scf_data.generate_density_matrix(); */
+        scf_data.generate_density_matrix();
+        //scf_data.generate_hf_hamiltonian();
+        //if scf_data.mol.ctrl.print_level>0 {println!("Initial guess HF energy: {:16.8}", scf_data.scf_energy)};
+        //===============================see====================================
     // generate the initial guess from hcore
     } else if scf_data.mol.ctrl.initial_guess.eq(&"hcore") {
         let init_fock = scf_data.h_core.clone();
