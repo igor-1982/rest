@@ -829,11 +829,7 @@ impl Molecule {
         let bas_start_k = self.cint_fdqc[k][0];
         let bas_len_k = self.cint_fdqc[k][1];
         let nbas = self.num_basis;
-        //let mut mat_full = 
-        //    MatrixFull::new([bas_len_k,bas_len_l],MatrixFull::new([nbas,nbas],0.0));
         let mut mat_vec = vec![MatrixFull::new([nbas,nbas],0.0);bas_len_k*bas_len_l];
-        //let mut mat_vec = vec![MatrixUpper::new(nbas*(nbas+1)/2,0.0);bas_len_k*bas_len_l];
-        //let mut tmp_mat = &mut mat_full[[0,0]];
 
         let mut cint_data = self.initialize_cint(false);
         let nbas_shell = self.cint_bas.len();

@@ -26,7 +26,8 @@ use hdf5;
 use std::sync::{Mutex, Arc,mpsc};
 use std::thread;
 use crossbeam::{channel::{unbounded,bounded},thread::{Scope,scope}};
-use std::sync::mpsc::{channel, Receiver};
+//use std::sync::mpsc::{channel, Receiver};
+use std::sync::mpsc::channel;
 use crate::dft::gen_grids::prune::prune_by_rho;
 //use blas_src::openblas::dgemm;
 mod addons;
@@ -727,6 +728,67 @@ impl SCF {
                     }
                 }
             }
+
+            vj.push(vj_i.to_matrixupper());
+        }
+        if spin_channel == 1{
+            vj.push(MatrixUpper::new(1, 0.0));       
+        }
+        vj
+    }
+
+    pub fn generate_vj_on_the_fly_par(&mut self) -> Vec<MatrixUpper<f64>>{
+        let num_shell = self.mol.cint_bas.len();
+        let num_basis = self.mol.num_basis;
+        let spin_channel = self.mol.spin_channel;
+        let dm = &self.density_matrix;
+        let mut vj: Vec<MatrixUpper<f64>> = vec![];
+        let mol = &self.mol;
+        for i_spin in 0..spin_channel{
+            let mut vj_i = MatrixFull::new([num_basis, num_basis], 0.0);
+            let mut dm_s = &self.density_matrix[i_spin];
+            utilities::omp_set_num_threads_wrapper(1);
+            let par_tasks = utilities::balancing(num_shell*num_shell, rayon::current_num_threads());
+            let (sender, receiver) = channel();
+            let mut index = vec![0usize; num_shell*num_shell];
+            for i in 0..num_shell*num_shell{index[i] = i};
+            index.par_iter().for_each_with(sender,|s,i|{
+                let k = i/num_shell;
+                let bas_start_k = mol.cint_fdqc[k][0];
+                let bas_len_k = mol.cint_fdqc[k][1];
+                let l = i%num_shell;
+                let bas_start_l = mol.cint_fdqc[l][0];
+                let bas_len_l = mol.cint_fdqc[l][1];
+                let mut klij = &mol.int_ijkl_given_kl(k, l);
+                let mut sum =0.0;
+                //let mut out = vec![(0.0, 0usize, 0usize); ];
+                let mut out:Vec<(f64, usize, usize)> = Vec::new();
+                    for ao_k in bas_start_k..bas_start_k+bas_len_k{
+                        for ao_l in bas_start_l..bas_start_l+bas_len_l{
+                            let mut sum =0.0;
+                            let mut index_k = ao_k-bas_start_k;
+                            let mut index_l = ao_l-bas_start_l;
+                            let mut eri_cd = &klij[index_l * bas_len_k + index_k];
+                            let eri_full = eri_cd.to_matrixupper().to_matrixfull().unwrap();
+                            let mut v_cd = MatrixFull::new([num_basis, num_basis], 0.0);
+                            v_cd.data.iter_mut().zip(dm_s.data.iter()).zip(eri_full.data.iter()).for_each(|((v,p),eri)|{
+                                *v = *p * *eri
+                            });
+
+                            v_cd.data.iter().for_each(|x|{
+                                sum += *x
+                            });
+                            out.push((sum, ao_k, ao_l));
+                        }
+                    }
+                s.send(out).unwrap();
+            });
+            receiver.into_iter().for_each(|out_vec| {
+                out_vec.iter().for_each(|(value,index_k,index_l)|{
+                    vj_i[(*index_k, *index_l)] = *value
+                })
+            });
+            
 
             vj.push(vj_i.to_matrixupper());
         }
@@ -1437,7 +1499,7 @@ impl SCF {
         vk
     }
 
-    pub fn generate_vk_with_isdf_new_v2(&mut self) -> Vec<MatrixUpper<f64>>{
+    pub fn generate_vk_with_isdf_dm_only(&mut self) -> Vec<MatrixUpper<f64>>{
         let num_basis = self.mol.num_basis;
         let num_state = self.mol.num_state;
         //let npair = num_basis*(num_basis+1)/2;
@@ -1542,42 +1604,27 @@ impl SCF {
         let num_basis = self.mol.num_basis;
         let num_state = self.mol.num_state;
         let spin_channel = self.mol.spin_channel;
-        //let homo = &self.homo;
         let dt1 = time::Local::now();
-        //let vj = self.generate_vj_with_ri_v_sync(1.0);
         let vj = if self.mol.ctrl.isdf_new{
-            self.generate_vj_on_the_fly()
-            //self.generate_vj_with_ri_v_sync(1.0)
-            //self.generate_vj_with_erifold4_sync(1.0)
+            self.generate_vj_on_the_fly_par()
         }else{
             self.generate_vj_with_ri_v_sync(1.0)
         };
-        /* println!("vj alpha:");
-        &vj[0].formated_output(5, "upper");
-        println!("vj beta:");
-        &vj[1].formated_output(5, "upper"); */
+
         let dt2 = time::Local::now();
         let scaling_factor = match self.scftype {
             SCFType::RHF => -0.5,
             _ => -1.0,
         };
-        //&self.eigenvectors[0].formated_output_e(5, "full");
+
         let use_dm_only = self.mol.ctrl.use_dm_only;
-        //println!("use_isdf: {:?}; isdf_new: {:?}", self.mol.ctrl.use_isdf, self.mol.ctrl.isdf_new);
         let vk = if self.mol.ctrl.use_isdf && !self.mol.ctrl.isdf_new{
-            //println!("debug: isdf_k");
             self.generate_vk_with_isdf(scaling_factor, use_dm_only)
         }else if self.mol.ctrl.isdf_new{
-            //println!("debug: isdf_k_new");
             self.generate_vk_with_isdf_new(scaling_factor)
         }else{
-            //println!("debug: ri_v");
             self.generate_vk_with_ri_v(scaling_factor, use_dm_only)
         };
-        /* println!("debug: vk");
-        &vk[0].formated_output(5, "upper");
-        println!("second:");
-        &vk[1].formated_output(5, "full"); */
 
 
         let dt3 = time::Local::now();
