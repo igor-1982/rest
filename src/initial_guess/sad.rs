@@ -176,6 +176,12 @@ pub fn generate_occupation(elem: &String,num_basis: usize) -> ([Vec<f64>;2],[usi
             occ_a.extend(vec![0.0;num_basis-10]);
             ([occ_a,vec![0.0;num_basis]],[9,0],[10,0])
         },
+        "Rb" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0,2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0];
+            occ_a.extend(vec![0.0;num_basis-19]);
+            ([occ_a,vec![0.0;num_basis]],[18,0],[19,0])
+        },
+        
 
         "Be" => {
             let mut occ_a = vec![2.0, 2.0];
@@ -197,6 +203,109 @@ pub fn generate_occupation(elem: &String,num_basis: usize) -> ([Vec<f64>;2],[usi
             occ_a.extend(vec![0.0;num_basis-19]);
             ([occ_a,vec![0.0;num_basis]],[18,0],[19,0])
         },
+
+        "Sc" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.2, 0.2, 0.2, 0.2, 0.2, 2.0];
+            occ_a.extend(vec![0.0;num_basis-15]);
+            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+        },
+        "Ti" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.4, 0.4, 0.4, 0.4, 0.4, 2.0];
+            occ_a.extend(vec![0.0;num_basis-15]);
+            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+        },
+        "V" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.6, 0.6, 0.6, 0.6, 0.6, 2.0];
+            occ_a.extend(vec![0.0;num_basis-15]);
+            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+        },
+        "Cr" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+            occ_a.extend(vec![0.0;num_basis-15]);
+            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+        },
+        "Mn" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0];
+            occ_a.extend(vec![0.0;num_basis-15]);
+            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+        },
+        "Fe" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.2, 1.2, 1.2, 1.2, 1.2, 2.0];
+            occ_a.extend(vec![0.0;num_basis-15]);
+            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+        },
+        "Co" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.4, 1.4, 1.4, 1.4, 1.4, 2.0];
+            occ_a.extend(vec![0.0;num_basis-15]);
+            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+        },
+        "Ni" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.6, 1.6, 1.6, 1.6, 1.6, 2.0];
+            occ_a.extend(vec![0.0;num_basis-15]);
+            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+        },
+        "Cu" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0];
+            occ_a.extend(vec![0.0;num_basis-15]);
+            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+        },
+        "Zn" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
+            occ_a.extend(vec![0.0;num_basis-15]);
+            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+        },
+
+        "Y" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.2, 0.2, 0.2, 0.2, 0.2, 2.0, 2.0];
+            occ_a.extend(vec![0.0;num_basis-24]);
+            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+        },
+        "Zr" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.4, 0.4, 0.4, 0.4, 0.4, 2.0];
+            occ_a.extend(vec![0.0;num_basis-24]);
+            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+        },
+        "Nb" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.8, 0.8, 0.8, 0.8, 0.8, 1.0];
+            occ_a.extend(vec![0.0;num_basis-24]);
+            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+        },
+        "Mo" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+            occ_a.extend(vec![0.0;num_basis-24]);
+            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+        },
+        "Tc" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0];
+            occ_a.extend(vec![0.0;num_basis-24]);
+            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+        },
+        "Ru" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.4, 1.4, 1.4, 1.4, 1.4, 1.0];
+            occ_a.extend(vec![0.0;num_basis-24]);
+            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+        },
+        "Rh" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.6, 1.6, 1.6, 1.6, 1.6, 1.0];
+            occ_a.extend(vec![0.0;num_basis-24]);
+            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+        },
+        "Pd" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0,2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
+            occ_a.extend(vec![0.0;num_basis-24]);
+            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+        },
+        "Ag" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0,2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0];
+            occ_a.extend(vec![0.0;num_basis-24]);
+            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+        },
+        "Cd" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
+            occ_a.extend(vec![0.0;num_basis-24]);
+            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+        },
+
         "B" => {
             let mut occ_a = vec![2.0, 2.0, 0.333333333, 0.33333333, 0.333333333];
             occ_a.extend(vec![0.0;num_basis-5]);
@@ -301,6 +410,7 @@ pub fn generate_occupation(elem: &String,num_basis: usize) -> ([Vec<f64>;2],[usi
             occ_a.extend(vec![0.0;num_basis-27]);
             ([occ_a,vec![0.0;num_basis]],[26,0],[27,0])
         },
+
         
         _ => ([vec![],vec![]],[0,0],[0,0])
     }
