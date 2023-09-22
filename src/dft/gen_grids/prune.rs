@@ -5,7 +5,12 @@
 //! 
 //! [^1]: [P. M. W. Gill, B. G. Johnson, J. A. Pople. Chemical Physics Letters 209, 506-512 (1993)](https://doi.org/10.1016/0009-2614(93)80125-9).
 
-use super::parameters::{SG1RADII, BOHR, BRAGG0, LEBEDEV_NGRID};
+use num_traits::{ToPrimitive, Float};
+use tensors::MatrixFull;
+
+//use super::parameters::{SG1RADII, BOHR, BRAGG0, LEBEDEV_NGRID};
+use crate::{molecule_io::Molecule, scf_io::SCF, dft::Grids, utilities::balancing};
+use super::{parameters::{SG1RADII, BOHR, BRAGG0, LEBEDEV_NGRID}, atom::default_angular_num};
 
 /// Standard Grid 1 according to _P. M. W. Gill, B. G. Johnson, J. A. Pople. Chemical Physics Letters 209, 506-512 (1993)_.<br>
 /// Reference can be found [here](https://doi.org/10.1016/0009-2614(93)80125-9).
@@ -160,5 +165,83 @@ pub fn nwchem_prune(nuc: usize, rads: &Vec<f64>, n_ang: usize, n_rad: usize) -> 
     //println!("The radial grid is {:?}", rads);
     angs
 
+}
+
+pub fn prune_by_rho(grids: &mut Grids, dm: &Vec<MatrixFull<f64>>, spin_channel: usize) -> Grids{
+    let mut dm = dm.clone();
+    
+    let rho = grids.prepare_tabulated_density(&mut dm, spin_channel);
+    let ngrids_ori = rho.size[0];
+    let mut new_rho = vec![0.0; ngrids_ori];
+    if spin_channel == 2 {
+        for i in 0..ngrids_ori{
+            new_rho[i] = rho.data[i] + rho.data[ngrids_ori + i];
+        }
+    }else{
+        new_rho = rho.data.clone();
+    }
+    
+    let mut varrho = vec![0.0; ngrids_ori];
+    varrho.iter_mut().zip(new_rho.iter()).zip(grids.weights.iter())
+        .for_each(|((x_w,x),w)|{
+            *x_w = *x * w
+        });
+
+    let threshold = 1.0e-3 / ngrids_ori.to_f64().unwrap();
+    let effective_ind = varrho.iter()
+    .enumerate()
+    .filter(|(_, &r)| r.abs() >= threshold)
+    .map(|(index, _)| index)
+    .collect::<Vec<_>>();
+
+    let mut rgrids = vec![[0.0;3]; effective_ind.len()];
+    rgrids.iter_mut().zip(effective_ind.iter()).for_each(|(new,index_new)|{
+        new.iter_mut().zip(grids.coordinates[*index_new].iter()).for_each(|(a,b)|{
+            *a = *b;
+        }) 
+    });
+
+
+    let mut lambda_r = vec![0.0; effective_ind.len()];
+    lambda_r.iter_mut().zip(effective_ind.iter()).for_each(|(new,index_new)|{
+        *new = grids.weights[*index_new];
+    });
+
+    /* let mut new_grids = vec![[0.0;3]; effective_ind.len()];
+    let mut new_weights = vec![0.0; effective_ind.len()];
+    for i in 0..effective_ind.len(){
+        new_grids[i] = grids.coordinates[order_indices[i]];
+        new_weights[i] =grids.weights[order_indices[i]];
+    } */
+
+    println!("After prune_by_rho, grid size: {}", effective_ind.len());
+    /* let ngrids = lambda_r.len();
+    let mut x = vec![0.0; ngrids];
+    let mut y = vec![0.0; ngrids];
+    let mut z = vec![0.0; ngrids];
+    x.iter_mut().zip(y.iter_mut()).zip(z.iter_mut()).zip(rgrids.iter()).for_each(|(((x,y),z), p)|{
+        *x = p[0];
+        *y = p[1];
+        *z = p[2];
+    });
+    println!("prune_x_is: {:?}", &x);
+    println!("prune_y_is: {:?}", &y);
+    println!("prune_z_is: {:?}", &z);
+    println!("prune_w_is: {:?}", &lambda_r); */
+
+    let parallel_balancing = balancing(effective_ind.len(), rayon::current_num_threads());
+    Grids{
+        ao: None,
+        aop: None,
+        weights:lambda_r,
+        coordinates: rgrids,
+        parallel_balancing,
+    }
+    
+}
+
+pub fn none_prune(nuc: usize, n_rad: usize, level: usize) -> Vec<usize> { 
+    let n_ang = default_angular_num(nuc, level);
+    return vec![n_ang;n_rad]
 }
 

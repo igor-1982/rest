@@ -1,6 +1,7 @@
 pub mod rand_wf_real_space;
 pub mod cube_build;
 pub mod molden_build;
+pub mod mulliken;
 
 use std::path::Path;
 use crate::constants::SPECIES_INFO;

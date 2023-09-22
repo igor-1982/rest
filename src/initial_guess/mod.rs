@@ -42,7 +42,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
         };
         scf_data.diagonalize_hamiltonian();
         scf_data.generate_density_matrix();
-        scf_data.generate_hf_hamiltonian();
+        //scf_data.generate_hf_hamiltonian();
     } else if scf_data.mol.ctrl.initial_guess.eq(&"sad") {
         scf_data.density_matrix = initial_guess_from_sad(&scf_data.mol);
         //println!("debug: dm size: {:?}", scf_data.density_matrix[0].size());
@@ -58,7 +58,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
         scf_data.diagonalize_hamiltonian();
         scf_data.generate_density_matrix();
     // generate the initial guess from hcore
-    } else {
+    } else if scf_data.mol.ctrl.initial_guess.eq(&"hcore") {
         let init_fock = scf_data.h_core.clone();
         if scf_data.mol.spin_channel==1 {
             scf_data.hamiltonian = [init_fock,MatrixUpper::new(1,0.0)];

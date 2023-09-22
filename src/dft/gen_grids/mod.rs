@@ -16,7 +16,7 @@ mod parameters;
 mod python;
 mod radial;
 mod tables;
-mod prune;
+pub mod prune;
 
 pub use self::atom::atom_grid;
 pub use self::atom::atom_grid_bse;
