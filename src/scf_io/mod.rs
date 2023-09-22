@@ -12,6 +12,7 @@ use std::sync::{Mutex, Arc,mpsc};
 use std::thread;
 use crossbeam::{channel::{unbounded,bounded},thread::{Scope,scope}};
 use std::sync::mpsc::{channel, Receiver};
+use crate::dft::gen_grids::prune::prune_by_rho;
 //use ndarray;
 //use hdf5;
 //use libc::SCHED_OTHER;

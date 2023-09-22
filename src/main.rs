@@ -79,17 +79,17 @@ static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 use crate::initial_guess::sap::*;
 use crate::{post_scf_analysis::{rand_wf_real_space, cube_build, molden_build}, isdf::error_isdf, molecule_io::Molecule};
 use anyhow;
-use crate::isdf::error_isdf;
+//use crate::isdf::error_isdf;
 use crate::dft::DFA4REST;
 use crate::post_scf_analysis::mulliken::mulliken_pop;
-use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa};
+use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa, save_chkfile};
 use crate::scf_io::scf;
 use time::{DateTime,Local};
 
 //use crate::isdf::error_isdf;
 //use crate::dft::DFA4REST;
-use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa, save_chkfile};
-use crate::scf_io::scf;
+//use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa, save_chkfile};
+//use crate::scf_io::scf;
 
 //pub use crate::initial_guess::sap::*;
 //use crate::{post_scf_analysis::{rand_wf_real_space, cube_build, molden_build}, isdf::error_isdf, molecule_io::Molecule};

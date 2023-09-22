@@ -96,18 +96,6 @@ pub fn atom_grid(
         }
         else if rad_grid_method == String::from("gc2nd") || rad_grid_method == String::from("kk") {
             radial::radial_grid_gc2nd(default_radial_num(proton_usize, level))
-<<<<<<< HEAD
-        }
-        else if rad_grid_method == String::from("delley") {
-            radial::radial_grid_delley(default_radial_num(proton_usize, level))
-        }
-        else if rad_grid_method == String::from("becke") {
-            radial::radial_grid_becke(default_radial_num(proton_usize, level),proton_usize)
-        }
-        else if rad_grid_method == String::from("mura_knowles") {
-            radial::radial_grid_mura_knowles(default_radial_num(proton_usize, level),proton_usize)
-=======
->>>>>>> zyli
         }
         else if rad_grid_method == String::from("delley") {
             radial::radial_grid_delley(default_radial_num(proton_usize, level))
