@@ -862,7 +862,7 @@ impl Molecule {
     }
 
     #[inline]
-    pub fn int_ijkl_given_kl(&self, k: usize, l: usize) -> MatrixFull<MatrixFull<f64>> {
+    pub fn int_ijkl_given_kl_v02(&self, k: usize, l: usize) -> MatrixFull<MatrixFull<f64>> {
         let bas_start_l = self.cint_fdqc[l][0];
         let bas_len_l = self.cint_fdqc[l][1];
         let bas_start_k = self.cint_fdqc[k][0];
