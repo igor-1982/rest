@@ -58,7 +58,6 @@ use pyo3::prelude::*;
 
 mod geom_io;
 mod basis_io;
-mod post_scf_analysis;
 mod ctrl_io;
 mod dft;
 mod utilities;
@@ -70,6 +69,7 @@ mod ri_pt2;
 mod ri_rpa;
 mod isdf;
 mod constants;
+mod post_scf_analysis;
 mod external_libs;
 //use rayon;
 #[global_allocator]
@@ -77,19 +77,19 @@ static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 //static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 //use crate::grad::rhf::Gradient;
 use crate::initial_guess::sap::*;
-use crate::{post_scf_analysis::{rand_wf_real_space, cube_build, molden_build}, isdf::error_isdf, molecule_io::Molecule};
+
 use anyhow;
 //use crate::isdf::error_isdf;
 use crate::dft::DFA4REST;
 use crate::post_scf_analysis::mulliken::mulliken_pop;
-use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa, save_chkfile};
+//use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa, save_chkfile};
 use crate::scf_io::scf;
 use time::{DateTime,Local};
-
+use crate::molecule_io::Molecule;
 //use crate::isdf::error_isdf;
 //use crate::dft::DFA4REST;
-//use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa, save_chkfile};
-//use crate::scf_io::scf;
+use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa, save_chkfile, rand_wf_real_space, cube_build, molden_build};
+
 
 //pub use crate::initial_guess::sap::*;
 //use crate::{post_scf_analysis::{rand_wf_real_space, cube_build, molden_build}, isdf::error_isdf, molecule_io::Molecule};

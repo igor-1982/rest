@@ -6,19 +6,44 @@ use crate::scf_io::scf;
 use std::collections::HashMap;
 
 pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
+<<<<<<< HEAD
     //let mut elem_name: Vec<String> = vec![];
     //let mut dms_alpha: Vec<MatrixFull<f64>> = vec![];
     //let mut dms_beta: Vec<MatrixFull<f64>> = vec![];
     let mut atom_dms: HashMap<String, Vec<MatrixFull<f64>>> = HashMap::new();
 
+=======
+    let mut elem_name: Vec<String> = vec![];
+    let mut dms_alpha: Vec<MatrixFull<f64>> = vec![];
+    let mut dms_beta: Vec<MatrixFull<f64>> = vec![];
+    //let mut index_elem: Vec<usize> = vec![];
+>>>>>>> zyli
     mol.geom.elem.iter().for_each(|ielem| {
-        if let None = &mut atom_dms.get(&ielem.clone()) {
+        let mut index = 0;
 
+<<<<<<< HEAD
 
             if mol.ctrl.print_level>0 {println!("Generate SAD of {}", &ielem)};
 
             //elem_name.push(ielem.to_string());
 
+=======
+        //check if the dm of the given element available.
+        let flag =  elem_name.iter().enumerate()
+        .fold(false, |flag, (j,jelem)| {
+            if jelem.eq(ielem) {
+                index = j;
+                true
+            } else {
+                flag
+            }
+        });
+        elem_name.push(ielem.to_string());
+        //println!("?:{:?}", &flag);
+        if ! flag {
+            if mol.ctrl.print_level>0 {println!("Generate SAD of {}", &ielem)};
+
+>>>>>>> zyli
             let mut atom_ctrl = InputKeywords::init_ctrl();
             atom_ctrl.xc = String::from("hf");
             atom_ctrl.basis_path = mol.ctrl.basis_path.clone();
@@ -29,7 +54,7 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
             atom_ctrl.num_threads = Some(1);
             atom_ctrl.mixer = "diis".to_string();
             atom_ctrl.initial_guess = "hcore".to_string();
-            atom_ctrl.print_level = 1;
+            atom_ctrl.print_level = 0;
             atom_ctrl.atom_sad = true;
             atom_ctrl.charge = 0.0_f64;
             let (spin, spin_channel, spin_polarization) = ctrl_setting_atom_sad(ielem);
@@ -39,6 +64,7 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
             //atom_ctrl.spin = 1.0;
             //atom_ctrl.spin_channel = 1;
             //atom_ctrl.spin_polarization = false;
+
             let mut atom_geom = GeomCell::init_geom();
             atom_geom.name = ielem.to_string();
             atom_geom.position = MatrixFull::from_vec([3,1], vec![0.000,0.000,0.000]).unwrap();
@@ -48,39 +74,50 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
 
             let mut atom_scf = scf(atom_mol).unwrap();
 
-            println!("debug: elem prepared in this loop: {}, size: {:?}", ielem, atom_scf.density_matrix[0].size());
-
-
-            let mut dms: Vec<MatrixFull<f64>> = vec![];
-
             if atom_scf.mol.spin_channel == 1 {
                 let dm = atom_scf.density_matrix[0].clone()*0.5;
+<<<<<<< HEAD
                 dms.push(dm.clone());
                 dms.push(dm);
+=======
+                //println!("dm: {:?}", dm.size);
+                dms_alpha.push(dm.clone());
+                dms_beta.push(dm);
+>>>>>>> zyli
             } else {
-                dms.push(atom_scf.density_matrix[0].clone());
-                dms.push(atom_scf.density_matrix[1].clone());
+                dms_alpha.push(atom_scf.density_matrix[0].clone());
+                dms_beta.push(atom_scf.density_matrix[1].clone());
             }
-
-            atom_dms.insert(ielem.clone(),dms);
+<<<<<<< HEAD
+=======
+        } else {
+            let dm = dms_alpha[index].clone();
+            dms_alpha.push(dm);
+            let dm = dms_beta[index].clone();
+            dms_beta.push(dm);
+            //println!("index: {:?}", &index);
         }
+>>>>>>> zyli
+
     });
 
+<<<<<<< HEAD
     let (dms_alpha, dms_beta) = block_diag_specific(&atom_dms, &mol.geom.elem);
 
     if mol.spin_channel == 1 {
         vec![dms_alpha+dms_beta, MatrixFull::empty()]
     } else if mol.spin_channel == 2 {
         vec![dms_alpha, dms_beta]
+=======
+    if mol.spin_channel == 1{
+        let dm_all = vec![block_diag(&dms_alpha)+block_diag(&dms_beta), MatrixFull::empty()];
+        //println!("dm size: {:?}", dm_all[0].size);
+        dm_all
+>>>>>>> zyli
     } else {
-        vec![]
+        vec![block_diag(&dms_alpha), block_diag(&dms_beta)]
     }
 
-    //if mol.spin_channel == 1{
-    //    vec![block_diag(&dms_alpha)+block_diag(&dms_beta), MatrixFull::empty()]
-    //} else {
-    //    vec![block_diag(&dms_alpha), block_diag(&dms_beta)]
-    //}
 
 
 }
@@ -172,6 +209,12 @@ pub fn generate_occupation(elem: &String,num_basis: usize) -> ([Vec<f64>;2],[usi
             occ_a.extend(vec![0.0;num_basis-10]);
             ([occ_a,vec![0.0;num_basis]],[9,0],[10,0])
         },
+        "Rb" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0,2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0];
+            occ_a.extend(vec![0.0;num_basis-19]);
+            ([occ_a,vec![0.0;num_basis]],[18,0],[19,0])
+        },
+        
 
         "Be" => {
             let mut occ_a = vec![2.0, 2.0];
@@ -193,6 +236,109 @@ pub fn generate_occupation(elem: &String,num_basis: usize) -> ([Vec<f64>;2],[usi
             occ_a.extend(vec![0.0;num_basis-19]);
             ([occ_a,vec![0.0;num_basis]],[18,0],[19,0])
         },
+
+        "Sc" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.2, 0.2, 0.2, 0.2, 0.2, 2.0];
+            occ_a.extend(vec![0.0;num_basis-15]);
+            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+        },
+        "Ti" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.4, 0.4, 0.4, 0.4, 0.4, 2.0];
+            occ_a.extend(vec![0.0;num_basis-15]);
+            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+        },
+        "V" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.6, 0.6, 0.6, 0.6, 0.6, 2.0];
+            occ_a.extend(vec![0.0;num_basis-15]);
+            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+        },
+        "Cr" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+            occ_a.extend(vec![0.0;num_basis-15]);
+            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+        },
+        "Mn" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0];
+            occ_a.extend(vec![0.0;num_basis-15]);
+            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+        },
+        "Fe" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.2, 1.2, 1.2, 1.2, 1.2, 2.0];
+            occ_a.extend(vec![0.0;num_basis-15]);
+            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+        },
+        "Co" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.4, 1.4, 1.4, 1.4, 1.4, 2.0];
+            occ_a.extend(vec![0.0;num_basis-15]);
+            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+        },
+        "Ni" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.6, 1.6, 1.6, 1.6, 1.6, 2.0];
+            occ_a.extend(vec![0.0;num_basis-15]);
+            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+        },
+        "Cu" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0];
+            occ_a.extend(vec![0.0;num_basis-15]);
+            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+        },
+        "Zn" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
+            occ_a.extend(vec![0.0;num_basis-15]);
+            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+        },
+
+        "Y" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.2, 0.2, 0.2, 0.2, 0.2, 2.0, 2.0];
+            occ_a.extend(vec![0.0;num_basis-24]);
+            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+        },
+        "Zr" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.4, 0.4, 0.4, 0.4, 0.4, 2.0];
+            occ_a.extend(vec![0.0;num_basis-24]);
+            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+        },
+        "Nb" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.8, 0.8, 0.8, 0.8, 0.8, 1.0];
+            occ_a.extend(vec![0.0;num_basis-24]);
+            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+        },
+        "Mo" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+            occ_a.extend(vec![0.0;num_basis-24]);
+            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+        },
+        "Tc" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0];
+            occ_a.extend(vec![0.0;num_basis-24]);
+            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+        },
+        "Ru" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.4, 1.4, 1.4, 1.4, 1.4, 1.0];
+            occ_a.extend(vec![0.0;num_basis-24]);
+            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+        },
+        "Rh" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.6, 1.6, 1.6, 1.6, 1.6, 1.0];
+            occ_a.extend(vec![0.0;num_basis-24]);
+            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+        },
+        "Pd" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0,2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
+            occ_a.extend(vec![0.0;num_basis-24]);
+            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+        },
+        "Ag" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0,2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0];
+            occ_a.extend(vec![0.0;num_basis-24]);
+            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+        },
+        "Cd" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
+            occ_a.extend(vec![0.0;num_basis-24]);
+            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+        },
+
         "B" => {
             let mut occ_a = vec![2.0, 2.0, 0.333333333, 0.33333333, 0.333333333];
             occ_a.extend(vec![0.0;num_basis-5]);
@@ -297,6 +443,7 @@ pub fn generate_occupation(elem: &String,num_basis: usize) -> ([Vec<f64>;2],[usi
             occ_a.extend(vec![0.0;num_basis-27]);
             ([occ_a,vec![0.0;num_basis]],[26,0],[27,0])
         },
+
         
         _ => ([vec![],vec![]],[0,0],[0,0])
     }

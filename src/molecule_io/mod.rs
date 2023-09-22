@@ -576,7 +576,7 @@ impl Molecule {
 
         let ctrl_elem = ctrl_element_checker(geom);
         let local_elem = local_element_checker(&ctrl.basis_path);
-        println!("local elements are {:?}", local_elem);
+        //println!("local elements are {:?}", local_elem);
         println!("ctrl elements are {:?}", ctrl_elem);
         let elem_intersection = ctrl_elem.intersect(local_elem.clone());
         let mut required_elem = vec![];
@@ -821,6 +821,46 @@ impl Molecule {
         //vec_2d
         mat_global
     }
+
+    #[inline]
+    pub fn int_ijkl_given_kl(&self, k: usize, l: usize) -> Vec<MatrixFull<f64>> {
+        let bas_start_l = self.cint_fdqc[l][0];
+        let bas_len_l = self.cint_fdqc[l][1];
+        let bas_start_k = self.cint_fdqc[k][0];
+        let bas_len_k = self.cint_fdqc[k][1];
+        let nbas = self.num_basis;
+        let mut mat_vec = vec![MatrixFull::new([nbas,nbas],0.0);bas_len_k*bas_len_l];
+
+        let mut cint_data = self.initialize_cint(false);
+        let nbas_shell = self.cint_bas.len();
+        cint_data.cint2e_optimizer_rust();
+        for j in 0..nbas_shell {
+            let bas_start_j = self.cint_fdqc[j][0];
+            let bas_len_j = self.cint_fdqc[j][1];
+            //let (i_start, i_end) = (0,j+1);
+            for i in 0..j+1 {
+                let bas_start_i = self.cint_fdqc[i][0];
+                let bas_len_i = self.cint_fdqc[i][1];
+                let buf = cint_data.cint_ijkl_by_shell(i as i32, j as i32, k as i32, l as i32);
+                let tmp_eri = ERIFull::from_vec([bas_len_i,bas_len_j,bas_len_k,bas_len_l],buf).unwrap();
+
+                for loc_l in 0..bas_len_l {
+                    for loc_k in 0..bas_len_k {
+                        let tmp_index = loc_l*bas_len_k + loc_k;
+                        let mut tmp_mat = &mut mat_vec[tmp_index];
+
+                        let tmp_loc = tmp_eri.get_reducing_matrix(&[loc_k,loc_l]).data.iter();
+
+                        tmp_mat.iter_submatrix_mut(bas_start_i..bas_start_i+bas_len_i, bas_start_j..bas_start_j+bas_len_j)
+                        .zip(tmp_loc).for_each(|(gij,lij)| {*gij = *lij});
+                    }
+                }
+            };
+        };
+        //mat_full
+        mat_vec
+    }
+
     #[inline]
     pub fn int_ijkl_given_kl(&self, k: usize, l: usize) -> MatrixFull<MatrixFull<f64>> {
         let bas_start_l = self.cint_fdqc[l][0];

@@ -785,5 +785,10 @@ mod tests {
             println!("Random Number: {}", random_number);
         }
     }
+
+    #[test]
+    fn test_add_i(){
+        println!("hello world");
+    }
     
 }
