@@ -51,7 +51,7 @@ pub struct SCF {
     pub ri3fn: Option<RIFull<f64>>,
     pub ri3fn_isdf: Option<RIFull<f64>>,
     pub tab_ao: Option<MatrixFull<f64>>,
-    pub m: Option<MatrixFull<f64>>,
+    pub m: Option<MatrixUpper<f64>>,
     pub rimatr: Option<(MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>)>,
     pub ri3mo: Option<Vec<(RIFull<f64>,std::ops::Range<usize> , std::ops::Range<usize>)>>,
     #[pyo3(get,set)]
@@ -950,7 +950,7 @@ impl SCF {
                         //            .zip(dm_jc[..k].par_iter()).map(|(i,j)| i*j).sum::<f64>();
                         //        kl += k;
                         //        vk_ic[k] += reduce_ij[kl] *dm_jc[k];
-                        //        kl += 1;我们的描述子是1*10
+                        //        kl += 1;
                         //    } else {
                         //        vk_ic[..ic+1].iter_mut()
                         //            .zip(reduce_ij[kl..kl+ic+1].iter())
@@ -1461,7 +1461,7 @@ impl SCF {
         let spin_channel = self.mol.spin_channel;
         let mut vk: Vec<MatrixUpper<f64>> = vec![];
         let spin_channel = self.mol.spin_channel;
-        let m = self.m.clone().unwrap();
+        let m = self.m.clone().unwrap().to_matrixfull().unwrap();
         let tab_ao = self.tab_ao.clone().unwrap();
         let n_ip = m.size[0];
 
@@ -1507,7 +1507,7 @@ impl SCF {
         let mut vk: Vec<MatrixUpper<f64>> = vec![];
         let eigv = &self.eigenvectors;
         let spin_channel = self.mol.spin_channel;
-        let m = self.m.clone().unwrap();
+        let m = self.m.clone().unwrap().to_matrixfull().unwrap();
         let tab_ao = self.tab_ao.clone().unwrap();
         let n_ip = m.size[0];
 

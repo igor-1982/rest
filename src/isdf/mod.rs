@@ -8,7 +8,8 @@ use crate::dft::Grids as dftgrids;
 use crate::molecule_io::Molecule;
 use rand::{Rng, SeedableRng, StdRng};
 use rayon::prelude::{IntoParallelRefMutIterator, IntoParallelRefIterator, IndexedParallelIterator, ParallelIterator};
-use rest_tensors::{MatrixFull, RIFull, ERIFull};
+use rest_tensors::{MatrixFull, RIFull, ERIFull, MatrixUpper};
+use rest_tensors::matrix_blas_lapack::_dpinverse;
 use tensors::external_libs::matr_copy_from_ri;
 use tensors::{TensorSlice, TensorSliceMut};
 use std::cmp::Ordering;
@@ -1058,7 +1059,7 @@ pub fn init_by_rho(grids: &mut dftgrids, dm: &Vec<MatrixFull<f64>>, spin_channel
 
 }
 
-pub fn prepare_m_isdf(k_mu: usize, mol: &Molecule, grids: &dft::Grids) -> (MatrixFull<f64>, MatrixFull<f64>) {
+pub fn prepare_m_isdf(k_mu: usize, mol: &Molecule, grids: &dft::Grids) -> (MatrixFull<f64>, MatrixUpper<f64>) {
     //used for isdf_k 
     let nao = mol.num_basis;
     let nri = mol.num_auxbas;
@@ -1168,6 +1169,7 @@ pub fn prepare_m_isdf(k_mu: usize, mol: &Molecule, grids: &dft::Grids) -> (Matri
     time_mark.new_item("test pinv", "pseudo inverse of c2");
     time_mark.count_start("test pinv");
     let mut inv_cctrans = c2.pinv(1.0e-12);
+    //let mut inv_cctrans = _dpinverse(&mut c2, 1.0e-12).unwrap();
     time_mark.count("test pinv");
     time_mark.report_all();
     //=============================================================
@@ -1183,5 +1185,5 @@ pub fn prepare_m_isdf(k_mu: usize, mol: &Molecule, grids: &dft::Grids) -> (Matri
             kernel_part[[i,j]] *= ip_weights[i] * ip_weights[j]
         }
     }
-    (varphi, kernel_part)
+    (varphi, kernel_part.to_matrixupper())
 }
