@@ -1,39 +1,71 @@
-use clap::value_parser;
-use pyo3::{pyclass, pymethods, pyfunction};
-use tensors::matrix_blas_lapack::{_dgemm, _dinverse, _dsymm};
-use tensors::{ERIFull,MatrixFull, ERIFold4, MatrixUpper, TensorSliceMut, RIFull, MatrixFullSlice, MatrixFullSliceMut, BasicMatrix, MathMatrix, MatrixUpperSlice, ParMathMatrix, ri};
-use itertools::{Itertools, iproduct, izip};
-use libc::SCHED_OTHER;
-use core::num;
-use std::fmt::format;
-use std::io::Write;
+//use clap::value_parser;
+//use pyo3::{pyclass, pymethods, pyfunction};
+//use tensors::matrix_blas_lapack::{_dgemm, _dinverse, _dsymm};
+//use tensors::{ERIFull,MatrixFull, ERIFold4, MatrixUpper, TensorSliceMut, RIFull, MatrixFullSlice, MatrixFullSliceMut, BasicMatrix, MathMatrix, MatrixUpperSlice, ParMathMatrix, ri};
+//use itertools::{Itertools, iproduct, izip};
+//use libc::SCHED_OTHER;
+//use core::num;
+//use std::fmt::format;
+//use std::io::Write;
 //use std::{fs, vec};
-use std::thread::panicking;
-use std::{vec, fs};
-use rest_libcint::{CINTR2CDATA, CintType};
-use crate::geom_io::{GeomCell,MOrC, GeomUnit};
-use crate::basis_io::{Basis4Elem,BasInfo};
-use crate::isdf::{prepare_for_ri_isdf, init_by_rho, prepare_m_isdf};
-//use crate::initial_guess::sad::sad_dm;
-use crate::molecule_io::{Molecule, generate_ri3fn_from_rimatr};
-use crate::tensors::{TensorOpt,TensorOptMut,TensorSlice};
-use crate::dft::{Grids, numerical_density, par_numerical_density};
-use crate::{utilities, initial_guess};
-use crate::initial_guess::initial_guess;
-use rayon::prelude::*;
-use hdf5;
-//use blas::{ddot,daxpy};
-use std::sync::{Mutex, Arc,mpsc};
-use std::thread;
-use crossbeam::{channel::{unbounded,bounded},thread::{Scope,scope}};
-//use std::sync::mpsc::{channel, Receiver};
-use std::sync::mpsc::channel;
+//use std::thread::panicking;
+//use std::{vec, fs};
+//use rest_libcint::{CINTR2CDATA, CintType};
+//use crate::geom_io::{GeomCell,MOrC, GeomUnit};
+//use crate::basis_io::{Basis4Elem,BasInfo};
+//use crate::isdf::{prepare_for_ri_isdf, init_by_rho, prepare_m_isdf};
+////use crate::initial_guess::sad::sad_dm;
+//use crate::molecule_io::{Molecule, generate_ri3fn_from_rimatr};
+//use crate::tensors::{TensorOpt,TensorOptMut,TensorSlice};
+//use crate::dft::{Grids, numerical_density, par_numerical_density};
+//use crate::{utilities, initial_guess};
+//use crate::initial_guess::initial_guess;
+//use rayon::prelude::*;
+//use hdf5;
+////use blas::{ddot,daxpy};
+//use std::sync::{Mutex, Arc,mpsc};
+//use std::thread;
+//use crossbeam::{channel::{unbounded,bounded},thread::{Scope,scope}};
+////use std::sync::mpsc::{channel, Receiver};
+//use std::sync::mpsc::channel;
 use crate::dft::gen_grids::prune::prune_by_rho;
-//use blas_src::openblas::dgemm;
+////use blas_src::openblas::dgemm;
 mod addons;
 mod fchk;
 mod pyrest_scf_io;
 
+//use clap::value_parser;
+use pyo3::{pyclass, pymethods, pyfunction};
+use tensors::matrix_blas_lapack::{_dgemm, _dinverse, _dsymm};
+use tensors::{ERIFull,MatrixFull, ERIFold4, MatrixUpper, TensorSliceMut, RIFull, MatrixFullSlice, MatrixFullSliceMut, BasicMatrix, MathMatrix, MatrixUpperSlice, ParMathMatrix, ri};
+use itertools::{Itertools, iproduct, izip};
+use rayon::prelude::*;
+use std::collections::HashMap;
+use std::sync::{Mutex, Arc,mpsc};
+use std::thread;
+use crossbeam::{channel::{unbounded,bounded},thread::{Scope,scope}};
+use std::sync::mpsc::{channel, Receiver};
+//use ndarray;
+//use hdf5;
+//use libc::SCHED_OTHER;
+//use core::num;
+//use std::fmt::format;
+//use std::io::Write;
+//use std::path::Path;
+//use std::{fs, vec};
+//use std::thread::panicking;
+//use std::{vec, fs};
+//use rest_libcint::{CINTR2CDATA, CintType};
+//use crate::geom_io::{GeomCell,MOrC, GeomUnit};
+//use crate::basis_io::{Basis4Elem,BasInfo};
+//use crate::post_scf_analysis::save_chkfile;
+//use crate::dft::{Grids, numerical_density, par_numerical_density};
+use crate::isdf::{prepare_for_ri_isdf, init_by_rho, prepare_m_isdf};
+use crate::molecule_io::{Molecule, generate_ri3fn_from_rimatr};
+use crate::tensors::{TensorOpt,TensorOptMut,TensorSlice};
+use crate::dft::Grids;
+use crate::{utilities, initial_guess};
+use crate::initial_guess::initial_guess;
 use crate::constants::{SPECIES_INFO, INVERSE_THRESHOLD};
 
 
@@ -75,7 +107,7 @@ pub struct SCF {
     #[pyo3(get,set)]
     pub scf_energy: f64,
     pub grids: Option<Grids>,
-    
+    pub energies: HashMap<String,Vec<f64>>,
 }
 
 #[derive(Clone,Copy)]
@@ -116,6 +148,7 @@ impl SCF {
             nuc_energy: 0.0,
             scf_energy: 0.0,
             grids: None,
+            energies: HashMap::new(),
         };
 
         // at first check the scf type: RHF, ROHF or UHF

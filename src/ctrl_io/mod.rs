@@ -74,6 +74,7 @@ pub struct InputKeywords {
     pub xc: String,
     pub post_xc: Vec<String>,
     pub post_correlation: Vec<DFAFamily>,
+    pub post_ai_correction: String,
     pub charge: f64,
     #[pyo3(get, set)]
     pub spin: f64,
@@ -184,6 +185,7 @@ impl InputKeywords {
             xc: String::from("x3lyp"),
             post_xc: vec![],
             post_correlation: vec![],
+            post_ai_correction: String::from("none"),
             eri_type: String::from("ri_v"),
             use_ri_symm: true,
             charge: 0.0_f64,
@@ -478,6 +480,31 @@ impl InputKeywords {
                     }
                     //if corr.to_lowercase().eq(&pt2) 
                 });
+                tmp_input.post_ai_correction = match tmp_ctrl.get("post_ai_correction").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_xc) => {tmp_xc.to_lowercase()},
+                    other => {String::from("none")},
+                };
+                //let post_corr  = if post_ai_corr.eq("scc23") && tmp_input.xc.eq("r-xdh7") {
+                //   vec!["sbge2"] 
+                //} else {
+                //    vec![]
+                //};
+
+                //tmp_input.post_ai_correction = vec![];
+                //post_corr.iter().for_each(|corr| {
+                //    if corr.to_lowercase().eq("pt2") {
+                //        tmp_input.post_ai_correction.push(DFAFamily::PT2)
+                //    } else if corr.to_lowercase().eq("sbge2") {
+                //        tmp_input.post_ai_correction.push(DFAFamily::SBGE2)
+                //    } else if corr.to_lowercase().eq("rpa") {
+                //        tmp_input.post_ai_correction.push(DFAFamily::RPA)
+                //    } else if corr.to_lowercase().eq("scsrpa") {
+                //        tmp_input.post_ai_correction.push(DFAFamily::SCSRPA)
+                //    } else {
+                //        println!("Unknown post-scf correlation method: {}", corr)
+                //    }
+                //    //if corr.to_lowercase().eq(&pt2) 
+                //});
                 // ===============================================
                 //  Keywords to determine the spin channel, which 
                 //   is important to turn on RHF(RKS) or UHF(UKS)

@@ -21,7 +21,7 @@ use crate::constants::{ELEM1ST, ELEM2ND, ELEM3RD, ELEM4TH, ELEM5TH,ELEM6TH, ELEM
 use crate::dft::DFA4REST;
 use crate::geom_io::{GeomCell,MOrC, GeomUnit, get_mass_charge};
 use crate::basis_io::{Basis4Elem,BasInfo};
-use crate::ctrl_io::{InputKeywords};
+use crate::ctrl_io::InputKeywords;
 use crate::utilities;
 use rest_libcint::{CINTR2CDATA, CintType};
 use std::path::Path;
@@ -861,6 +861,47 @@ impl Molecule {
         mat_vec
     }
 
+    #[inline]
+    pub fn int_ijkl_given_kl_v02(&self, k: usize, l: usize) -> MatrixFull<MatrixFull<f64>> {
+        let bas_start_l = self.cint_fdqc[l][0];
+        let bas_len_l = self.cint_fdqc[l][1];
+        let bas_start_k = self.cint_fdqc[k][0];
+        let bas_len_k = self.cint_fdqc[k][1];
+        let nbas = self.num_basis;
+        let mut mat_full = 
+            MatrixFull::new([bas_len_k,bas_len_l],MatrixFull::new([nbas,nbas],0.0));
+        //let mut mat_vec = vec![MatrixFull::new([nbas,nbas],0.0);bas_len_k*bas_len_l];
+
+        let mut cint_data = self.initialize_cint(false);
+        let nbas_shell = self.cint_bas.len();
+        cint_data.cint2e_optimizer_rust();
+        for j in 0..nbas_shell {
+            let bas_start_j = self.cint_fdqc[j][0];
+            let bas_len_j = self.cint_fdqc[j][1];
+            //let (i_start, i_end) = (0,j+1);
+            for i in 0..j+1 {
+                let bas_start_i = self.cint_fdqc[i][0];
+                let bas_len_i = self.cint_fdqc[i][1];
+                let buf = cint_data.cint_ijkl_by_shell(i as i32, j as i32, k as i32, l as i32);
+                let tmp_eri = ERIFull::from_vec([bas_len_i,bas_len_j,bas_len_k,bas_len_l],buf).unwrap();
+
+                for loc_l in 0..bas_len_l {
+                    for loc_k in 0..bas_len_k {
+                        //let tmp_index = loc_l*bas_len_k + loc_k;
+                        //let mut tmp_mat = &mut mat_vec[tmp_index];
+                        let mut tmp_mat = &mut mat_full[[loc_k,loc_l]];
+
+                        let tmp_loc = tmp_eri.get_reducing_matrix(&[loc_k,loc_l]).data.iter();
+
+                        tmp_mat.iter_submatrix_mut(bas_start_i..bas_start_i+bas_len_i, bas_start_j..bas_start_j+bas_len_j)
+                        .zip(tmp_loc).for_each(|(gij,lij)| {*gij = *lij});
+                    }
+                }
+            };
+        };
+        mat_full
+        //mat_vec
+    }
     #[inline]
     pub fn int_ijkl_erifull(&self) -> ERIFull<f64> {
         //let mut dt_cint = 0.0_f64;

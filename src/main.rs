@@ -65,7 +65,7 @@ mod molecule_io;
 mod scf_io;
 mod initial_guess;
 mod ri_pt2;
-mod grad;
+//mod grad;
 mod ri_rpa;
 mod isdf;
 mod constants;
@@ -75,18 +75,20 @@ mod external_libs;
 #[global_allocator]
 static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 //static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-use crate::grad::rhf::Gradient;
+//use crate::grad::rhf::Gradient;
 use crate::initial_guess::sap::*;
 
 use anyhow;
+//use crate::isdf::error_isdf;
 use crate::dft::DFA4REST;
 use crate::post_scf_analysis::mulliken::mulliken_pop;
+//use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa, save_chkfile};
 use crate::scf_io::scf;
 use time::{DateTime,Local};
 use crate::molecule_io::Molecule;
 //use crate::isdf::error_isdf;
 //use crate::dft::DFA4REST;
-use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa, save_chkfile, rand_wf_real_space, cube_build, molden_build};
+use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa, save_chkfile, rand_wf_real_space, cube_build, molden_build, post_ai_correction};
 
 
 //pub use crate::initial_guess::sap::*;
@@ -169,6 +171,10 @@ fn main() -> anyhow::Result<()> {
             _ => {}
         }
     }
+    //====================================
+    // Now for post ai correction
+    //====================================
+    post_ai_correction(&mut scf_data);
 
     //====================================
     // Now for post-correlation calculations

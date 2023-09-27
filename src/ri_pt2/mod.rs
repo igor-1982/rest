@@ -11,7 +11,7 @@ use tensors::matrix_blas_lapack::{_dsymm, _dgemm};
 
 use crate::ri_pt2::sbge2::{close_shell_sbge2_rayon,open_shell_sbge2_rayon};
 use crate::ri_rpa::scsrpa::evaluate_osrpa_correlation_rayon;
-use crate::scf_io::determine_ri3mo_size_for_pt2_and_rpa;
+use crate::scf_io::{determine_ri3mo_size_for_pt2_and_rpa, scf};
 use crate::molecule_io::Molecule;
 use crate::scf_io::SCF;
 use crate::utilities::{TimeRecords, self};
@@ -67,6 +67,7 @@ pub fn xdh_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
     let x_energy = scf_data.evaluate_exact_exchange_ri_v();
     let xc_energy_scf = scf_data.evaluate_xc_energy(0);
     let xc_energy_xdh = scf_data.evaluate_xc_energy(1);
+    scf_data.energies.insert(String::from("x_hf"), vec![x_energy]);
     timerecords.count("xc_energy");
     let dfa_family_pos = scf_data.mol.xc_data.dfa_family_pos.clone().unwrap();
 
@@ -107,10 +108,19 @@ pub fn xdh_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
         };
     };
 
+    match dfa_family_pos {
+        crate::dft::DFAFamily::PT2 => scf_data.energies.insert(String::from("pt2"), pt2_c.to_vec()),
+        crate::dft::DFAFamily::SBGE2 => scf_data.energies.insert(String::from("sbge2"), pt2_c.to_vec()),
+        crate::dft::DFAFamily::SCSRPA => scf_data.energies.insert(String::from("scsrpa"), pt2_c.to_vec()),
+        crate::dft::DFAFamily::RPA => scf_data.energies.insert(String::from("rpa"), pt2_c.to_vec()),
+        _ => scf_data.energies.insert(String::from("unknown"), pt2_c.to_vec())
+    };
+
     if scf_data.mol.ctrl.xc.eq(&"scsrpa") {
         let pt2_c_old = pt2_c.clone();
         pt2_c[2] = pt2_c[0] - pt2_c[1];
     };
+    
     println!("----------------------------------------------------------------------");
     println!("{:16}: {:>16}, {:>16}, {:>16}","Methods","Total Corr", "OS Corr", "SS Corr");
     println!("----------------------------------------------------------------------");
@@ -134,6 +144,8 @@ pub fn xdh_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
         x_energy, 
         postscf_method,
         pt2_c[0]);
+
+    scf_data.energies.insert(String::from("xdh_energy"), vec![total_energy]);
 
     if scf_data.mol.ctrl.print_level>1 {timerecords.report_all()};
 

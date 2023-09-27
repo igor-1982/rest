@@ -6,7 +6,8 @@ use tensors::{MatrixFull,matrix_blas_lapack::_dgemm, TensorOpt};
 
 use crate::utilities;
 
-pub fn close_shell_sbge2_rayon(scf_data: &crate::scf_io::SCF) -> anyhow::Result<[f64;3]> {
+pub fn close_shell_sbge2_detailed_rayon(scf_data: &crate::scf_io::SCF) -> anyhow::Result<([f64;3],[MatrixFull<(f64,f64)>;3])> {
+//pub fn close_shell_sbge2_rayon(scf_data: &crate::scf_io::SCF) -> anyhow::Result<[f64;3]> {
 
     let enhanced_factor = 1.0;
     let screening_factor = 1.0;
@@ -21,24 +22,30 @@ pub fn close_shell_sbge2_rayon(scf_data: &crate::scf_io::SCF) -> anyhow::Result<
     let num_auxbas = scf_data.mol.num_auxbas;
     let num_basis = scf_data.mol.num_basis;
     let num_state = scf_data.mol.num_state;
+    let homo = scf_data.homo.get(0).unwrap().clone();
+    let lumo = scf_data.lumo.get(0).unwrap().clone();
+    let start_mo: usize = scf_data.mol.start_mo;
+    let num_occu = homo + 1;
 
     let mut e_mp2_ss = 0.0_f64;
     let mut e_mp2_os = 0.0_f64;
     let mut e_bge2_ss = 0.0_f64;
     let mut e_bge2_os = 0.0_f64;
+    let mut eij_00 = MatrixFull::new([num_occu,num_occu], (0.0_f64,0.0_f64));
+    let mut eij_01 = MatrixFull::new([num_occu,num_occu], (0.0_f64,0.0_f64));
+    let mut eij_11 = MatrixFull::new([num_occu,num_occu], (0.0_f64,0.0_f64));
 
     if let Some(ri3mo_vec) = &scf_data.ri3mo {
         let (rimo, vir_range, occ_range) = &ri3mo_vec[0];
+
+        let mut e_ij = MatrixFull::new([num_occu,num_occu], (0.0_f64,0.0_f64,0.0_f64,0.0_f64,0_usize));
+
+        let lumo_min = vir_range.start;
 
         let eigenvector = scf_data.eigenvectors.get(0).unwrap();
         let eigenvalues = scf_data.eigenvalues.get(0).unwrap();
         let occupation = scf_data.occupation.get(0).unwrap();
 
-        let homo = scf_data.homo.get(0).unwrap().clone();
-        let lumo = scf_data.lumo.get(0).unwrap().clone();
-        let lumo_min = vir_range.start;
-        let start_mo: usize = scf_data.mol.start_mo;
-        let num_occu = homo + 1;
         //tmp_record.new_item("dgemm", "prepare four-center integrals from RI-MO");
         //tmp_record.new_item("get2d", "get the ERI values");
         let mut elec_pair: Vec<[usize;2]> = vec![];
@@ -47,7 +54,6 @@ pub fn close_shell_sbge2_rayon(scf_data: &crate::scf_io::SCF) -> anyhow::Result<
                 elec_pair.push([i_state,j_state])
             }
         };
-        let mut e_ij = MatrixFull::new([num_occu,num_occu], (0.0_f64,0.0_f64,0.0_f64,0.0_f64,0_usize));
         let (sender, receiver) = channel();
         elec_pair.par_iter().for_each_with(sender,|s,i_pair| {
             let mut e_mp2_term_ss = 0.0_f64;
@@ -143,40 +149,52 @@ pub fn close_shell_sbge2_rayon(scf_data: &crate::scf_io::SCF) -> anyhow::Result<
         //        }
         //    };
         //}
-        if scf_data.mol.ctrl.print_level>1 {
-            let num_occ = scf_data.homo[0]+1;
-            println!("Print the correlation energies for each electron-pair:");
-            println!("For (alpha, alpha)");
-            for i_state in start_mo..num_occ {
-                for j_state in i_state+1..num_occ {
-                    let (e_mp2_term_os,e_mp2_term_ss, e_eij_term_os, e_eij_term_ss,num_eij_iter) = e_ij[(i_state, j_state)];
+        let num_occ = scf_data.homo[0]+1;
+        println!("Print the correlation energies for each electron-pair:");
+        if scf_data.mol.ctrl.print_level>1 {println!("For (alpha, alpha)")};
+        for i_state in start_mo..num_occ {
+            for j_state in i_state+1..num_occ {
+                let (e_mp2_term_os,e_mp2_term_ss, e_eij_term_os, e_eij_term_ss,num_eij_iter) = e_ij[(i_state, j_state)];
+                if scf_data.mol.ctrl.print_level>1 {
                     println!("the ({:3},{:3}) elec-pair: (PT2, sBGE2)=({:16.8},{:16.8})", i_state,j_state, e_mp2_term_ss/2.0, e_eij_term_ss/2.0);
                 }
-            };
-            println!("For (beta, beta)");
-            for i_state in start_mo..num_occ {
-                for j_state in i_state+1..num_occ {
-                    //let (e_mp2_term, e_eij_term) = eij_11[(i_state, j_state)];
-                    //println!("the ({:3},{:3}) elec-pair: (PT2, sBGE2)=({:16.8},{:16.8})", i_state,j_state, e_mp2_term, e_eij_term);
-                    let (e_mp2_term_os,e_mp2_term_ss, e_eij_term_os, e_eij_term_ss,num_eij_iter) = e_ij[(i_state, j_state)];
-                    println!("the ({:3},{:3}) elec-pair: (PT2, sBGE2)=({:16.8},{:16.8})", i_state,j_state, e_mp2_term_ss/2.0, e_eij_term_ss/2.0);
-                }
+                eij_00[(i_state,j_state)] = (e_mp2_term_ss/2.0,e_eij_term_ss/2.0);
             }
-            println!("For (alpha, beta)");
-            for i_state in start_mo..num_occ {
-                for j_state in start_mo..num_occ {
-                    //let (e_mp2_term, e_eij_term) = eij_01[(i_state, j_state)];
-                    if i_state<j_state {
-                        let (e_mp2_term_os,e_mp2_term_ss, e_eij_term_os, e_eij_term_ss,num_eij_iter) = e_ij[(i_state, j_state)];
+        };
+        if scf_data.mol.ctrl.print_level>1 {println!("For (beta, beta)")};
+        for i_state in start_mo..num_occ {
+            for j_state in i_state+1..num_occ {
+                //let (e_mp2_term, e_eij_term) = eij_11[(i_state, j_state)];
+                //println!("the ({:3},{:3}) elec-pair: (PT2, sBGE2)=({:16.8},{:16.8})", i_state,j_state, e_mp2_term, e_eij_term);
+                let (e_mp2_term_os,e_mp2_term_ss, e_eij_term_os, e_eij_term_ss,num_eij_iter) = e_ij[(i_state, j_state)];
+                if scf_data.mol.ctrl.print_level>1 {
+                    println!("the ({:3},{:3}) elec-pair: (PT2, sBGE2)=({:16.8},{:16.8})", i_state,j_state, e_mp2_term_ss/2.0, e_eij_term_ss/2.0);
+                }
+                eij_11[(i_state,j_state)] = (e_mp2_term_ss/2.0,e_eij_term_ss/2.0);
+            }
+        }
+        if scf_data.mol.ctrl.print_level>1 {println!("For (alpha, beta)");}
+        for i_state in start_mo..num_occ {
+            for j_state in start_mo..num_occ {
+                //let (e_mp2_term, e_eij_term) = eij_01[(i_state, j_state)];
+                if i_state<j_state {
+                    let (e_mp2_term_os,e_mp2_term_ss, e_eij_term_os, e_eij_term_ss,num_eij_iter) = e_ij[(i_state, j_state)];
+                    if scf_data.mol.ctrl.print_level>1 {
                         println!("the ({:3},{:3}) elec-pair: (PT2, sBGE2)=({:16.8},{:16.8})", i_state,j_state, e_mp2_term_os/2.0, e_eij_term_os/2.0);
-                    } else if i_state==j_state {
-                        let (e_mp2_term_os,e_mp2_term_ss, e_eij_term_os, e_eij_term_ss,num_eij_iter) = e_ij[(i_state, j_state)];
+                    } 
+                    eij_01[(i_state,j_state)] = (e_mp2_term_os/2.0,e_eij_term_os/2.0);
+                } else if i_state==j_state {
+                    let (e_mp2_term_os,e_mp2_term_ss, e_eij_term_os, e_eij_term_ss,num_eij_iter) = e_ij[(i_state, j_state)];
+                    if scf_data.mol.ctrl.print_level>1 {
                         println!("the ({:3},{:3}) elec-pair: (PT2, sBGE2)=({:16.8},{:16.8})", i_state,j_state, e_mp2_term_os, e_eij_term_os);
-                    } else if i_state>j_state {
-                        let (e_mp2_term_os,e_mp2_term_ss, e_eij_term_os, e_eij_term_ss,num_eij_iter) = e_ij[(j_state, i_state)];
-                        println!("the ({:3},{:3}) elec-pair: (PT2, sBGE2)=({:16.8},{:16.8})", i_state,j_state, e_mp2_term_os/2.0, e_eij_term_os/2.0);
-
                     }
+                    eij_01[(i_state,j_state)] = (e_mp2_term_os,e_eij_term_os);
+                } else if i_state>j_state {
+                    let (e_mp2_term_os,e_mp2_term_ss, e_eij_term_os, e_eij_term_ss,num_eij_iter) = e_ij[(j_state, i_state)];
+                    if scf_data.mol.ctrl.print_level>1 {
+                        println!("the ({:3},{:3}) elec-pair: (PT2, sBGE2)=({:16.8},{:16.8})", i_state,j_state, e_mp2_term_os/2.0, e_eij_term_os/2.0);
+                    }
+                    eij_01[(i_state,j_state)] = (e_mp2_term_os/2.0,e_eij_term_os/2.0);
                 }
             }
         }
@@ -187,11 +205,18 @@ pub fn close_shell_sbge2_rayon(scf_data: &crate::scf_io::SCF) -> anyhow::Result<
     // reuse the default omp_num_threads setting
     utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
 
+    println!("debug pt2 and sbge2: {:?}, {:?}", e_mp2_os+e_mp2_ss, e_bge2_ss+ e_bge2_os);
+
     //tmp_record.report_all();
-    Ok([e_bge2_ss+e_bge2_os,e_bge2_os,e_bge2_ss])
+    Ok(([e_bge2_ss+e_bge2_os,e_bge2_os,e_bge2_ss],[eij_00,eij_01,eij_11]))
 
 }
 
+pub fn close_shell_sbge2_rayon(scf_data: &crate::scf_io::SCF) -> anyhow::Result<[f64;3]> {
+    let ([e_bge2_tot,e_bge2_os,e_bge2_ss],_) = 
+        close_shell_sbge2_detailed_rayon(scf_data).unwrap();
+    Ok([e_bge2_tot,e_bge2_os,e_bge2_ss])
+}
 
 pub fn iterator_close_shell_eij_serial(
     eri_virt: &MatrixFull<f64>, 
@@ -303,7 +328,7 @@ pub fn close_shell_eij_serial(
     (eij_ss, eij_os)
 } 
 
-pub fn open_shell_sbge2_rayon(scf_data: &crate::scf_io::SCF) -> anyhow::Result<[f64;3]> {
+pub fn open_shell_sbge2_detailed_rayon(scf_data: &crate::scf_io::SCF) -> anyhow::Result<([f64;3], [MatrixFull<(f64,f64)>;3])> {
     let enhanced_factor = 1.0;
     let screening_factor = 1.0;
     let shifted_factor = 0.0;
@@ -318,6 +343,11 @@ pub fn open_shell_sbge2_rayon(scf_data: &crate::scf_io::SCF) -> anyhow::Result<[
     let mut e_bge2_ss = 0.0_f64;
     let mut e_bge2_os = 0.0_f64;
 
+    let num_occu_max = scf_data.homo[0].max(scf_data.homo[1])+1;
+    let mut eij_00 = MatrixFull::new([num_occu_max,num_occu_max], (0.0_f64,0.0_f64));
+    let mut eij_01 = MatrixFull::new([num_occu_max,num_occu_max], (0.0_f64,0.0_f64));
+    let mut eij_11 = MatrixFull::new([num_occu_max,num_occu_max], (0.0_f64,0.0_f64));
+
     if let Some(ri3mo_vec) = &scf_data.ri3mo {
 
         let start_mo: usize = scf_data.mol.start_mo;
@@ -327,10 +357,6 @@ pub fn open_shell_sbge2_rayon(scf_data: &crate::scf_io::SCF) -> anyhow::Result<[
         let spin_channel = scf_data.mol.spin_channel;
         let i_spin_pair: [(usize,usize);3] = [(0,0),(0,1),(1,1)];
 
-        let num_occu_max = scf_data.homo[0].max(scf_data.homo[1])+1;
-        let mut eij_00 = MatrixFull::new([num_occu_max,num_occu_max], (0.0_f64,0.0_f64));
-        let mut eij_01 = MatrixFull::new([num_occu_max,num_occu_max], (0.0_f64,0.0_f64));
-        let mut eij_11 = MatrixFull::new([num_occu_max,num_occu_max], (0.0_f64,0.0_f64));
 
         for (i_spin_1,i_spin_2) in i_spin_pair {
             if i_spin_1 == i_spin_2 {
@@ -577,8 +603,13 @@ pub fn open_shell_sbge2_rayon(scf_data: &crate::scf_io::SCF) -> anyhow::Result<[
     // reuse the default omp_num_threads setting
     utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
 
-    Ok([e_bge2_ss+e_bge2_os,e_bge2_os,e_bge2_ss])
+    Ok(([e_bge2_ss+e_bge2_os,e_bge2_os,e_bge2_ss],[eij_00,eij_01,eij_11]))
 
+}
+
+pub fn open_shell_sbge2_rayon(scf_data: &crate::scf_io::SCF) -> anyhow::Result<[f64;3]> {
+    let ([e_bge2_tot, e_bge2_os,e_bge2_ss],_) = open_shell_sbge2_detailed_rayon(scf_data).unwrap();
+    Ok([e_bge2_ss+e_bge2_os,e_bge2_os,e_bge2_ss])
 }
 
 

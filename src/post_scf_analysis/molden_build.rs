@@ -92,8 +92,8 @@ pub fn gen_mo_info(scf_data: &SCF) -> String {
         mo_info +=  " Sym=     1a\n Ene= ";
         mo_info += &format!("{:16.8}",&eig);
         mo_info += "\n Spin= Alpha\n Occup= ";
-        mo_info += &occ.to_string();
-        mo_info += ".0\n";
+        mo_info += &format!("{:16.8}",&occ);
+        mo_info += "\n";
         let num_ao = mo_co.len();
         mo_co.iter().zip(1..(num_ao+1)).for_each(|(ao_co,index)|{
             mo_info += " ";
