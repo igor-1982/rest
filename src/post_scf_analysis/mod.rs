@@ -2,19 +2,21 @@ pub mod rand_wf_real_space;
 pub mod cube_build;
 pub mod molden_build;
 pub mod mulliken;
+pub mod strong_correlation_correction;
 
 use std::path::Path;
 use crate::constants::SPECIES_INFO;
 use crate::dft::DFAFamily;
 use crate::geom_io::get_mass_charge;
-use crate::ri_pt2::sbge2::{close_shell_sbge2_rayon, open_shell_sbge2_rayon};
-use crate::ri_rpa::scsrpa::evaluate_osrpa_correlation_rayon;
+use crate::ri_pt2::sbge2::{close_shell_sbge2_rayon, open_shell_sbge2_rayon, close_shell_sbge2_detailed_rayon, open_shell_sbge2_detailed_rayon};
+use crate::ri_rpa::scsrpa::{evaluate_osrpa_correlation_rayon, evaluate_spin_response_rayon, evaluate_special_radius_only};
 use crate::ri_rpa::{evaluate_rpa_correlation, evaluate_rpa_correlation_rayon};
 use crate::scf_io::SCF;
 use crate::ri_pt2::{close_shell_pt2_rayon, open_shell_pt2_rayon};
 use crate::utilities::TimeRecords;
 
 use self::molden_build::{gen_header, gen_molden};
+use self::strong_correlation_correction::scc23_for_rxdh7;
 
 pub fn post_scf_output(scf_data: &SCF) {
     scf_data.mol.ctrl.outputs.iter().for_each(|output_type| {
@@ -136,6 +138,7 @@ pub fn save_hamiltonian(scf_data: &SCF) {
     };
     file.close();
 }
+
 pub fn save_overlap(scf_data: &SCF) {
     let chkfile= &scf_data.mol.ctrl.chkfile;
     let path = Path::new(chkfile);
@@ -162,6 +165,7 @@ pub fn save_overlap(scf_data: &SCF) {
     };
     file.close();
 }
+
 pub fn save_geometry(scf_data: &SCF) {
     let ang = crate::constants::ANG;
     let chkfile= &scf_data.mol.ctrl.chkfile;
@@ -204,6 +208,16 @@ pub fn print_out_dfa(scf_data: &SCF) {
     post_xc_energy.iter().zip(scf_data.mol.ctrl.post_xc.iter()).for_each(|(energy, name)| {
         println!("{:<16}: {:16.8} Ha", name, energy[0]+energy[1]);
     });
+}
+
+pub fn post_ai_correction(scf_data: &mut SCF) {
+    let xc_method = &scf_data.mol.ctrl.xc;
+    let post_ai_corr = &scf_data.mol.ctrl.post_ai_correction;
+    if post_ai_corr.eq("scc23") && xc_method.eq("r-xdh7") {
+        let scc = scc23_for_rxdh7(scf_data);
+        let total_energy = scf_data.energies.get("xdh_energy").unwrap()[0];
+        println!("E(R-xDH7-SCC23): {:16.8} Ha", total_energy + scc);
+    };
 }
 
 /// NOTE: only support symmetric RI-V tensors

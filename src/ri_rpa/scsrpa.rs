@@ -177,10 +177,38 @@ pub fn evaluate_special_radius(polar_freq: &MatrixFull<f64>) -> f64 {
 
     //let special_radius = eigenvalues.iter().map(|x| x.abs()).max().unwrap();
 
-    eigenvalues.iter().map(|x| (*x).abs()).collect::<Vec<f64>>().max()
+    //eigenvalues.iter().map(|x| (*x).abs()).collect::<Vec<f64>>().max()
+    eigenvalues.iter().fold(0.0, |x, y| x.abs().max(y.abs()))
+}
+
+pub fn evaluate_special_radius_only(scf_data: &SCF) -> anyhow::Result<[f64;2]>  {
+    let spin_channel = scf_data.mol.spin_channel;
+    let spin_polar_freq = evaluate_spin_response_serial(scf_data, 0.0).unwrap();
+
+    let mut special_radius = [0.0f64; 2];
+    let mut sc_check = [false; 2];
+
+    for i_spin in 0..spin_channel {
+        let polar_freq = spin_polar_freq.get(i_spin).unwrap();
+        special_radius[i_spin] = evaluate_special_radius(polar_freq);
+        sc_check[i_spin] = special_radius[i_spin] > 0.8f64;
+    }
+
+    if spin_channel == 1 {
+        sc_check = [false;2];
+        let mut tmp_sr = special_radius[0];
+        special_radius[1] = tmp_sr;
+    }
+
+    Ok(special_radius)
 }
 
 pub fn evaluate_osrpa_correlation_rayon(scf_data: &SCF) -> anyhow::Result<[f64;3]>  {
+    let (rpa_c, _) = evaluate_osrpa_correlation_detailed_rayon(scf_data).unwrap();
+    Ok(rpa_c)
+}
+
+pub fn evaluate_osrpa_correlation_detailed_rayon(scf_data: &SCF) -> anyhow::Result<([f64;3],[f64;2])>  {
 
     let mut rpa_c_energy = 0.0_f64;
     let mut rpa_c_energy_os = 0.0_f64;
@@ -244,6 +272,7 @@ pub fn evaluate_osrpa_correlation_rayon(scf_data: &SCF) -> anyhow::Result<[f64;3
     // In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
     let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
     let mut per_omp_num_threads = default_omp_num_threads/num_freq;
+    if per_omp_num_threads == 0 {per_omp_num_threads = 1};
     //if default_omp_num_threads%num_freq != 0 {per_omp_num_threads += 1};
     utilities::omp_set_num_threads_wrapper(per_omp_num_threads);
 
@@ -281,7 +310,7 @@ pub fn evaluate_osrpa_correlation_rayon(scf_data: &SCF) -> anyhow::Result<[f64;3
 
     // for scs-rpa, higher oder OS terms are combined with the SS term to be the SS+ term
     // SS+ = RPA_total - RPA_OS
-    Ok([rpa_c_energy, rpa_c_energy_os, rpa_c_energy_ss])
+    Ok(([rpa_c_energy, rpa_c_energy_os, rpa_c_energy_ss],special_radius))
 }
 
 fn evaluate_osrpa_integrand(

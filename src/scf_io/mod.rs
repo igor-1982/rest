@@ -40,6 +40,7 @@ use tensors::matrix_blas_lapack::{_dgemm, _dinverse, _dsymm};
 use tensors::{ERIFull,MatrixFull, ERIFold4, MatrixUpper, TensorSliceMut, RIFull, MatrixFullSlice, MatrixFullSliceMut, BasicMatrix, MathMatrix, MatrixUpperSlice, ParMathMatrix, ri};
 use itertools::{Itertools, iproduct, izip};
 use rayon::prelude::*;
+use std::collections::HashMap;
 use std::sync::{Mutex, Arc,mpsc};
 use std::thread;
 use crossbeam::{channel::{unbounded,bounded},thread::{Scope,scope}};
@@ -106,7 +107,7 @@ pub struct SCF {
     #[pyo3(get,set)]
     pub scf_energy: f64,
     pub grids: Option<Grids>,
-    
+    pub energies: HashMap<String,Vec<f64>>,
 }
 
 #[derive(Clone,Copy)]
@@ -147,6 +148,7 @@ impl SCF {
             nuc_energy: 0.0,
             scf_energy: 0.0,
             grids: None,
+            energies: HashMap::new(),
         };
 
         // at first check the scf type: RHF, ROHF or UHF
