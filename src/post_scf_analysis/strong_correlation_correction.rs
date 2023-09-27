@@ -10,6 +10,12 @@ use libm::{erf,erfc,pow};
 pub fn scc23_for_rxdh7(scf_data: &mut SCF) -> f64 {
     let spin_channel = scf_data.mol.spin_channel;
     let xc_method = &scf_data.mol.ctrl.xc;
+    let num_elec = scf_data.mol.num_elec;
+
+    if num_elec[0] == 0 || num_elec[0] == 1 {
+        println!("There is no electron correlation effect in the system. No strong-correlation correction is needed");
+        return 0.0
+    }
 
     let start_mo = scf_data.mol.start_mo;
     let num_occu_0 = scf_data.homo[0] + 1;
