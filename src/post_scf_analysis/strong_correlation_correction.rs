@@ -18,8 +18,8 @@ pub fn scc23_for_rxdh7(scf_data: &mut SCF) -> f64 {
     }
 
     let start_mo = scf_data.mol.start_mo;
-    let num_occu_0 = scf_data.homo[0] + 1;
-    let num_occu_1 = if spin_channel ==1 {scf_data.homo[0] + 1} else {scf_data.homo[1] + 1};
+    let num_occu_0 = scf_data.lumo[0];
+    let num_occu_1 = if spin_channel ==1 {scf_data.lumo[0] + 1} else {scf_data.lumo[1] + 1};
 
     let mut scc = 0.0;
     // prepare energy gaps

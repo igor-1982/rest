@@ -31,7 +31,9 @@ pub fn evaluate_spin_response_rayon(scf_data: &SCF, freq: f64) -> anyhow::Result
             let occ_numbers = scf_data.occupation.get(i_spin).unwrap();
             let homo = scf_data.homo.get(i_spin).unwrap().clone();
             let lumo = scf_data.lumo.get(i_spin).unwrap().clone();
-            let num_occu = homo + 1;
+            //let num_occu = homo + 1;
+            let num_occu = lumo;
+            //let num_occu = scf_data.mol.num_elec.get(i_spin + 1).unwrap().clone() as usize;
 
             let (ri3mo, vir_range, occ_range) = ri3mo_vec.get(i_spin).unwrap();
             
@@ -44,6 +46,7 @@ pub fn evaluate_spin_response_rayon(scf_data: &SCF, freq: f64) -> anyhow::Result
 
                 let num_threads = rayon::current_num_threads();
                 let tasks = utilities::balancing(num_state-lumo, num_threads);
+                //println!("debug tasks: {:?}", &tasks);
 
                 let (sender, receiver) = channel();
 
@@ -110,13 +113,20 @@ pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Resul
             let occ_numbers = scf_data.occupation.get(i_spin).unwrap();
             let homo = scf_data.homo.get(i_spin).unwrap().clone();
             let lumo = scf_data.lumo.get(i_spin).unwrap().clone();
-            let num_occu = homo + 1;
+            //let num_occu = homo + 1;
+            let num_occu = lumo;
+            //let num_occu = scf_data.mol.num_elec.get(i_spin + 1).unwrap().clone() as usize;
 
             let (ri3mo, vir_range, occ_range) = ri3mo_vec.get(i_spin).unwrap();
+
+            //if i_spin == 1 {println!("debug polar_freq_beta_0: {:?}", &polar_freq)};
 
             
             //let mut rimo = riao.ao2mo(eigenvector).unwrap();
             //timerecords.count_start("all");
+            //println!("start_mo: {}, num_occu: {}, num_state: {}, num_auxbas: {}", start_mo, num_occu, num_state, num_auxbas);
+            //println!("occupation: {:?}", &scf_data.occupation);
+            //println!("homo: {:?}", &scf_data.homo);
             for j_state in start_mo..num_occu {
                 let j_state_eigen = eigenvalues[j_state];
                 let j_state_occ = occ_numbers[j_state];
@@ -156,6 +166,8 @@ pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Resul
                 //timerecords.count("all");
             };
 
+            //if i_spin == 1 {println!("debug polar_freq_beta_1: {:?}", &polar_freq)};
+
             //receiver.into_iter().for_each(|loc_polar_freq| {
             //    polar_freq += loc_polar_freq
             //})
@@ -166,6 +178,8 @@ pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Resul
     } else {
         panic!("RI3MO should be initialized before the RPA calculations")
     };
+
+    //println!("debug spin_polar_freq: {:?}", &spin_polar_freq);
 
     Ok(spin_polar_freq)
 
@@ -183,7 +197,8 @@ pub fn evaluate_special_radius(polar_freq: &MatrixFull<f64>) -> f64 {
 
 pub fn evaluate_special_radius_only(scf_data: &SCF) -> anyhow::Result<[f64;2]>  {
     let spin_channel = scf_data.mol.spin_channel;
-    let spin_polar_freq = evaluate_spin_response_serial(scf_data, 0.0).unwrap();
+    //let spin_polar_freq = evaluate_spin_response_serial(scf_data, 0.0).unwrap();
+    let spin_polar_freq = evaluate_spin_response_rayon(scf_data, 0.0).unwrap();
 
     let mut special_radius = [0.0f64; 2];
     let mut sc_check = [false; 2];
@@ -253,7 +268,9 @@ pub fn evaluate_osrpa_correlation_detailed_rayon(scf_data: &SCF) -> anyhow::Resu
 
     timerecords.count_start("evaluate_special_radius");
     for i_spin in 0..spin_channel {
+        //println!("debug: i_spin = {}", i_spin);
         let polar_freq = spin_polar_freq.get(i_spin).unwrap();
+        //println!("debug polar_freq = {:?}", polar_freq);
         special_radius[i_spin] = evaluate_special_radius(polar_freq);
         sc_check[i_spin] = special_radius[i_spin] > 0.8f64;
     }

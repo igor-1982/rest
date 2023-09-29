@@ -25,7 +25,8 @@ pub fn close_shell_sbge2_detailed_rayon(scf_data: &crate::scf_io::SCF) -> anyhow
     let homo = scf_data.homo.get(0).unwrap().clone();
     let lumo = scf_data.lumo.get(0).unwrap().clone();
     let start_mo: usize = scf_data.mol.start_mo;
-    let num_occu = homo + 1;
+    //let num_occu = homo + 1;
+    let num_occu = lumo;
 
     let mut e_mp2_ss = 0.0_f64;
     let mut e_mp2_os = 0.0_f64;
@@ -149,7 +150,8 @@ pub fn close_shell_sbge2_detailed_rayon(scf_data: &crate::scf_io::SCF) -> anyhow
         //        }
         //    };
         //}
-        let num_occ = scf_data.homo[0]+1;
+        //let num_occ = scf_data.homo[0]+1;
+        let num_occ = scf_data.lumo[0];
         println!("Print the correlation energies for each electron-pair:");
         if scf_data.mol.ctrl.print_level>1 {println!("For (alpha, alpha)")};
         for i_state in start_mo..num_occ {
@@ -343,7 +345,8 @@ pub fn open_shell_sbge2_detailed_rayon(scf_data: &crate::scf_io::SCF) -> anyhow:
     let mut e_bge2_ss = 0.0_f64;
     let mut e_bge2_os = 0.0_f64;
 
-    let num_occu_max = scf_data.homo[0].max(scf_data.homo[1])+1;
+    //let num_occu_max = scf_data.homo[0].max(scf_data.homo[1])+1;
+    let num_occu_max = scf_data.lumo[0].max(scf_data.lumo[1]);
     let mut eij_00 = MatrixFull::new([num_occu_max,num_occu_max], (0.0_f64,0.0_f64));
     let mut eij_01 = MatrixFull::new([num_occu_max,num_occu_max], (0.0_f64,0.0_f64));
     let mut eij_11 = MatrixFull::new([num_occu_max,num_occu_max], (0.0_f64,0.0_f64));
@@ -368,7 +371,8 @@ pub fn open_shell_sbge2_detailed_rayon(scf_data: &crate::scf_io::SCF) -> anyhow:
 
                 let homo = scf_data.homo[i_spin].clone();
                 let lumo = scf_data.lumo[i_spin].clone();
-                let num_occu = homo + 1;
+                //let num_occu = homo + 1;
+                let num_occu = lumo;
 
                 let (rimo, vir_range, occ_range) = &ri3mo_vec[i_spin];
                 let lumo_min = vir_range.start;
@@ -475,7 +479,8 @@ pub fn open_shell_sbge2_detailed_rayon(scf_data: &crate::scf_io::SCF) -> anyhow:
                 let occupation_1 = scf_data.occupation.get(i_spin_1).unwrap();
                 let homo_1 = scf_data.homo.get(i_spin_1).unwrap().clone();
                 let lumo_1 = scf_data.lumo.get(i_spin_1).unwrap().clone();
-                let num_occu_1 = homo_1 + 1;
+                //let num_occu_1 = homo_1 + 1;
+                let num_occu_1 = lumo_1;
                 let (rimo_1, vir_range, occ_range) = &ri3mo_vec[i_spin_1];
                 let lumo_min = vir_range.start;
 
@@ -484,7 +489,8 @@ pub fn open_shell_sbge2_detailed_rayon(scf_data: &crate::scf_io::SCF) -> anyhow:
                 let occupation_2 = scf_data.occupation.get(i_spin_2).unwrap();
                 let homo_2 = scf_data.homo.get(i_spin_2).unwrap().clone();
                 let lumo_2 = scf_data.lumo.get(i_spin_2).unwrap().clone();
-                let num_occu_2 = homo_2 + 1;
+                //let num_occu_2 = homo_2 + 1;
+                let num_occu_2 = lumo_2;
                 let (rimo_2, _, _) = &ri3mo_vec[i_spin_2];
 
                 // prepare the elec_pair for the rayon parallelization
@@ -572,8 +578,8 @@ pub fn open_shell_sbge2_detailed_rayon(scf_data: &crate::scf_io::SCF) -> anyhow:
             }
         }
         if scf_data.mol.ctrl.print_level>1 {
-            let num_occ_alpha = scf_data.homo[0]+1;
-            let num_occ_beta = scf_data.homo[1]+1;
+            let num_occ_alpha = scf_data.lumo[0];
+            let num_occ_beta = scf_data.lumo[1];
             println!("Print the correlation energies for each electron-pair:");
             println!("For (alpha, alpha)");
             for i_state in start_mo..num_occ_alpha {

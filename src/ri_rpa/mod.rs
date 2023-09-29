@@ -213,7 +213,8 @@ fn evaluate_response(scf_data: &SCF, rimo: &mut Vec<RIFull<f64>>, freq: f64) -> 
         let rimo_s = rimo.get_mut(i_spin).unwrap();
         let homo = scf_data.homo.get(i_spin).unwrap().clone();
         let lumo = scf_data.lumo.get(i_spin).unwrap().clone();
-        let num_occu = homo + 1;
+        //let num_occu = homo + 1;
+        let num_occu = lumo;
         for j_state in start_mo .. num_occu {
             let j_state_eigen = eigenvalues.get(j_state).unwrap();
             let j_state_occ = occ_numbers.get(j_state).unwrap();
@@ -262,7 +263,8 @@ fn evaluate_response_rayon(scf_data: &SCF, freq: f64) -> anyhow::Result<MatrixFu
             let occ_numbers = scf_data.occupation.get(i_spin).unwrap();
             let homo = scf_data.homo.get(i_spin).unwrap().clone();
             let lumo = scf_data.lumo.get(i_spin).unwrap().clone();
-            let num_occu = homo + 1;
+            //let num_occu = homo + 1;
+            let num_occu = lumo;
 
             let (ri3mo, vir_range, occ_range) = ri3mo_vec.get(i_spin).unwrap();
 
@@ -343,7 +345,8 @@ fn evaluate_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Result<MatrixF
             let occ_numbers = scf_data.occupation.get(i_spin).unwrap();
             let homo = scf_data.homo.get(i_spin).unwrap().clone();
             let lumo = scf_data.lumo.get(i_spin).unwrap().clone();
-            let num_occu = homo + 1;
+            //let num_occu = homo + 1;
+            let num_occu = lumo;
 
             let (ri3mo, vir_range, occ_range) = ri3mo_vec.get(i_spin).unwrap();
 
