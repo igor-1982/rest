@@ -140,7 +140,7 @@ pub fn close_shell_sbge2_detailed_rayon(scf_data: &crate::scf_io::SCF) -> anyhow
             e_mp2_ss -= e_mp2_term_ss;
             e_bge2_os -= e_eij_term_os;
             e_bge2_ss -= e_eij_term_ss;
-            e_ij[(i_state,j_state)] = (e_mp2_term_os,e_mp2_term_ss, e_eij_term_os, e_eij_term_ss,num_eij_iter)
+            e_ij[(i_state,j_state)] = (-e_mp2_term_os,-e_mp2_term_ss, -e_eij_term_os, -e_eij_term_ss,num_eij_iter)
         });
         //if scf_data.mol.ctrl.print_level>0 {
         //    for i_state in start_mo..num_occu {
