@@ -85,17 +85,17 @@ pub fn scc23_for_rxdh7(scf_data: &mut SCF) -> f64 {
         let mut pt2_c = 0.0f64;
         for i_state in start_mo..num_occu_0 {
             for j_state  in i_state+1..num_occu_0 {
-                pt2_c = eij_00[(i_state,j_state)].0;
+                pt2_c += eij_00[(i_state,j_state)].0;
             }
         };
         for i_state in start_mo..num_occu_1 {
             for j_state  in i_state+1..num_occu_1 {
-                pt2_c = eij_11[(i_state,j_state)].0;
+                pt2_c += eij_11[(i_state,j_state)].0;
             }
         };
         for i_state in start_mo..num_occu_0 {
             for j_state  in start_mo..num_occu_1 {
-                pt2_c = eij_01[(i_state,j_state)].0;
+                pt2_c += eij_01[(i_state,j_state)].0;
             }
         };
 

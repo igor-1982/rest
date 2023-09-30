@@ -207,7 +207,7 @@ pub fn close_shell_sbge2_detailed_rayon(scf_data: &crate::scf_io::SCF) -> anyhow
     // reuse the default omp_num_threads setting
     utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
 
-    println!("debug pt2 and sbge2: {:?}, {:?}", e_mp2_os+e_mp2_ss, e_bge2_ss+ e_bge2_os);
+    //println!("debug pt2 and sbge2: {:?}, {:?}", e_mp2_os+e_mp2_ss, e_bge2_ss+ e_bge2_os);
 
     //tmp_record.report_all();
     Ok(([e_bge2_ss+e_bge2_os,e_bge2_os,e_bge2_ss],[eij_00,eij_01,eij_11]))
