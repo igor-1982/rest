@@ -34,6 +34,7 @@ mod addons;
 mod fchk;
 mod pyrest_scf_io;
 
+use libc::_SC_AIO_LISTIO_MAX;
 //use clap::value_parser;
 use pyo3::{pyclass, pymethods, pyfunction};
 use tensors::matrix_blas_lapack::{_dgemm, _dinverse, _dsymm};
@@ -708,14 +709,6 @@ impl SCF {
             }
         };
 
-        //debug 
-        //let i_spin:usize = 0;
-        //for j in (0..num_basis) {
-        //    for i in (0..j+1) {
-        //        println!("i: {}, j: {}, vj_ij: {}", i,j, vj[0].get2d([i,j]).unwrap());
-        //    }
-        //}
-
         vj
     }
 
@@ -770,7 +763,7 @@ impl SCF {
         vj
     }
 
-    pub fn generate_vj_on_the_fly_par(&mut self) -> Vec<MatrixUpper<f64>>{
+    pub fn generate_vj_on_the_fly_par_old(&mut self) -> Vec<MatrixUpper<f64>>{
         let num_shell = self.mol.cint_bas.len();
         let num_basis = self.mol.num_basis;
         let spin_channel = self.mol.spin_channel;
@@ -821,6 +814,79 @@ impl SCF {
                     vj_i[(*index_k, *index_l)] = *value
                 })
             });
+
+
+            vj.push(vj_i.to_matrixupper());
+        }
+        if spin_channel == 1{
+            vj.push(MatrixUpper::new(1, 0.0));
+        }
+        vj
+
+    }
+
+    pub fn generate_vj_on_the_fly_par_new(&mut self) -> Vec<MatrixUpper<f64>>{
+        let num_shell = self.mol.cint_bas.len();
+        let num_basis = self.mol.num_basis;
+        let spin_channel = self.mol.spin_channel;
+        let dm = &self.density_matrix;
+        let mut vj: Vec<MatrixUpper<f64>> = vec![];
+        let mol = &self.mol;
+        //utilities::omp_set_num_threads_wrapper(1);
+        for i_spin in 0..spin_channel{
+            let mut vj_i = MatrixFull::new([num_basis, num_basis], 0.0);
+            let mut dm_s = &self.density_matrix[i_spin];
+            let par_tasks = utilities::balancing(num_shell*num_shell, rayon::current_num_threads());
+            let (sender, receiver) = channel();
+            let mut index = Vec::new();
+            for l in 0..num_shell {
+                for k in 0..l+1 {
+                    index.push((k,l))
+                }
+            };
+            index.par_iter().for_each_with(sender,|s,(k,l)|{
+                let bas_start_k = mol.cint_fdqc[*k][0];
+                let bas_len_k = mol.cint_fdqc[*k][1];
+                let bas_start_l = mol.cint_fdqc[*l][0];
+                let bas_len_l = mol.cint_fdqc[*l][1];
+
+                let mut klij = mol.int_ijkl_given_kl_v02(*k, *l);
+                let mut sum =0.0;
+                //let mut out = vec![(0.0, 0usize, 0usize); ];
+                //let mut out:Vec<(f64, usize, usize)> = Vec::new();
+                let mut out = MatrixFull::new([bas_len_k, bas_len_l],0.0);
+                //for ao_k in bas_start_k..bas_start_k+bas_len_k{
+                //    for ao_l in bas_start_l..bas_start_l+bas_len_l{
+                out.iter_columns_full_mut().enumerate().for_each(|(loc_l,x)|{
+                    x.iter_mut().enumerate().for_each(|(loc_k,elem)|{
+                        let ao_k = loc_k + bas_start_k;
+                        let ao_l = loc_l + bas_start_l;
+                        let mut eri_cd = klij.get(&[loc_k, loc_l]).unwrap();
+                        let mut sum = dm_s.iter_matrixupper().unwrap().zip(eri_cd.iter_matrixupper().unwrap()).fold(0.0,|sum, (p,eri)| {
+                            sum + *p * *eri
+                        });
+
+                        let mut diagonal = dm_s.iter_diagonal().unwrap().zip(eri_cd.iter_diagonal().unwrap()).fold(0.0,|diagonal, (p,eri)| {
+                            diagonal + *p * *eri
+                        });
+
+                        sum = sum*2.0 - diagonal;
+
+                        *elem = sum;
+                    })
+                });
+                s.send((out,*k,*l)).unwrap();
+            });
+            receiver.into_iter().for_each(|(out,k,l)| {
+                let bas_start_k = mol.cint_fdqc[k][0];
+                let bas_len_k = mol.cint_fdqc[k][1];
+                let bas_start_l = mol.cint_fdqc[l][0];
+                let bas_len_l = mol.cint_fdqc[l][1];
+                vj_i.copy_from_matr(bas_start_k..bas_start_k+bas_len_k, bas_start_l..bas_start_l+bas_len_l, 
+                    &out, 0..bas_len_k,0..bas_len_l);
+                //vj_i.iter_submatrix_mut(bas_start_k..bas_start_k+bas_len_k, bas_start_l..bas_start_l+bas_len_l).zip(out.iter())
+                //    .for_each(|(to, from)| {*to = *from});
+            });
             
 
             vj.push(vj_i.to_matrixupper());
@@ -830,6 +896,11 @@ impl SCF {
         }
         vj
     }
+
+    pub fn generate_vj_on_the_fly_par(&mut self) -> Vec<MatrixUpper<f64>> {
+        self.generate_vj_on_the_fly_par_new()
+    }
+
 
     pub fn generate_vk_with_erifold4(&mut self, scaling_factor: f64) -> Vec<MatrixFull<f64>> {
         let num_basis = self.mol.num_basis;
@@ -1638,7 +1709,7 @@ impl SCF {
         let num_state = self.mol.num_state;
         let spin_channel = self.mol.spin_channel;
         let dt1 = time::Local::now();
-        let vj = if self.mol.ctrl.isdf_new{
+        let vj = if self.mol.ctrl.isdf_new || self.mol.ctrl.ri_k_only {
             self.generate_vj_on_the_fly_par()
         }else{
             self.generate_vj_with_ri_v_sync(1.0)
@@ -1695,7 +1766,11 @@ impl SCF {
         let spin_channel = self.mol.spin_channel;
         //let homo = &self.homo;
         let dt1 = time::Local::now();
-        let vj = self.generate_vj_with_ri_v_sync(1.0);
+        let vj = if self.mol.ctrl.isdf_new || self.mol.ctrl.ri_k_only {
+            self.generate_vj_on_the_fly_par()
+        } else {
+            self.generate_vj_with_ri_v_sync(1.0)
+        };
         let dt2 = time::Local::now();
         let scaling_factor = match self.scftype {
             SCFType::RHF => -0.5,

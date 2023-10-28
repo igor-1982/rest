@@ -891,10 +891,10 @@ impl Molecule {
                         //let mut tmp_mat = &mut mat_vec[tmp_index];
                         let mut tmp_mat = &mut mat_full[[loc_k,loc_l]];
 
-                        let tmp_loc = tmp_eri.get_reducing_matrix(&[loc_k,loc_l]).data.iter();
+                        let tmp_loc = tmp_eri.get_reducing_matrix(&[loc_k,loc_l]);
 
                         tmp_mat.iter_submatrix_mut(bas_start_i..bas_start_i+bas_len_i, bas_start_j..bas_start_j+bas_len_j)
-                        .zip(tmp_loc).for_each(|(gij,lij)| {*gij = *lij});
+                        .zip(tmp_loc.data.iter()).for_each(|(gij,lij)| {*gij = *lij});
                     }
                 }
             };

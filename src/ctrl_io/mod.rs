@@ -2,7 +2,7 @@
 use pyo3::pyclass;
 use serde::{Deserialize,Serialize};
 //use std::{fs, str::pattern::StrSearcher};
-use std::fs;
+use std::{fs, sync::Arc};
 use crate::{geom_io::{GeomCell,MOrC, GeomUnit}, dft::{DFAFamily, DFA4REST}, utilities};
 use rayon::ThreadPoolBuilder;
 
@@ -53,6 +53,9 @@ pub struct InputKeywords {
     pub etb_start_atom_number: usize,
     #[pyo3(get, set)]
     pub etb_beta: f64,
+    // Keywords for RI_K
+    #[pyo3(get, set)]
+    pub ri_k_only: bool,
     // Keywords for Gradient
     #[pyo3(get, set)]
     pub auxbasis_response: bool,
@@ -178,6 +181,7 @@ impl InputKeywords {
             use_auxbas: true,
             auxbasis_response: false,
             use_isdf: false,
+            ri_k_only: false,
             isdf_k_only: false,
             isdf_k_mu: 17,
             isdf_new: false,
@@ -343,6 +347,12 @@ impl InputKeywords {
                 {
                     tmp_input.use_auxbas = true;
                     tmp_input.use_isdf = false;
+                    tmp_input.ri_k_only = false;
+                } else if eri_type.eq(&String::from("ri_k")) {
+                    tmp_input.eri_type = String::from("ri_v");
+                    tmp_input.use_auxbas = true;
+                    tmp_input.use_isdf = false;
+                    tmp_input.ri_k_only = true;
                 } else if eri_type.eq(&String::from("isdf_full")) {
                     // =========== for debug use by IGOR =================
                     tmp_input.eri_type = String::from("ri_v");
