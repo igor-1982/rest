@@ -7,7 +7,7 @@ mod tests {
 
     use num_traits::Float;
     use tensors::{MatrixFull, RIFull};
-
+    use rest_tensors::matrix_blas_lapack::_dpinverse;
     use crate::isdf::{index_of_min,prod_states_gw, cvt_update_cmu, cvt_find_corresponding_point, cvt_classification, cvt_isdf_v2};
 
     #[test]
@@ -56,6 +56,42 @@ mod tests {
         let mut a = MatrixFull::from_vec([3,3], vec![4.100378e-7,6.446175e-20,1.038086e-17,6.446175e-20,1.070506e-30,4.646721e-27,-2.836063e7,5.034143e0,6.305798e3]).unwrap(); 
         //let mut a = MatrixFull::from_vec([3,3], vec![1.0,2.0,4.0,6.0,-1.0,3.0,4.0,0.0,-2.0]).unwrap(); 
         let result = &mut a.pinv(1.0e-6);
+        println!("{:?}",result);
+    }
+
+    #[test]
+    fn test_dpinverse() {
+
+        let mut a = MatrixFull::from_vec([3,3], vec![4.100378e-7,6.446175e-20,1.038086e-17,6.446175e-20,1.070506e-30,4.646721e-27,-2.836063e7,5.034143e0,6.305798e3]).unwrap(); 
+        //let mut a = MatrixFull::from_vec([3,3], vec![1.0,2.0,4.0,6.0,-1.0,3.0,4.0,0.0,-2.0]).unwrap(); 
+        let result = _dpinverse(&mut a, 1.0e-6).unwrap();
+        println!("{:?}",result);
+    }
+
+    #[test]
+    fn test_eigenvalue_pinv() {
+
+        let mut a = MatrixFull::from_vec([3,3], vec![4.100378e-7,6.446175e-20,1.038086e-17,6.446175e-20,1.070506e-30,4.646721e-27,-2.836063e7,5.034143e0,6.305798e3]).unwrap(); 
+        //let mut a = MatrixFull::from_vec([3,3], vec![1.0,2.0,4.0,6.0,-1.0,3.0,4.0,0.0,-2.0]).unwrap(); 
+        let result = &a.eigenvalue_pinv(1.0e-6);
+        println!("{:?}",result);
+    }
+
+    #[test]
+    fn test_eigenvalue_pinv_2() {
+
+        let mut a = MatrixFull::from_vec([3,3], vec![1.0e-7,2.0e-20,3.0e-17,2.0e-20,4.0e-30,5.0e-27,3.0e-17,5.0e-27,7.0e3]).unwrap(); 
+        //let mut a = MatrixFull::from_vec([3,3], vec![1.0,2.0,4.0,6.0,-1.0,3.0,4.0,0.0,-2.0]).unwrap(); 
+        let result = &a.eigenvalue_pinv(1.0e-6);
+        println!("{:?}",result);
+    }
+
+    #[test]
+    fn test_pinv_2() {
+
+        let mut a = MatrixFull::from_vec([3,3], vec![1.0e-7,2.0e-20,3.0e-17,2.0e-20,4.0e-30,5.0e-27,3.0e-17,5.0e-27,7.0e3]).unwrap(); 
+        //let mut a = MatrixFull::from_vec([3,3], vec![1.0,2.0,4.0,6.0,-1.0,3.0,4.0,0.0,-2.0]).unwrap(); 
+        let result = &a.pinv(1.0e-6);
         println!("{:?}",result);
     }
 
