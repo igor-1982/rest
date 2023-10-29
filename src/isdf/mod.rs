@@ -1169,6 +1169,7 @@ pub fn prepare_m_isdf(k_mu: usize, mol: &Molecule, grids: &dft::Grids) -> (Matri
     time_mark.new_item("test pinv", "pseudo inverse of c2");
     time_mark.count_start("test pinv");
     let mut inv_cctrans = c2.pinv(1.0e-12);
+    //let mut inv_cctrans = c2.eigenvalue_pinv(1.0e-8);
     //let mut inv_cctrans = _dpinverse(&mut c2, 1.0e-12).unwrap();
     time_mark.count("test pinv");
     time_mark.report_all();

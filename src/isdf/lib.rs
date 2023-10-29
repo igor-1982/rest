@@ -69,6 +69,33 @@ mod tests {
     }
 
     #[test]
+    fn test_eigenvalue_pinv() {
+
+        let mut a = MatrixFull::from_vec([3,3], vec![4.100378e-7,6.446175e-20,1.038086e-17,6.446175e-20,1.070506e-30,4.646721e-27,-2.836063e7,5.034143e0,6.305798e3]).unwrap(); 
+        //let mut a = MatrixFull::from_vec([3,3], vec![1.0,2.0,4.0,6.0,-1.0,3.0,4.0,0.0,-2.0]).unwrap(); 
+        let result = &a.eigenvalue_pinv(1.0e-6);
+        println!("{:?}",result);
+    }
+
+    #[test]
+    fn test_eigenvalue_pinv_2() {
+
+        let mut a = MatrixFull::from_vec([3,3], vec![1.0e-7,2.0e-20,3.0e-17,2.0e-20,4.0e-30,5.0e-27,3.0e-17,5.0e-27,7.0e3]).unwrap(); 
+        //let mut a = MatrixFull::from_vec([3,3], vec![1.0,2.0,4.0,6.0,-1.0,3.0,4.0,0.0,-2.0]).unwrap(); 
+        let result = &a.eigenvalue_pinv(1.0e-6);
+        println!("{:?}",result);
+    }
+
+    #[test]
+    fn test_pinv_2() {
+
+        let mut a = MatrixFull::from_vec([3,3], vec![1.0e-7,2.0e-20,3.0e-17,2.0e-20,4.0e-30,5.0e-27,3.0e-17,5.0e-27,7.0e3]).unwrap(); 
+        //let mut a = MatrixFull::from_vec([3,3], vec![1.0,2.0,4.0,6.0,-1.0,3.0,4.0,0.0,-2.0]).unwrap(); 
+        let result = &a.pinv(1.0e-6);
+        println!("{:?}",result);
+    }
+
+    #[test]
     fn test_rifull() {
         let mut a = RIFull::from_vec([3,3,4], vec![1.,2.,3.,2.,4.,5.,3.,5.,6.,7.,8.,9.,8.,10.,11.,9.,11.,12.,13.,14.,15.,14.,16.,17.,15.,17.,18.,19.,20.,21.,20.,22.,23.,21.,23.,24.]).unwrap(); 
         let mut ri_v_ao = MatrixFull::new([4, 9],0.0);
