@@ -74,11 +74,11 @@ pub fn xdh_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
     if scf_data.mol.ctrl.use_ri_symm {
         timerecords.count_start("ao2mo");
         let (occ_range, vir_range) = determine_ri3mo_size_for_pt2_and_rpa(&scf_data);
-        timerecords.count("ao2mo");
         if scf_data.mol.ctrl.print_level>1 {
             println!("generate RI3MO only for occ_range:{:?}, vir_range:{:?}", &occ_range, &vir_range)
         };
         scf_data.generate_ri3mo_rayon(vir_range, occ_range);
+        timerecords.count("ao2mo");
         timerecords.count_start("c_r5dft");
         pt2_c = if scf_data.mol.spin_channel == 1 {
             match  dfa_family_pos {
