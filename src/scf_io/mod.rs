@@ -37,7 +37,7 @@ mod pyrest_scf_io;
 use libc::_SC_AIO_LISTIO_MAX;
 //use clap::value_parser;
 use pyo3::{pyclass, pymethods, pyfunction};
-use tensors::matrix_blas_lapack::{_dgemm, _dinverse, _dsymm};
+use tensors::matrix_blas_lapack::{_dgemm, _dinverse, _dsymm, _dsyrk};
 use tensors::{ERIFull,MatrixFull, ERIFold4, MatrixUpper, TensorSliceMut, RIFull, MatrixFullSlice, MatrixFullSliceMut, BasicMatrix, MathMatrix, MatrixUpperSlice, ParMathMatrix, ri};
 use itertools::{Itertools, iproduct, izip};
 use rayon::prelude::*;
@@ -2438,8 +2438,15 @@ impl SCF {
         let spin_channel = self.mol.spin_channel;
 
         if self.mol.ctrl.use_ri_symm {
-            let dm = &self.density_matrix;
-            vk_upper_with_rimatr_use_dm_only_sync(&mut self.rimatr, dm, spin_channel, scaling_factor)
+            if use_dm_only {
+                let dm = &self.density_matrix;
+                vk_upper_with_rimatr_use_dm_only_sync(&mut self.rimatr, dm, spin_channel, scaling_factor)
+            } else {
+                let eigv = &self.eigenvectors;
+                let occupation = &self.occupation;
+                let num_elec = &self.mol.num_elec;
+                vk_upper_with_rimatr_sync(&mut self.rimatr, eigv, num_elec, occupation, spin_channel, scaling_factor)
+            }
         } else if self.mol.ctrl.isdf_new{
             self.generate_vk_with_isdf_new(scaling_factor)
         }else{
@@ -2448,7 +2455,7 @@ impl SCF {
                 vk_upper_with_ri_v_use_dm_only_sync(&mut self.ri3fn, dm, spin_channel, scaling_factor)
             } else {
                 let eigv = &self.eigenvectors;
-                vk_upper_with_ri_v_sync(&mut self.ri3fn, eigv, self.homo, &self.occupation, 
+                vk_upper_with_ri_v_sync(&mut self.ri3fn, eigv, &self.mol.num_elec, &self.occupation, 
                                         spin_channel, scaling_factor)
             }
         }
@@ -2475,7 +2482,7 @@ impl SCF {
                 vk_upper_with_ri_v_use_dm_only_sync(&mut self.ri3fn_isdf, dm, spin_channel, scaling_factor)
             } else {
                 let eigv = &self.eigenvectors;
-                vk_upper_with_ri_v_sync(&mut self.ri3fn_isdf, eigv, self.homo, &self.occupation, 
+                vk_upper_with_ri_v_sync(&mut self.ri3fn_isdf, eigv, &self.mol.num_elec, &self.occupation, 
                                         spin_channel, scaling_factor)
             }
         }
@@ -3214,11 +3221,87 @@ pub fn vk_upper_with_rimatr_use_dm_only_sync(
     vk
 }
 
+pub fn vk_upper_with_rimatr_sync(
+                ri3fn: &Option<(MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>)>,
+                eigv: &[MatrixFull<f64>;2], 
+                num_elec: &[f64;3], occupation: &[Vec<f64>;2],
+                //dm: &Vec<MatrixFull<f64>>,
+                spin_channel: usize, scaling_factor: f64)  -> Vec<MatrixUpper<f64>> {
+    // In this subroutine, we call the lapack dgemm in a rayon parallel environment.
+    // In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
+    let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
+    //println!("debug: default omp_num_threads: {}", default_omp_num_threads);
+    utilities::omp_set_num_threads_wrapper(1);
+    //let mut bm = RIFull::new([num_state,num_basis,num_auxbas], 0.0f64);
+    let mut vk: Vec<MatrixUpper<f64>> = vec![MatrixUpper::new(1,0.0f64),MatrixUpper::new(1,0.0f64)];
+
+    if let Some((ri3fn,basbas2baspar,baspar2basbas)) = ri3fn {
+        let num_basis = eigv[0].size()[0];
+        let num_baspair = (num_basis+1)*num_basis/2;
+        //let num_auxbas = ri3fn.size[2];
+        for i_spin in 0..spin_channel {
+            let mut vk_s = &mut vk[i_spin];
+            *vk_s = MatrixUpper::new(num_baspair,0.0_f64);
+            let eigv_s = &eigv[i_spin];
+            let nw = num_elec[i_spin+1].ceil() as usize;
+            if nw>0 {
+                let mut tmp_mat = MatrixFull::new([num_basis,nw],0.0_f64);
+                tmp_mat.data.iter_mut().zip(eigv_s.iter_submatrix(0..num_basis,0..nw))
+                    .for_each(|value| {*value.0 = *value.1});
+                let reduced_eigv_s = tmp_mat;
+                let occ_s = &occupation[i_spin][0..nw];
+
+                //let dm_s = &dm[i_spin];
+
+                let (sender, receiver) = channel();
+                ri3fn.par_iter_columns_full().for_each_with(sender,|s, m| {
+                    //let mut tmp_mat = MatrixFull::new([num_basis,num_basis],0.0_f64);
+                    let mut reduced_ri3fn = MatrixFull::new([num_basis,num_basis],0.0_f64);
+
+                    reduced_ri3fn.iter_matrixupper_mut().unwrap().zip(m.iter()).for_each(|(to, from)| {*to = *from});
+
+                    let mut tmp_mc = MatrixFull::new([num_basis,nw],0.0_f64);
+                    //tmp_mc = ri3fn \cdot eigv
+                    _dsymm(&reduced_ri3fn, &reduced_eigv_s, &mut tmp_mc, 'L', 'U', 1.0, 0.0);
+                    //tmp_mat = tmp_mc (ri3fn \cdot eigv)
+                    let mut tmp_mat = tmp_mc.clone();
+                    //tmp_mat = tmp_mc * occ**(1/2)
+                    tmp_mat.data.chunks_exact_mut(tmp_mat.size[0]).zip(occ_s.iter()).for_each(|(to_value, from_value)| {
+                        to_value.iter_mut().for_each(|to_value| {*to_value = *to_value*from_value.sqrt()});
+                    });
+                    let mut vk_sm = MatrixFull::new([num_basis,num_basis],0.0_f64);
+                    _dsyrk(&tmp_mat, &mut vk_sm, 'U', 'N', 1.0, 0.0);
+
+                    s.send(vk_sm.to_matrixupper()).unwrap();
+                });
+
+                receiver.into_iter().for_each(|vk_mu_upper| {
+                    vk_s.data.iter_mut()
+                        .zip(vk_mu_upper.data.iter()).for_each(|value| {
+                        *value.0 += *value.1
+                    })
+                });
+            }
+        }
+    }
+
+    if scaling_factor!=1.0f64 {
+        for i_spin in (0..spin_channel) {
+            vk[i_spin].data.par_iter_mut().for_each(|f| *f = *f*scaling_factor)
+        }
+    };
+
+    // reuse the default omp_num_threads setting
+    utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
+
+    vk
+}
+
 //==========================need to be checked=============================
 pub fn vk_upper_with_ri_v_sync(
                 ri3fn: &mut Option<RIFull<f64>>,
                 eigv: &[MatrixFull<f64>;2], 
-                homo: [usize;2], occupation: &[Vec<f64>;2],
+                num_elec: &[f64;3], occupation: &[Vec<f64>;2],
                 spin_channel: usize, scaling_factor: f64)  -> Vec<MatrixUpper<f64>> {
     // In this subroutine, we call the lapack dgemm in a rayon parallel environment.
     // In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
@@ -3238,47 +3321,50 @@ pub fn vk_upper_with_ri_v_sync(
             let mut vk_s = &mut vk[i_spin];
             *vk_s = MatrixUpper::new(npair,0.0_f64);
             let eigv_s = &eigv[i_spin];
-            let nw = homo[i_spin]+1;
-            let occ_s = &occupation[i_spin][0..nw];
-            //let mut tmp_b = MatrixFull::new([num_basis,num_basis],0.0_f64);
-            let (sender, receiver) = channel();
-            ri3fn.par_iter_mut_auxbas(0..num_auxbas).unwrap().for_each_with(sender, |s, m| {
+            let nw = num_elec[i_spin+1].ceil() as usize;
+            if nw>0 {
                 let mut tmp_mat = MatrixFull::new([num_basis,nw],0.0_f64);
                 tmp_mat.data.iter_mut().zip(eigv_s.iter_submatrix(0..num_basis,0..nw))
                     .for_each(|value| {*value.0 = *value.1});
+                let reduced_eigv_s = tmp_mat;
+                let occ_s = &occupation[i_spin][0..nw];
+                //let mut tmp_b = MatrixFull::new([num_basis,num_basis],0.0_f64);
+                let (sender, receiver) = channel();
+                ri3fn.par_iter_mut_auxbas(0..num_auxbas).unwrap().for_each_with(sender, |s, m| {
 
-                let mut reduced_ri3fn = MatrixFullSlice {
-                    size:  &[num_basis,num_basis], 
-                    indicing: &[1,num_basis],
-                    data: m,
-                };
-                //tmp_mat: copy of related eigenvalue; reduced_ri3fn: certain part of ri3fn
-                let mut tmp_mc = MatrixFull::new([num_basis,nw],0.0_f64);
-                //tmp_mc = ri3fn \cdot eigv
-                tmp_mc.to_matrixfullslicemut().lapack_dgemm(&reduced_ri3fn, &tmp_mat.to_matrixfullslice(), 'N', 'N', 1.0, 0.0);
-                //tmp_mat = tmp_mc (ri3fn \cdot eigv)
-                let mut tmp_mat = tmp_mc.clone();
-                //tmp_mat = tmp_mc * occ
-                tmp_mat.data.chunks_exact_mut(tmp_mat.size[0]).zip(occ_s.iter()).for_each(|(to_value, from_value)| {
-                    to_value.iter_mut().for_each(|to_value| {*to_value = *to_value*from_value});
+                    let mut reduced_ri3fn = MatrixFullSlice {
+                        size:  &[num_basis,num_basis], 
+                        indicing: &[1,num_basis],
+                        data: m,
+                    };
+                    //tmp_mat: copy of related eigenvalue; reduced_ri3fn: certain part of ri3fn
+                    let mut tmp_mc = MatrixFull::new([num_basis,nw],0.0_f64);
+                    //tmp_mc = ri3fn \cdot eigv
+                    tmp_mc.to_matrixfullslicemut().lapack_dgemm(&reduced_ri3fn, &reduced_eigv_s.to_matrixfullslice(), 'N', 'N', 1.0, 0.0);
+                    //tmp_mat = tmp_mc (ri3fn \cdot eigv)
+                    let mut tmp_mat = tmp_mc.clone();
+                    //tmp_mat = tmp_mc * occ
+                    tmp_mat.data.chunks_exact_mut(tmp_mat.size[0]).zip(occ_s.iter()).for_each(|(to_value, from_value)| {
+                        to_value.iter_mut().for_each(|to_value| {*to_value = *to_value*from_value});
+                    });
+
+                    let mut vk_mu = MatrixFull::new([num_basis,num_basis],0.0_f64);
+                    // vk_mu = tmp_mat \cdot tmp_mc.T  ((ri3fn \cdot eigv * occ) \cdot (ri3fn \cdot eigv)^T)
+                    vk_mu.lapack_dgemm(&mut tmp_mat, &mut tmp_mc, 'N', 'T', 1.0, 0.0);
+
+                    // filter out the upper part of vk_mu
+                    let mut tmp_mat = MatrixUpper::from_vec(npair, vk_mu.data.iter().enumerate().filter(|(i,v)| i%num_basis<=i/num_basis)
+                        .map(|(i,v)| v.clone() ).collect_vec()).unwrap();
+
+                    s.send(tmp_mat).unwrap()
                 });
-
-                let mut vk_mu = MatrixFull::new([num_basis,num_basis],0.0_f64);
-                // vk_mu = tmp_mat \cdot tmp_mc.T  ((ri3fn \cdot eigv * occ) \cdot (ri3fn \cdot eigv)^T)
-                vk_mu.lapack_dgemm(&mut tmp_mat, &mut tmp_mc, 'N', 'T', 1.0, 0.0);
-
-                // filter out the upper part of vk_mu
-                let mut tmp_mat = MatrixUpper::from_vec(npair, vk_mu.data.iter().enumerate().filter(|(i,v)| i%num_basis<=i/num_basis)
-                    .map(|(i,v)| v.clone() ).collect_vec()).unwrap();
-
-                s.send(tmp_mat).unwrap()
-            });
-            receiver.into_iter().for_each(|vk_mu_upper| {
-                vk_s.data.par_iter_mut()
-                    .zip(vk_mu_upper.data.par_iter()).for_each(|value| {
-                    *value.0 += *value.1
-                })
-            });
+                receiver.into_iter().for_each(|vk_mu_upper| {
+                    vk_s.data.par_iter_mut()
+                        .zip(vk_mu_upper.data.par_iter()).for_each(|value| {
+                        *value.0 += *value.1
+                    })
+                });
+            }
         }
         //// for each spin channel
         //vk.iter_mut().zip(eigv.iter()).for_each(|(vk_s,eigv_s)| {

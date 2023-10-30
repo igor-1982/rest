@@ -86,7 +86,7 @@ pub struct Molecule {
     #[pyo3(get, set)]
     pub num_auxbas: usize,
     #[pyo3(get, set)]
-    pub num_elec : Vec<f64>,
+    pub num_elec : [f64;3],
     // for frozen-core pt2, rpa and so forth
     #[pyo3(get, set)]
     pub start_mo : usize,
@@ -121,7 +121,7 @@ impl Molecule {
             ctrl:InputKeywords::init_ctrl(),
             xc_data: DFA4REST::new("hf",1, 0),
             geom: GeomCell::init_geom(),
-            num_elec: vec![0.0,0.0,0.0],
+            num_elec: [0.0;3],
             num_state: 0,
             num_basis: 0,
             num_auxbas: 0,
@@ -511,7 +511,7 @@ impl Molecule {
     }
 
     pub fn collect_basis(ctrl: &InputKeywords,geom: &mut GeomCell) -> 
-            (Vec<Basis4Elem>, Vec<Vec<i32>>, Vec<Vec<i32>>, Vec<f64>, Vec<BasInfo>, Vec<Vec<usize>>, Vec<f64>,usize, usize) {
+            (Vec<Basis4Elem>, Vec<Vec<i32>>, Vec<Vec<i32>>, Vec<f64>, Vec<BasInfo>, Vec<Vec<usize>>, [f64;3],usize, usize) {
         //let (elem_name, elem_charge, elem_mass) = elements();
         let mass_charge = get_mass_charge(&geom.elem);
         let mut atm: Vec<Vec<i32>> = vec![];
@@ -528,7 +528,7 @@ impl Molecule {
         };
 
         // Prepare atm info.
-        let  mut num_elec = vec![0.0,0.0,0.0];
+        let  mut num_elec = [0.0;3];
         geom.elem.iter().enumerate().zip(mass_charge.iter())
             .for_each(|((atm_index,atm_elem),(tmp_mass,tmp_charge))| {
             num_elec[0] += tmp_charge;
