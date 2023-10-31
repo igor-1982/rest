@@ -37,7 +37,7 @@ mod pyrest_scf_io;
 use libc::_SC_AIO_LISTIO_MAX;
 //use clap::value_parser;
 use pyo3::{pyclass, pymethods, pyfunction};
-use tensors::matrix_blas_lapack::{_dgemm, _dinverse, _dsymm, _dsyrk};
+use tensors::matrix_blas_lapack::{_dgemm, _dinverse, _dsymm, _dsyrk, _dgemv};
 use tensors::{ERIFull,MatrixFull, ERIFold4, MatrixUpper, TensorSliceMut, RIFull, MatrixFullSlice, MatrixFullSliceMut, BasicMatrix, MathMatrix, MatrixUpperSlice, ParMathMatrix, ri};
 use itertools::{Itertools, iproduct, izip};
 use rayon::prelude::*;
@@ -2411,7 +2411,7 @@ impl SCF {
         let dm = &self.density_matrix;
 
         if self.mol.ctrl.use_ri_symm {
-            vj_upper_with_rimatr_v_sync(&self.rimatr, dm, spin_channel, scaling_factor)
+            vj_upper_with_rimatr_sync(&self.rimatr, dm, spin_channel, scaling_factor)
         } else {
             //vj_upper_with_ri_v_sync(&self.ri3fn, dm, spin_channel, scaling_factor)
             if self.mol.ctrl.use_isdf && !self.mol.ctrl.isdf_k_only && !self.mol.ctrl.isdf_new{
@@ -2937,7 +2937,45 @@ pub fn vj_upper_with_ri_v_sync(
     vj
 }
 
-pub fn vj_upper_with_rimatr_v_sync(
+pub fn vj_upper_with_rimatr_sync_v02(
+                ri3fn: &Option<(MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>)>,
+                dm: &Vec<MatrixFull<f64>>, 
+                spin_channel: usize, scaling_factor: f64)  -> Vec<MatrixUpper<f64>> {
+    let mut vj: Vec<MatrixUpper<f64>> = vec![MatrixUpper::new(1,0.0f64),MatrixUpper::new(1,0.0f64)];
+    if let Some((ri3fn,basbas2baspar,baspar2basbas)) = ri3fn {
+        let num_basis = basbas2baspar.size[0];
+        let num_baspar = ri3fn.size[0];
+        let num_auxbas = ri3fn.size[1];
+        for i_spin in (0..spin_channel) {
+            //let mut tmp_mu = vec![0.0f64;num_auxbas];
+            let mut vj_spin = &mut vj[i_spin];
+            *vj_spin = MatrixUpper::new(num_baspar,0.0f64);
+            //let mut dm_s = dm[i_spin].clone();
+            //dm_s.iter_diagonal_mut().unwrap().for_each(|x| *x = *x/2.0);
+
+            let mut dm_s_upper = MatrixUpper::from_vec(num_baspar,dm[i_spin].iter_matrixupper().unwrap().map(|x| *x).collect_vec()).unwrap();
+            dm_s_upper.iter_diagonal_mut().for_each(|x| {*x = *x/2.0});
+
+            let mut tmp_v = vec![0.0;num_baspar];
+
+            _dgemv(ri3fn, &dm_s_upper.data, &mut tmp_v, 'T', 2.0, 0.0, 1, 1);
+
+            _dgemv(ri3fn, &tmp_v, &mut vj_spin.data, 'N',1.0,0.0,1,1);
+
+        }
+    }
+
+    vj
+}
+
+pub fn vj_upper_with_rimatr_sync(
+                ri3fn: &Option<(MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>)>,
+                dm: &Vec<MatrixFull<f64>>, 
+                spin_channel: usize, scaling_factor: f64)  -> Vec<MatrixUpper<f64>> {
+    vj_upper_with_rimatr_sync_v02(ri3fn,dm,spin_channel,scaling_factor)
+}
+
+pub fn vj_upper_with_rimatr_sync_v01(
                 ri3fn: &Option<(MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>)>,
                 dm: &Vec<MatrixFull<f64>>, 
                 spin_channel: usize, scaling_factor: f64)  -> Vec<MatrixUpper<f64>> {
@@ -2958,13 +2996,14 @@ pub fn vj_upper_with_rimatr_v_sync(
             //let mut tmp_mu = vec![0.0f64;num_auxbas];
             let mut vj_spin = &mut vj[i_spin];
             *vj_spin = MatrixUpper::new(num_baspar,0.0f64);
+            let dm_s = &dm[i_spin];
 
             let (sender, receiver) = channel();
             ri3fn.par_iter_columns_full().enumerate().for_each_with(sender, |s, (i,m)| {
                 //prepare \sum_{kl}D_{kl}*M_{kl}^{\mu} for each \mu -> tmp_mu
                 let riupper = MatrixUpperSlice::from_vec(m);
                 let mut tmp_mu =
-                    m.iter().zip(dm[i_spin].iter_matrixupper().unwrap()).fold(0.0_f64, |acc,(m,d)| {
+                    m.iter().zip(dm_s.iter_matrixupper().unwrap()).fold(0.0_f64, |acc,(m,d)| {
                         acc + *m * (*d)
                     });
                 //let diagonal_term = riupper.get_diagonal_terms().unwrap()
