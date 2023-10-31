@@ -3248,8 +3248,11 @@ pub fn vk_upper_with_rimatr_sync(
                 let mut tmp_mat = MatrixFull::new([num_basis,nw],0.0_f64);
                 tmp_mat.data.iter_mut().zip(eigv_s.iter_submatrix(0..num_basis,0..nw))
                     .for_each(|value| {*value.0 = *value.1});
-                let reduced_eigv_s = tmp_mat;
                 let occ_s = &occupation[i_spin][0..nw];
+                tmp_mat.data.chunks_exact_mut(tmp_mat.size[0]).zip(occ_s.iter()).for_each(|(to_value, from_value)| {
+                        to_value.iter_mut().for_each(|to_value| {*to_value = *to_value*from_value.sqrt()});
+                });
+                let reduced_eigv_s = tmp_mat;
 
                 //let dm_s = &dm[i_spin];
 
@@ -3264,13 +3267,13 @@ pub fn vk_upper_with_rimatr_sync(
                     //tmp_mc = ri3fn \cdot eigv
                     _dsymm(&reduced_ri3fn, &reduced_eigv_s, &mut tmp_mc, 'L', 'U', 1.0, 0.0);
                     //tmp_mat = tmp_mc (ri3fn \cdot eigv)
-                    let mut tmp_mat = tmp_mc.clone();
+                    //let mut tmp_mat = tmp_mc.clone();
                     //tmp_mat = tmp_mc * occ**(1/2)
-                    tmp_mat.data.chunks_exact_mut(tmp_mat.size[0]).zip(occ_s.iter()).for_each(|(to_value, from_value)| {
-                        to_value.iter_mut().for_each(|to_value| {*to_value = *to_value*from_value.sqrt()});
-                    });
+                    //tmp_mat.data.chunks_exact_mut(tmp_mat.size[0]).zip(occ_s.iter()).for_each(|(to_value, from_value)| {
+                    //    to_value.iter_mut().for_each(|to_value| {*to_value = *to_value*from_value.sqrt()});
+                    //});
                     let mut vk_sm = MatrixFull::new([num_basis,num_basis],0.0_f64);
-                    _dsyrk(&tmp_mat, &mut vk_sm, 'U', 'N', 1.0, 0.0);
+                    _dsyrk(&tmp_mc, &mut vk_sm, 'U', 'N', 1.0, 0.0);
 
                     s.send(vk_sm.to_matrixupper()).unwrap();
                 });
