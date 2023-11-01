@@ -764,6 +764,7 @@ impl SCF {
     }
 
     pub fn generate_vj_on_the_fly_par_old(&mut self) -> Vec<MatrixUpper<f64>>{
+        //utilities::omp_set_num_threads_wrapper(1);
         let num_shell = self.mol.cint_bas.len();
         let num_basis = self.mol.num_basis;
         let spin_channel = self.mol.spin_channel;
@@ -773,7 +774,6 @@ impl SCF {
         for i_spin in 0..spin_channel{
             let mut vj_i = MatrixFull::new([num_basis, num_basis], 0.0);
             let mut dm_s = &self.density_matrix[i_spin];
-            utilities::omp_set_num_threads_wrapper(1);
             let par_tasks = utilities::balancing(num_shell*num_shell, rayon::current_num_threads());
             let (sender, receiver) = channel();
             let mut index = vec![0usize; num_shell*num_shell];
@@ -2787,8 +2787,8 @@ impl SCF {
         let mut ri3mo: Vec<(RIFull<f64>,std::ops::Range<usize>, std::ops::Range<usize>)> = vec![];
         // In this subroutine, we call the lapack dgemm in a rayon parallel environment.
         // In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
-        let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
-        utilities::omp_set_num_threads_wrapper(1);
+        //let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
+        //utilities::omp_set_num_threads_wrapper(1);
         for i_spin in 0..self.mol.spin_channel {
             let eigenvector = &self.eigenvectors[i_spin];
             ri3mo.push(
@@ -2804,7 +2804,7 @@ impl SCF {
         self.rimatr = None;
         self.ri3mo = Some(ri3mo);
 
-        utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
+        //utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
 
     }
 
@@ -2956,7 +2956,7 @@ pub fn vj_upper_with_rimatr_sync_v02(
             let mut dm_s_upper = MatrixUpper::from_vec(num_baspar,dm[i_spin].iter_matrixupper().unwrap().map(|x| *x).collect_vec()).unwrap();
             dm_s_upper.iter_diagonal_mut().for_each(|x| {*x = *x/2.0});
 
-            let mut tmp_v = vec![0.0;num_baspar];
+            let mut tmp_v = vec![0.0;num_auxbas];
 
             _dgemv(ri3fn, &dm_s_upper.data, &mut tmp_v, 'T', 2.0, 0.0, 1, 1);
 

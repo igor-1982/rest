@@ -3,6 +3,7 @@ use crate::molecule_io::Molecule;
 use crate::ctrl_io::InputKeywords;
 use crate::geom_io::{GeomCell, formated_element_name};
 use crate::scf_io::scf;
+use crate::utilities;
 use std::collections::HashMap;
 
 pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
@@ -26,7 +27,7 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
             atom_ctrl.auxbas_path = mol.ctrl.auxbas_path.clone();
             atom_ctrl.auxbas_type = mol.ctrl.auxbas_type.clone();
             atom_ctrl.eri_type = String::from("ri_v");
-            atom_ctrl.num_threads = Some(1);
+            atom_ctrl.num_threads = Some(mol.ctrl.num_threads.unwrap());
             atom_ctrl.mixer = "diis".to_string();
             atom_ctrl.initial_guess = "hcore".to_string();
             atom_ctrl.print_level = 1;
@@ -65,6 +66,9 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
             atom_dms.insert(ielem.clone(),dms);
         }
     });
+
+    // reset the omp_num_threads to be the correct one
+    utilities::omp_set_num_threads_wrapper(mol.ctrl.num_threads.unwrap());
 
     let (dms_alpha, dms_beta) = block_diag_specific(&atom_dms, &mol.geom.elem);
 

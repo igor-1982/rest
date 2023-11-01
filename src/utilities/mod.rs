@@ -124,21 +124,20 @@ extern "C" {
 //}
 
 pub fn omp_get_num_threads_wrapper() -> usize {
-    let num_threads = unsafe{openblas_get_num_threads()} as usize;
-    num_threads
+    let num_threads_openblas = unsafe{openblas_get_num_threads()} as usize;
+    //let num_threads_goto = unsafe{goto_get_num_threads()} as usize;
+    //println!("debug {:}, {:}", num_threads_goto, num_threads_openblas);
+    //num_threads_openblas.max(num_threads_goto)
+    //println!("debug {:}", num_threads_openblas);
+    num_threads_openblas
 }
 /// NOTE: the current OpenBLAS only supports at most 32 threads. Otherwise, it panics with an error:  
 /// "BLAS : Program is Terminated. Because you tried to allocate too many memory regions."
 pub fn omp_set_num_threads_wrapper(n:usize)  {
-    unsafe{if n<=256 {
+    unsafe{
         openblas_set_num_threads(n as std::os::raw::c_int);
         goto_set_num_threads(n as std::os::raw::c_int);
-        //omp_set_num_threads(n  as std::os::raw::c_int);
-    } else {
-        openblas_set_num_threads(256);
-        goto_set_num_threads(256);
-        //omp_set_num_threads(32);
-    } } 
+    } 
 }
 
 //#[test]
