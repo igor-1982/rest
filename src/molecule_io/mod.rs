@@ -1647,10 +1647,6 @@ impl Molecule {
 
     }
 
-    pub fn prepare_rimatr_for_ri_v_rayon(&self) -> (MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>) {
-        self.prepare_rimatr_for_ri_v_rayon_v02()
-    }
-
     // generate the 3-center RI integrals and the basis pair symmetry is used to save the memory
     pub fn prepare_rimatr_for_ri_v_rayon_v02(&self) -> (MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>) {
 
@@ -2099,45 +2095,65 @@ impl Molecule {
                     let basis_len_k = bas_info[1];
                     let gk  = k + n_basis_shell;
 
-                    let buf = RIFull::from_vec([basis_len_i,basis_len_j, basis_len_k], 
+                    let buf = MatrixFull::from_vec([basis_len_i*basis_len_j, basis_len_k], 
                         cint_data.cint_3c2e(bas_i as i32, bas_j as i32, gk as i32)).unwrap();
-                    //let buf = MatrixFull::from_vec([basis_len_i*basis_len_j, basis_len_k], 
-                    //    cint_data.cint_3c2e(bas_i as i32, bas_j as i32, gk as i32)).unwrap();
                     
-                    //buf.iter_rows(0..basis_len_i*basis_len_j).enumerate().for_each(|(index, from)| {
+                    //(0..basis_len_i*basis_len_j).for_each(|index| {
                     //    let loc_j = index/basis_len_i;
+                    //    let gj = loc_j;
                     //    let loc_i = index%basis_len_i;
-                    //    ri_rayon.get_reducing_matrix_mut(loc_j).unwrap().iter_column_mut(loc_i).zip(from).for_each(|(to, from)| *to = *from)
-                    //    //let gj = loc_j + basis_start_j;
-                    //    //let loc_x_start = (gj+1)*gj/2 - global_start;
+                    //    let gi = loc_i + basis_start_i;
+                    //    let tmp_aux = buf.iter_row(index);
+                    //    ri_rayon.get_reducing_matrix_mut(gj).unwrap()
+                    //        .get_column_mut(gi)[basis_start_k..basis_start_k+basis_len_k].iter_mut()
+                    //        .zip(tmp_aux).for_each(|(to, from)| *to = *from)
                     //});
 
-
-                    ri_rayon.copy_from_ri(
-                        basis_start_k..basis_start_k+basis_len_k,
-                        basis_start_i..basis_start_i+basis_len_i,
-                        0..basis_len_j,
-                        & buf, 
-                        0..basis_len_k, 
-                        0..basis_len_i, 
-                        0..basis_len_j);
-                    //sub_time_records.count("ri: copy_from_ri");
+                    if bas_i < bas_j {
+                        for loc_j in (0..basis_len_j) {
+                            let index_s = loc_j * basis_len_i;
+                            let gj = loc_j + basis_start_j;
+                            let loc_x_start = (gj+1)*gj/2 - global_start;
+                            for loc_i in (0..basis_len_i) {
+                                let index = index_s + loc_i;
+                                let gi = loc_i + basis_start_i;
+                                let loc_x = loc_x_start + gi;
+                                let tmp_aux = buf.iter_row(index);
+                                loc_rimatr.slice_column_mut(loc_x)[basis_start_k..basis_start_k+basis_len_k].iter_mut()
+                                .zip(tmp_aux).for_each(|(to, from)| *to = *from)
+                            }
+                        }
+                    } else {
+                        for loc_j in (0..basis_len_j) {
+                            let index_s = loc_j * basis_len_i;
+                            let gj = loc_j + basis_start_j;
+                            let loc_x_start = (gj+1)*gj/2 - global_start;
+                            for loc_i in (0..loc_j+1) {
+                                let index = index_s + loc_i;
+                                let gi = loc_i + basis_start_i;
+                                let loc_x = loc_x_start + gi;
+                                let tmp_aux = buf.iter_row(index);
+                                loc_rimatr.slice_column_mut(loc_x)[basis_start_k..basis_start_k+basis_len_k].iter_mut()
+                                .zip(tmp_aux).for_each(|(to, from)| *to = *from)
+                            }
+                        }
+                    }
                 });
             }
 
             cint_data.final_c2r();
 
-            for loc_j in 0..basis_len_j {
-                let gj = loc_j + basis_start_j;
-                let loc_x_start = (gj+1)*gj/2 - global_start;
+            //for loc_j in 0..basis_len_j {
+            //    let gj = loc_j + basis_start_j;
+            //    let loc_x_start = (gj+1)*gj/2 - global_start;
 
-                let tmp_matr = ri_rayon.get_reducing_matrix(loc_j).unwrap();
+            //    let tmp_matr = ri_rayon.get_reducing_matrix(loc_j).unwrap();
 
-                loc_rimatr.iter_columns_mut(loc_x_start..loc_x_start+gj+1).zip(tmp_matr.iter_columns(0..gj+1).unwrap())
-                .for_each(|(to, from)| {
-                    to.copy_from_slice(from)
-                })
-            }
+            //    loc_rimatr.iter_columns_mut(loc_x_start..loc_x_start+gj+1).zip(tmp_matr.iter_columns(0..gj+1).unwrap())
+            //    .for_each(|(to, from)| {
+            //        to.copy_from_slice(from)
+            //    })
+            //}
 
             s.send((loc_rimatr,global_start,pair_length)).unwrap();
             //s.send((loc_rimatr,global_start,pair_length, sub_time_records)).unwrap();
@@ -2171,7 +2187,7 @@ impl Molecule {
         time_records.count_start("ri_v");
         utilities::omp_set_num_threads_wrapper(self.ctrl.num_threads.unwrap());
         let mut ri3fn = MatrixFull::new([n_baspar,n_auxbas],0.0);
-        _dgemm_full(&tmp_ri3fn, 'N', &aux_v, 'N', &mut ri3fn, 1.0, 0.0);
+        _dgemm_full(&tmp_ri3fn, 'T', &aux_v, 'N', &mut ri3fn, 1.0, 0.0);
         time_records.count("ri_v");
 
 
@@ -2185,6 +2201,11 @@ impl Molecule {
         (ri3fn,basbas2baspar,baspar2basbas)
 
     }
+
+    pub fn prepare_rimatr_for_ri_v_rayon(&self) -> (MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>) {
+        self.prepare_rimatr_for_ri_v_rayon_v04()
+    }
+
 
 
 }
