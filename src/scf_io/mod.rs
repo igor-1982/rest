@@ -37,7 +37,7 @@ mod pyrest_scf_io;
 use libc::_SC_AIO_LISTIO_MAX;
 //use clap::value_parser;
 use pyo3::{pyclass, pymethods, pyfunction};
-use tensors::matrix_blas_lapack::{_dgemm, _dinverse, _dsymm, _dsyrk, _dgemv};
+use tensors::matrix_blas_lapack::{_dgemm, _dinverse, _dsymm, _dsyrk, _dgemv, _power, _power_rayon};
 use tensors::{ERIFull,MatrixFull, ERIFold4, MatrixUpper, TensorSliceMut, RIFull, MatrixFullSlice, MatrixFullSliceMut, BasicMatrix, MathMatrix, MatrixUpperSlice, ParMathMatrix, ri};
 use itertools::{Itertools, iproduct, izip};
 use rayon::prelude::*;
@@ -2933,37 +2933,6 @@ pub fn vj_upper_with_ri_v_sync(
     vj
 }
 
-pub fn vj_upper_with_rimatr_sync_v02(
-                ri3fn: &Option<(MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>)>,
-                dm: &Vec<MatrixFull<f64>>, 
-                spin_channel: usize, scaling_factor: f64)  -> Vec<MatrixUpper<f64>> {
-    let mut vj: Vec<MatrixUpper<f64>> = vec![MatrixUpper::new(1,0.0f64),MatrixUpper::new(1,0.0f64)];
-    if let Some((ri3fn,basbas2baspar,baspar2basbas)) = ri3fn {
-        let num_basis = basbas2baspar.size[0];
-        let num_baspar = ri3fn.size[0];
-        let num_auxbas = ri3fn.size[1];
-        for i_spin in (0..spin_channel) {
-            //let mut tmp_mu = vec![0.0f64;num_auxbas];
-            let mut vj_spin = &mut vj[i_spin];
-            *vj_spin = MatrixUpper::new(num_baspar,0.0f64);
-            //let mut dm_s = dm[i_spin].clone();
-            //dm_s.iter_diagonal_mut().unwrap().for_each(|x| *x = *x/2.0);
-
-            let mut dm_s_upper = MatrixUpper::from_vec(num_baspar,dm[i_spin].iter_matrixupper().unwrap().map(|x| *x).collect_vec()).unwrap();
-            dm_s_upper.iter_diagonal_mut().for_each(|x| {*x = *x/2.0});
-
-            let mut tmp_v = vec![0.0;num_auxbas];
-
-            _dgemv(ri3fn, &dm_s_upper.data, &mut tmp_v, 'T', 2.0, 0.0, 1, 1);
-
-            _dgemv(ri3fn, &tmp_v, &mut vj_spin.data, 'N',1.0,0.0,1,1);
-
-        }
-    }
-
-    vj
-}
-
 pub fn vj_upper_with_rimatr_sync(
                 ri3fn: &Option<(MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>)>,
                 dm: &Vec<MatrixFull<f64>>, 
@@ -3044,6 +3013,38 @@ pub fn vj_upper_with_rimatr_sync_v01(
 
     vj
 }
+
+pub fn vj_upper_with_rimatr_sync_v02(
+                ri3fn: &Option<(MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>)>,
+                dm: &Vec<MatrixFull<f64>>, 
+                spin_channel: usize, scaling_factor: f64)  -> Vec<MatrixUpper<f64>> {
+    let mut vj: Vec<MatrixUpper<f64>> = vec![MatrixUpper::new(1,0.0f64),MatrixUpper::new(1,0.0f64)];
+    if let Some((ri3fn,basbas2baspar,baspar2basbas)) = ri3fn {
+        let num_basis = basbas2baspar.size[0];
+        let num_baspar = ri3fn.size[0];
+        let num_auxbas = ri3fn.size[1];
+        for i_spin in (0..spin_channel) {
+            //let mut tmp_mu = vec![0.0f64;num_auxbas];
+            let mut vj_spin = &mut vj[i_spin];
+            *vj_spin = MatrixUpper::new(num_baspar,0.0f64);
+            //let mut dm_s = dm[i_spin].clone();
+            //dm_s.iter_diagonal_mut().unwrap().for_each(|x| *x = *x/2.0);
+
+            let mut dm_s_upper = MatrixUpper::from_vec(num_baspar,dm[i_spin].iter_matrixupper().unwrap().map(|x| *x).collect_vec()).unwrap();
+            dm_s_upper.iter_diagonal_mut().for_each(|x| {*x = *x/2.0});
+
+            let mut tmp_v = vec![0.0;num_auxbas];
+
+            _dgemv(ri3fn, &dm_s_upper.data, &mut tmp_v, 'T', 2.0, 0.0, 1, 1);
+
+            _dgemv(ri3fn, &tmp_v, &mut vj_spin.data, 'N',1.0,0.0,1,1);
+
+        }
+    }
+
+    vj
+}
+
 
 // Just for test, no need to use vj_full because it's always symmetric
 pub fn vj_full_with_ri_v(
@@ -3270,8 +3271,7 @@ pub fn vk_upper_with_rimatr_use_dm_only_sync_v02(
     // In this subroutine, we call the lapack dgemm in a rayon parallel environment.
     // In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
     let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
-    //println!("debug: default omp_num_threads: {}", default_omp_num_threads);
-    utilities::omp_set_num_threads_wrapper(1);
+    //utilities::omp_set_num_threads_wrapper(1);
     //let mut bm = RIFull::new([num_state,num_basis,num_auxbas], 0.0f64);
     let mut vk: Vec<MatrixUpper<f64>> = vec![MatrixUpper::new(1,0.0f64),MatrixUpper::new(1,0.0f64)];
 
@@ -3283,7 +3283,10 @@ pub fn vk_upper_with_rimatr_use_dm_only_sync_v02(
         for i_spin in 0..spin_channel {
             let mut vk_s = &mut vk[i_spin];
             *vk_s = MatrixUpper::new(num_baspair,0.0_f64);
-            let dm_s = &dm[i_spin];
+            //let dm_s = &dm[i_spin];
+            utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
+            let dm_s = _power_rayon(&dm[i_spin], 0.5, 1.0e-8).unwrap();
+            utilities::omp_set_num_threads_wrapper(1);
             let batch_num_auxbas = utilities::balancing(num_auxbas, rayon::current_num_threads());
             let (sender, receiver) = channel();
             batch_num_auxbas.par_iter().for_each_with(sender, |s,loc_auxbas| {
@@ -3292,15 +3295,17 @@ pub fn vk_upper_with_rimatr_use_dm_only_sync_v02(
                 let mut vk_sm = MatrixFull::new([num_basis,num_basis],0.0_f64);
                 ri3fn.iter_columns(loc_auxbas.clone()).for_each(|m| {
                     reduced_ri3fn.iter_matrixupper_mut().unwrap().zip(m.iter()).for_each(|(to, from)| {*to = *from});
-                    _dsymm(&reduced_ri3fn, dm_s, &mut tmp_mat, 'L', 'U', 1.0, 0.0);
-                    _dsymm(&reduced_ri3fn, &tmp_mat, &mut vk_sm, 'R', 'U', 1.0, 1.0);
+                    //_dsymm(&reduced_ri3fn, dm_s, &mut tmp_mat, 'L', 'U', 1.0, 0.0);
+                    //_dsymm(&reduced_ri3fn, &tmp_mat, &mut vk_sm, 'R', 'U', 1.0, 1.0);
+                    _dsymm(&reduced_ri3fn, &dm_s, &mut tmp_mat, 'L', 'U', 1.0, 0.0);
+                    _dsyrk(&tmp_mat, &mut vk_sm, 'U', 'N', 1.0, 1.0)
                 });
                 s.send(vk_sm.to_matrixupper()).unwrap();
             });
 
             receiver.into_iter().for_each(|vk_mu_upper| {
-                vk_s.data.iter_mut()
-                    .zip(vk_mu_upper.data.iter()).for_each(|value| {
+                vk_s.data.par_iter_mut()
+                    .zip(vk_mu_upper.data.par_iter()).for_each(|value| {
                     *value.0 += *value.1
                 })
             });
@@ -3380,8 +3385,8 @@ pub fn vk_upper_with_rimatr_sync_v01(
                 });
 
                 receiver.into_iter().for_each(|vk_mu_upper| {
-                    vk_s.data.iter_mut()
-                        .zip(vk_mu_upper.data.iter()).for_each(|value| {
+                    vk_s.data.par_iter_mut()
+                        .zip(vk_mu_upper.data.par_iter()).for_each(|value| {
                         *value.0 += *value.1
                     })
                 });
@@ -3519,8 +3524,8 @@ pub fn vk_upper_with_rimatr_sync_v03(
                 });
 
                 receiver.into_iter().for_each(|vk_mu_upper| {
-                    vk_s.data.iter_mut()
-                        .zip(vk_mu_upper.data.iter()).for_each(|value| {
+                    vk_s.data.par_iter_mut()
+                        .zip(vk_mu_upper.data.par_iter()).for_each(|value| {
                         *value.0 += *value.1
                     })
                 });

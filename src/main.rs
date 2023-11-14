@@ -120,7 +120,10 @@ fn main() -> anyhow::Result<()> {
 
     time_mark.count("SCF");
 
-    if scf_data.mol.ctrl.restart {save_chkfile(&scf_data)};
+    if scf_data.mol.ctrl.restart {
+        //println!("now save the converged SCF results");
+        save_chkfile(&scf_data)
+    };
 
     if scf_data.mol.ctrl.check_stab {
         time_mark.new_item("Stability", "the scf stability check");

@@ -25,12 +25,15 @@ pub fn initial_guess(scf_data: &mut SCF) {
 
     // import the eigenvalues and eigen vectors from a hdf5 file directly
     } else if scf_data.mol.ctrl.restart 
-        && std::path::Path::new(&scf_data.mol.ctrl.chkfile).exists() 
-        && scf_data.mol.ctrl.chkfile_type.eq(&"hdf5") {
-        let (eigenvectors, eigenvalues) = initial_guess_from_hdf5chk(&scf_data.mol);
-        scf_data.eigenvalues = eigenvalues;
-        scf_data.eigenvectors = eigenvectors;
-        scf_data.generate_density_matrix();
+        && std::path::Path::new(&scf_data.mol.ctrl.chkfile).exists() {
+            if scf_data.mol.ctrl.chkfile_type.eq(&"hdf5") {
+                let (eigenvectors, eigenvalues) = initial_guess_from_hdf5chk(&scf_data.mol);
+                scf_data.eigenvalues = eigenvalues;
+                scf_data.eigenvectors = eigenvectors;
+                scf_data.generate_density_matrix();
+            } else {
+                panic!("WARNNING: at present only hdf5 type check file is supported");
+            }
     // generate the VSAP initial guess
     } else if scf_data.mol.ctrl.initial_guess.eq(&"vsap") {
         let init_fock = initial_guess_from_vsap(&scf_data.mol,&scf_data.grids);

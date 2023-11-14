@@ -702,10 +702,11 @@ impl InputKeywords {
                 };
                 tmp_input.chkfile_type = match tmp_ctrl.get("chkfile_type").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_chk) => tmp_chk.to_lowercase().clone(),
-                    other => String::from("none"),
+                    other => String::from("hdf5"),
                 };
 
                 tmp_input.restart = ! tmp_input.chkfile.to_lowercase().eq(&"none");
+                //println!("debug: {:?}", &tmp_input.chkfile);
 
                 tmp_input.initial_guess = match tmp_ctrl.get("initial_guess").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase()},

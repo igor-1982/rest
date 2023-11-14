@@ -9,7 +9,7 @@ use libc::regerror;
 use statrs::distribution::Continuous;
 use tensors::BasicMatrix;
 use tensors::external_libs::{ri_copy_from_ri, matr_copy_from_ri};
-use tensors::matrix_blas_lapack::_dgemm;
+use tensors::matrix_blas_lapack::{_dgemm, _dgemm_full, _power, _power_rayon};
 use std::fmt::format;
 use std::fs;
 use std::ops::Range;
@@ -1662,6 +1662,11 @@ impl Molecule {
         time_records.new_item("aux_ij", "for the coulomb matrix of auxiliary basis");
         time_records.new_item("inv_sqrt", "for the sqrt inverse of aux_ij");
 
+        //time_records.new_item("ri: cint_3c2e", "debug");
+        //time_records.new_item("ri: copy_from_ri","debug");
+        //time_records.new_item("ri: ri_dot_sqrtv","debug");
+        //time_records.new_item("ri: dgemm","debug");
+
         let n_basis = self.num_basis;
         let n_auxbas = self.num_auxbas;
         let n_baspar = (self.num_basis+1)*self.num_basis/2;
@@ -1671,7 +1676,8 @@ impl Molecule {
         let mut aux_v = self.int_ij_aux_columb();
         time_records.count("aux_ij");
         time_records.count_start("inv_sqrt");
-        aux_v = aux_v.lapack_power(-0.5, AUXBAS_THRESHOLD).unwrap();
+        aux_v = _power_rayon(&aux_v, -0.5, AUXBAS_THRESHOLD).unwrap();
+        //aux_v = aux_v.lapack_power(-0.5, AUXBAS_THRESHOLD).unwrap();
         //aux_v = aux_v.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
         time_records.count("inv_sqrt");
 
@@ -1689,18 +1695,219 @@ impl Molecule {
                    self.ctrl.basis_type);
         };
 
-        //// gather all shellpair together for parallel implemention
-        //let mut par_shellpair: Vec<[usize;2]> = vec![];
-        //for j in 0..n_basis_shell {
-        //    for i in 0..j+1 {
-        //        par_shellpair.push([i,j]);
-        //    }
-        //};
+        utilities::omp_set_num_threads_wrapper(1);
+        let (sender, receiver) = channel();
+        //par_shellpair.par_iter().for_each_with(sender, |s, shell_index| {
+        (0..n_basis_shell).rev().collect::<Vec<usize>>().par_iter().for_each_with(sender, |s, gj| {
+            //// ========== for efficiency debug ==============
+            //let mut sub_time_records = utilities::TimeRecords::new();
+            //sub_time_records.new_item("ri: cint_3c2e", "debug");
+            //sub_time_records.new_item("ri: copy_from_ri","debug");
+            //sub_time_records.new_item("ri: ri_dot_sqrtv","debug");
+            //sub_time_records.new_item("ri: dgemm","debug");
+            ////================================================
+            let bas_j = *gj;
+            // first, initialize rust_cint for each rayon threads
+            let mut cint_data = self.initialize_cint(true);
+
+            //let i = shell_index[0];
+            //let j = shell_index[1];
+            let basis_start_j = self.cint_fdqc[bas_j][0];
+            let basis_len_j = self.cint_fdqc[bas_j][1];
+            let global_start = (basis_start_j+1)*basis_start_j/2;
+
+            let mut i_length:usize = 0;
+            let mut pair_length = 0; 
+            for bas_i in 0..bas_j+1 {
+                let basis_start_i = self.cint_fdqc[bas_i][0];
+                let basis_len_i = self.cint_fdqc[bas_i][1];
+                i_length += basis_len_i;
+
+                if bas_i!=bas_j {
+                    pair_length += basis_len_i*basis_len_j
+                } else {
+                    pair_length += (basis_len_i+1)*basis_len_i/2
+                };
+            }
+
+
+            //if rayon::current_thread_index().unwrap()==0 {
+            //    let bas_i = 0;
+            //    let bas_k = n_basis_shell-1;
+            //    let gk = n_basis_shell-1;
+
+            //    let basis_len_i = self.cint_fdqc[bas_i][1];
+            //    let basis_len_k = self.cint_fdqc[bas_k][1];
+            //    //let basis_len_k = self.cint_aux_fdqc[bas_k][1];
+
+            //    let buf_1 = RIFull::from_vec([basis_len_i, basis_len_j,basis_len_k], 
+            //        cint_data.cint_3c2e(bas_i as i32, bas_j as i32, gk as i32)).unwrap();
+
+            //    let buf_2 = RIFull::from_vec([basis_len_k,basis_len_i, basis_len_j], 
+            //        cint_data.cint_3c2e(gk as i32,bas_i as i32, bas_j as i32)).unwrap();
+
+            //    let buf_3 = RIFull::from_vec([basis_len_j, basis_len_i,basis_len_k], 
+            //        cint_data.cint_3c2e(bas_i as i32, bas_j as i32, gk as i32)).unwrap();
+
+            //    let buf_4 = RIFull::from_vec([basis_len_j, basis_len_i,basis_len_k], 
+            //        cint_data.cint_3c2e(bas_i as i32, gk as i32, bas_j as i32)).unwrap();
+
+            //    println!("buf_1: (i:{:2},j:{:2},k:{:2}) {:?}", bas_i, bas_j, gk, &buf_1.data);
+            //    println!("buf_2: (i:{:2},j:{:2},k:{:2}) {:?}", bas_i, bas_j, gk, &buf_2.data);
+            //    println!("buf_3: (i:{:2},j:{:2},k:{:2}) {:?}", bas_i, bas_j, gk, &buf_3.data);
+            //    println!("buf_4: (i:{:2},j:{:2},k:{:2}) {:?}", bas_i, bas_j, gk, &buf_4.data);
+            //}
+
+
+
+
+            let mut ri_rayon =  RIFull::new([i_length,basis_len_j,n_auxbas],0.0);
+            //let mut ri_rayon =  RIFull::new([n_auxbas,i_length,basis_len_j],0.0);
+            let mut loc_rimatr = MatrixFull::new([pair_length,n_auxbas],0.0);
+            for bas_i in 0..bas_j+1 {
+                let basis_start_i = self.cint_fdqc[bas_i][0];
+                let basis_len_i = self.cint_fdqc[bas_i][1];
+                self.cint_aux_fdqc.iter().enumerate().for_each(|(k,bas_info)| {
+                    let basis_start_k = bas_info[0];
+                    let basis_len_k = bas_info[1];
+                    let gk  = k + n_basis_shell;
+                    //sub_time_records.count_start("ri: cint_3c2e");
+                    let buf = RIFull::from_vec([basis_len_i, basis_len_j,basis_len_k], 
+                        cint_data.cint_3c2e(bas_i as i32, bas_j as i32, gk as i32)).unwrap();
+                    //let buf = RIFull::from_vec([basis_len_k,basis_len_i, basis_len_j], 
+                    //    cint_data.cint_3c2e(gk as i32,bas_i as i32, bas_j as i32)).unwrap();
+                    //sub_time_records.count("ri: cint_3c2e");
+                    //sub_time_records.count_start("ri: copy_from_ri");
+                    ri_rayon.copy_from_ri(
+                        basis_start_i..basis_start_i+basis_len_i,
+                        0..basis_len_j,
+                        basis_start_k..basis_start_k+basis_len_k,
+                        & buf, 
+                        0..basis_len_i, 
+                        0..basis_len_j, 
+                        0..basis_len_k);
+                    //sub_time_records.count("ri: copy_from_ri");
+                });
+            }
+
+            cint_data.final_c2r();
+
+            //sub_time_records.count_start("ri: ri_dot_sqrtv");
+            let mut tmp_ovlp_matr = MatrixFull::new([i_length,n_auxbas],0.0);
+            let mut aux_ovlp_matr = MatrixFull::new([i_length,n_auxbas],0.0);
+            //let mut tmp_ovlp_matr = MatrixFull::new([n_auxbas,i_length],0.0);
+            //let mut aux_ovlp_matr = MatrixFull::new([n_auxbas,i_length],0.0);
+            let size = [i_length,n_auxbas];
+            for loc_j in 0..basis_len_j {
+                let gj = loc_j + basis_start_j;
+
+                matr_copy_from_ri(&ri_rayon.data, &ri_rayon.size,0..i_length, 0..n_auxbas, loc_j, 1,
+                    &mut tmp_ovlp_matr.data, &size, 0..i_length, 0..n_auxbas);
+
+                _dgemm(
+                    &tmp_ovlp_matr, (0..i_length,0..n_auxbas), 'N', 
+                    &aux_v, (0..n_auxbas, 0..n_auxbas), 'N', 
+                    &mut aux_ovlp_matr, (0..i_length,0..n_auxbas), 1.0, 0.0);
+
+                let loc_x_start = (gj+1)*gj/2 - global_start;
+                //loc_rimatr.copy_from_matr((loc_x_start..loc_x_start+gj+1), (0..n_auxbas), &aux_ovlp_matr, (0..gj+1), (0..n_auxbas));
+                loc_rimatr.iter_columns_full_mut().zip(aux_ovlp_matr.iter_columns_full()).for_each(|(to, from)| {
+                    to[loc_x_start..loc_x_start+gj+1].copy_from_slice(&from[0..gj+1])
+
+                });
+            }
+
+            s.send((loc_rimatr,global_start,pair_length)).unwrap();
+            //s.send((loc_rimatr,global_start,pair_length, sub_time_records)).unwrap();
+        });
+
+        time_records.new_item("prim ri receive", "");
+        time_records.count_start("prim ri receive");
+
+        receiver.into_iter().for_each(|(loc_rimatr, global_start, pair_length)| {
+            //ri3fn.copy_from_matr(global_start..global_start+pair_length, 0..n_auxbas, &loc_rimatr, 0..pair_length, 0..n_auxbas);
+            ri3fn.par_iter_columns_full_mut().zip(loc_rimatr.par_iter_columns_full()).for_each(|(to, from)| {
+                to[global_start..global_start+pair_length].copy_from_slice(from);
+            });
+            //time_records.max(&sub_timerecords);
+        });
+        time_records.count("prim ri receive");
+
+        let mut basbas2baspar = MatrixFull::new([n_basis,n_basis],0_usize);
+        let mut baspar2basbas = vec![[0_usize;2];n_baspar];
+        basbas2baspar.iter_columns_full_mut().enumerate().for_each(|(j,slice_x)| {
+            &slice_x.iter_mut().enumerate().for_each(|(i,map_v)| {
+                let baspar_ind = if i< j {(j+1)*j/2+i} else {(i+1)*i/2+j};
+                *map_v = baspar_ind;
+                baspar2basbas[baspar_ind] = [i,j];
+            });
+        });
+
+        utilities::omp_set_num_threads_wrapper(self.ctrl.num_threads.unwrap());
+
+        time_records.count("prim ri");
+
+        time_records.count("all ri");
+
+
+        if self.ctrl.print_level>=2 {
+            time_records.report_all();
+        }
+
+        (ri3fn,basbas2baspar,baspar2basbas)
+
+    }
+
+    // generate the 3-center RI integrals and the basis pair symmetry is used to save the memory
+    pub fn prepare_rimatr_for_ri_v_rayon_v03(&self) -> (MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>) {
+
+        let mut time_records = utilities::TimeRecords::new();
+        time_records.new_item("all ri", "for the total evaluations of ri3fn");
+        time_records.count_start("all ri");
+
+        time_records.new_item("prim ri", "for the pure three-center integrals");
+        time_records.new_item("aux_ij", "for the coulomb matrix of auxiliary basis");
+        time_records.new_item("inv_sqrt", "for the sqrt inverse of aux_ij");
+
+        let n_basis = self.num_basis;
+        let n_auxbas = self.num_auxbas;
+        let n_baspar = (self.num_basis+1)*self.num_basis/2;
+
+        // First the Cholesky decomposition `L` of the inverse of the auxiliary 2-center coulumb matrix: V=(\nu|\mu)
+        time_records.count_start("aux_ij");
+        let mut aux_v = self.int_ij_aux_columb();
+        time_records.count("aux_ij");
+        time_records.count_start("inv_sqrt");
+        //aux_v = aux_v.lapack_power(-0.5, AUXBAS_THRESHOLD).unwrap();
+        aux_v = _power_rayon(&aux_v, -0.5, AUXBAS_THRESHOLD).unwrap();
+        //aux_v = aux_v.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
+        time_records.count("inv_sqrt");
+
+        // Then, prepare the 3-center integrals: O_V = (ij|\nu), and multiple with `L`
+        time_records.count_start("prim ri");
+        let mut tmp_ri3fn = MatrixFull::new([n_baspar,n_auxbas],0.0);
+        let n_basis_shell = self.cint_bas.len();
+        let n_auxbas_shell = self.cint_aux_bas.len();
+        let cint_type = if self.ctrl.basis_type.to_lowercase()==String::from("spheric") {
+            CintType::Spheric
+        } else if self.ctrl.basis_type.to_lowercase()==String::from("cartesian") {
+            CintType::Cartesian
+        } else {
+            panic!("Error:: Unknown basis type '{}'. Please use either 'spheric' or 'Cartesian'", 
+                   self.ctrl.basis_type);
+        };
 
         utilities::omp_set_num_threads_wrapper(1);
         let (sender, receiver) = channel();
         //par_shellpair.par_iter().for_each_with(sender, |s, shell_index| {
         (0..n_basis_shell).rev().collect::<Vec<usize>>().par_iter().for_each_with(sender, |s, gj| {
+            //// ========== for efficiency debug ==============
+            //let mut sub_time_records = utilities::TimeRecords::new();
+            //sub_time_records.new_item("ri: cint_3c2e", "debug");
+            //sub_time_records.new_item("ri: copy_from_ri","debug");
+            //sub_time_records.new_item("ri: ri_dot_sqrtv","debug");
+            //sub_time_records.new_item("ri: dgemm","debug");
+            ////================================================
             let bas_j = *gj;
             // first, initialize rust_cint for each rayon threads
             let mut cint_data = self.initialize_cint(true);
@@ -1735,57 +1942,55 @@ impl Molecule {
                     let basis_start_k = bas_info[0];
                     let basis_len_k = bas_info[1];
                     let gk  = k + n_basis_shell;
+                    //sub_time_records.count_start("ri: cint_3c2e");
                     let buf = RIFull::from_vec([basis_len_i, basis_len_j,basis_len_k], 
                         cint_data.cint_3c2e(bas_i as i32, bas_j as i32, gk as i32)).unwrap();
+                    //sub_time_records.count("ri: cint_3c2e");
+                    //sub_time_records.count_start("ri: copy_from_ri");
                     ri_rayon.copy_from_ri(
                         basis_start_i..basis_start_i+basis_len_i,
-                        //0..basis_len_i,
                         0..basis_len_j,
                         basis_start_k..basis_start_k+basis_len_k,
-                        //basis_start_k..basis_start_k+basis_len_k,
                         & buf, 
                         0..basis_len_i, 
                         0..basis_len_j, 
                         0..basis_len_k);
+                    //sub_time_records.count("ri: copy_from_ri");
                 });
             }
 
             cint_data.final_c2r();
 
+            //sub_time_records.count_start("ri: ri_dot_sqrtv");
             let mut tmp_ovlp_matr = MatrixFull::new([i_length,n_auxbas],0.0);
-            let mut aux_ovlp_matr = MatrixFull::new([i_length,n_auxbas],0.0);
+            //let mut aux_ovlp_matr = MatrixFull::new([i_length,n_auxbas],0.0);
             let size = [i_length,n_auxbas];
             for loc_j in 0..basis_len_j {
                 let gj = loc_j + basis_start_j;
+                let loc_x_start = (gj+1)*gj/2 - global_start;
 
                 matr_copy_from_ri(&ri_rayon.data, &ri_rayon.size,0..i_length, 0..n_auxbas, loc_j, 1,
                     &mut tmp_ovlp_matr.data, &size, 0..i_length, 0..n_auxbas);
 
-                _dgemm(
-                    &tmp_ovlp_matr, (0..i_length,0..n_auxbas), 'N', 
-                    &aux_v, (0..n_auxbas, 0..n_auxbas), 'N', 
-                    &mut aux_ovlp_matr, (0..i_length,0..n_auxbas), 1.0, 0.0);
-
-                //ri_rayon.copy_from_matr(0..i_length, 0..n_auxbas, j, 1, 
-                //    &aux_ovlp_matr, 0..i_length, 0..n_auxbas);
-                let loc_x_start = (gj+1)*gj/2 - global_start;
-                loc_rimatr.copy_from_matr((loc_x_start..loc_x_start+gj+1), (0..n_auxbas), &aux_ovlp_matr, (0..gj+1), (0..n_auxbas));
+                loc_rimatr.copy_from_matr((loc_x_start..loc_x_start+gj+1), (0..n_auxbas), &tmp_ovlp_matr, (0..gj+1), (0..n_auxbas));
             }
-            //let mut tmp_ovlp_matr = MatrixFull::new([1,1],0.0);
-            //let mut aux_ovlp_matr = MatrixFull::new([1,1],0.0);
-
-            //let mut loc_rimatr = MatrixFull::new([pair_length,n_auxbas],0.0);
 
 
             s.send((loc_rimatr,global_start,pair_length)).unwrap();
+            //s.send((loc_rimatr,global_start,pair_length, sub_time_records)).unwrap();
         });
 
-        //time_records.new_item("prim ri receive", "");
-        //time_records.count_start("prim ri receive");
+        time_records.new_item("rec_ri", "the collection of primitry RI tensor after multi-threads parallization");
+        time_records.count_start("rec_ri");
 
         receiver.into_iter().for_each(|(loc_rimatr, global_start, pair_length)| {
-            ri3fn.copy_from_matr(global_start..global_start+pair_length, 0..n_auxbas, &loc_rimatr, 0..pair_length, 0..n_auxbas)
+            tmp_ri3fn.par_iter_columns_full_mut().zip(loc_rimatr.par_iter_columns_full()).for_each(|(to, from)| {
+                to[global_start..global_start+pair_length].copy_from_slice(from);
+            });
+            //tmp_ri3fn.copy_from_matr(global_start..global_start+pair_length, 0..n_auxbas, &loc_rimatr, 0..pair_length, 0..n_auxbas);
+            //time_records.max(&sub_timerecords);
         });
+        time_records.count("rec_ri");
 
         let mut basbas2baspar = MatrixFull::new([n_basis,n_basis],0_usize);
         let mut baspar2basbas = vec![[0_usize;2];n_baspar];
@@ -1796,10 +2001,15 @@ impl Molecule {
                 baspar2basbas[baspar_ind] = [i,j];
             });
         });
-
-        utilities::omp_set_num_threads_wrapper(self.ctrl.num_threads.unwrap());
-
         time_records.count("prim ri");
+
+        time_records.new_item("ri_v","for RI dot aux_v^{-1/2}");
+        time_records.count_start("ri_v");
+        utilities::omp_set_num_threads_wrapper(self.ctrl.num_threads.unwrap());
+        let mut ri3fn = MatrixFull::new([n_baspar,n_auxbas],0.0);
+        _dgemm_full(&tmp_ri3fn, 'N', &aux_v, 'N', &mut ri3fn, 1.0, 0.0);
+        time_records.count("ri_v");
+
 
         time_records.count("all ri");
 
@@ -1811,6 +2021,171 @@ impl Molecule {
         (ri3fn,basbas2baspar,baspar2basbas)
 
     }
+
+    // generate the 3-center RI integrals and the basis pair symmetry is used to save the memory
+    pub fn prepare_rimatr_for_ri_v_rayon_v04(&self) -> (MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>) {
+
+        let mut time_records = utilities::TimeRecords::new();
+        time_records.new_item("all ri", "for the total evaluations of ri3fn");
+        time_records.count_start("all ri");
+
+        time_records.new_item("prim ri", "for the pure three-center integrals");
+        time_records.new_item("aux_ij", "for the coulomb matrix of auxiliary basis");
+        time_records.new_item("inv_sqrt", "for the sqrt inverse of aux_ij");
+
+        let n_basis = self.num_basis;
+        let n_auxbas = self.num_auxbas;
+        let n_baspar = (self.num_basis+1)*self.num_basis/2;
+
+        // First the Cholesky decomposition `L` of the inverse of the auxiliary 2-center coulumb matrix: V=(\nu|\mu)
+        time_records.count_start("aux_ij");
+        let mut aux_v = self.int_ij_aux_columb();
+        time_records.count("aux_ij");
+        time_records.count_start("inv_sqrt");
+        //aux_v = aux_v.lapack_power(-0.5, AUXBAS_THRESHOLD).unwrap();
+        aux_v = _power_rayon(&aux_v, -0.5, AUXBAS_THRESHOLD).unwrap();
+        //aux_v = aux_v.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
+        time_records.count("inv_sqrt");
+
+        // Then, prepare the 3-center integrals: O_V = (ij|\nu), and multiple with `L`
+        time_records.count_start("prim ri");
+        let mut tmp_ri3fn = MatrixFull::new([n_auxbas, n_baspar],0.0);
+        let n_basis_shell = self.cint_bas.len();
+        let n_auxbas_shell = self.cint_aux_bas.len();
+        let cint_type = if self.ctrl.basis_type.to_lowercase()==String::from("spheric") {
+            CintType::Spheric
+        } else if self.ctrl.basis_type.to_lowercase()==String::from("cartesian") {
+            CintType::Cartesian
+        } else {
+            panic!("Error:: Unknown basis type '{}'. Please use either 'spheric' or 'Cartesian'", 
+                   self.ctrl.basis_type);
+        };
+
+        utilities::omp_set_num_threads_wrapper(1);
+        let (sender, receiver) = channel();
+        //par_shellpair.par_iter().for_each_with(sender, |s, shell_index| {
+        (0..n_basis_shell).rev().collect::<Vec<usize>>().par_iter().for_each_with(sender, |s, gj| {
+
+            let bas_j = *gj;
+            // first, initialize rust_cint for each rayon threads
+            let mut cint_data = self.initialize_cint(true);
+
+            let basis_start_j = self.cint_fdqc[bas_j][0];
+            let basis_len_j = self.cint_fdqc[bas_j][1];
+            let global_start = (basis_start_j+1)*basis_start_j/2;
+
+            let mut i_length:usize = 0;
+            let mut pair_length = 0; 
+            for bas_i in 0..bas_j+1 {
+                let basis_start_i = self.cint_fdqc[bas_i][0];
+                let basis_len_i = self.cint_fdqc[bas_i][1];
+                i_length += basis_len_i;
+
+                if bas_i!=bas_j {
+                    pair_length += basis_len_i*basis_len_j
+                } else {
+                    pair_length += (basis_len_i+1)*basis_len_i/2
+                };
+            }
+
+
+            let mut ri_rayon =  RIFull::new([n_auxbas,i_length,basis_len_j],0.0);
+            let mut loc_rimatr = MatrixFull::new([n_auxbas,pair_length],0.0);
+            for bas_i in 0..bas_j+1 {
+                let basis_start_i = self.cint_fdqc[bas_i][0];
+                let basis_len_i = self.cint_fdqc[bas_i][1];
+                self.cint_aux_fdqc.iter().enumerate().for_each(|(k,bas_info)| {
+                    let basis_start_k = bas_info[0];
+                    let basis_len_k = bas_info[1];
+                    let gk  = k + n_basis_shell;
+
+                    let buf = RIFull::from_vec([basis_len_i,basis_len_j, basis_len_k], 
+                        cint_data.cint_3c2e(bas_i as i32, bas_j as i32, gk as i32)).unwrap();
+                    //let buf = MatrixFull::from_vec([basis_len_i*basis_len_j, basis_len_k], 
+                    //    cint_data.cint_3c2e(bas_i as i32, bas_j as i32, gk as i32)).unwrap();
+                    
+                    //buf.iter_rows(0..basis_len_i*basis_len_j).enumerate().for_each(|(index, from)| {
+                    //    let loc_j = index/basis_len_i;
+                    //    let loc_i = index%basis_len_i;
+                    //    ri_rayon.get_reducing_matrix_mut(loc_j).unwrap().iter_column_mut(loc_i).zip(from).for_each(|(to, from)| *to = *from)
+                    //    //let gj = loc_j + basis_start_j;
+                    //    //let loc_x_start = (gj+1)*gj/2 - global_start;
+                    //});
+
+
+                    ri_rayon.copy_from_ri(
+                        basis_start_k..basis_start_k+basis_len_k,
+                        basis_start_i..basis_start_i+basis_len_i,
+                        0..basis_len_j,
+                        & buf, 
+                        0..basis_len_k, 
+                        0..basis_len_i, 
+                        0..basis_len_j);
+                    //sub_time_records.count("ri: copy_from_ri");
+                });
+            }
+
+            cint_data.final_c2r();
+
+            for loc_j in 0..basis_len_j {
+                let gj = loc_j + basis_start_j;
+                let loc_x_start = (gj+1)*gj/2 - global_start;
+
+                let tmp_matr = ri_rayon.get_reducing_matrix(loc_j).unwrap();
+
+                loc_rimatr.iter_columns_mut(loc_x_start..loc_x_start+gj+1).zip(tmp_matr.iter_columns(0..gj+1).unwrap())
+                .for_each(|(to, from)| {
+                    to.copy_from_slice(from)
+                })
+            }
+
+            s.send((loc_rimatr,global_start,pair_length)).unwrap();
+            //s.send((loc_rimatr,global_start,pair_length, sub_time_records)).unwrap();
+        });
+
+        time_records.new_item("rec_ri", "the collection of primitry RI tensor after multi-threads parallization");
+        time_records.count_start("rec_ri");
+
+        receiver.into_iter().for_each(|(loc_rimatr, global_start, pair_length)| {
+            //tmp_ri3fn.copy_from_matr(0..n_auxbas, global_start..global_start+pair_length, &loc_rimatr, 0..n_auxbas, 0..pair_length);
+            tmp_ri3fn.par_iter_columns_mut(global_start..global_start+pair_length).unwrap().zip(loc_rimatr.par_iter_columns_full())
+                .for_each(|(to, from)| {
+                    to.copy_from_slice(from)
+            })
+            //time_records.max(&sub_timerecords);
+        });
+        time_records.count("rec_ri");
+
+        let mut basbas2baspar = MatrixFull::new([n_basis,n_basis],0_usize);
+        let mut baspar2basbas = vec![[0_usize;2];n_baspar];
+        basbas2baspar.iter_columns_full_mut().enumerate().for_each(|(j,slice_x)| {
+            &slice_x.iter_mut().enumerate().for_each(|(i,map_v)| {
+                let baspar_ind = if i< j {(j+1)*j/2+i} else {(i+1)*i/2+j};
+                *map_v = baspar_ind;
+                baspar2basbas[baspar_ind] = [i,j];
+            });
+        });
+        time_records.count("prim ri");
+
+        time_records.new_item("ri_v","for RI dot aux_v^{-1/2}");
+        time_records.count_start("ri_v");
+        utilities::omp_set_num_threads_wrapper(self.ctrl.num_threads.unwrap());
+        let mut ri3fn = MatrixFull::new([n_baspar,n_auxbas],0.0);
+        _dgemm_full(&tmp_ri3fn, 'N', &aux_v, 'N', &mut ri3fn, 1.0, 0.0);
+        time_records.count("ri_v");
+
+
+        time_records.count("all ri");
+
+
+        if self.ctrl.print_level>=2 {
+            time_records.report_all();
+        }
+
+        (ri3fn,basbas2baspar,baspar2basbas)
+
+    }
+
 
 }
 

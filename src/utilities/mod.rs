@@ -64,6 +64,26 @@ impl TimeRecords {
         }
     }
 
+    pub fn self_add(&mut self, sub_timerecords: &TimeRecords) {
+        self.items.iter_mut().for_each(|(key,value)| {
+            if let Some(sub_item) = sub_timerecords.items.get(key) {
+                value.0 = Instant:: now();
+                value.2 = false;
+                value.1 += sub_item.1
+            }
+        })
+    }
+    pub fn max(&mut self, sub_timerecords: &TimeRecords) {
+        self.items.iter_mut().for_each(|(key,value)| {
+            if let Some(sub_item) = sub_timerecords.items.get(key) {
+                let cur_time = value.1;
+                value.0 = Instant:: now();
+                value.2 = false;
+                value.1 = sub_item.1.max(cur_time);
+            }
+        })
+    }
+
     pub fn report(&self,name: &str) {
         if let Some(item) = self.items.get(name) {
             let sp = format!("{:20} {:8.3} s for {}", &name, item.1, item.3);
@@ -146,6 +166,30 @@ pub fn omp_set_num_threads_wrapper(n:usize)  {
 //}
 
 pub fn balancing(num_tasks:usize, num_threads: usize) -> Vec<Range<usize>> {
+    let mut distribute_vec: Vec<Range<usize>> = vec![0..num_tasks;num_threads];
+    let chunk_size = num_tasks/num_threads;
+    let chunk_rest = num_tasks%num_threads;
+
+    let mut start = 0_usize;
+    let mut count = chunk_rest as i32;
+    distribute_vec.iter_mut().enumerate().for_each(|(i,data)| {
+        if count >0 {
+            *data = start..start + chunk_size+1;
+            start += chunk_size+1;
+            count -= 1;
+        } else {
+            *data = start..start + chunk_size;
+            start += chunk_size;
+            //count -= 1;
+        }
+    });
+
+    distribute_vec
+}
+
+/// initialize the parallization vector for the sync data with the size of num_tasks * per_communication
+/// Eunsure that the data size communicated each time is less than 500 Mb
+pub fn balancing_type_02(num_tasks:usize, num_threads: usize, per_communication: usize) -> Vec<Range<usize>> {
     let mut distribute_vec: Vec<Range<usize>> = vec![0..num_tasks;num_threads];
     let chunk_size = num_tasks/num_threads;
     let chunk_rest = num_tasks%num_threads;

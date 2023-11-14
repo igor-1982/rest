@@ -117,24 +117,28 @@ pub fn scc23_for_rxdh7(scf_data: &mut SCF) -> f64 {
     }
     println!("c_pt2: {:16.8} Ha, c_sbge2: {:16.8} Ha, c_scsrpa: {:16.8} Ha", c_pt2,c_sbge2, c_scsrpa);
 
-    let screen0 = (2.3*dxpbe).exp()*fr1.ln().powf(4.0);
+    //let screen0 = (2.3*dxpbe).exp()*fr1.ln().powf(4.0);
+    let screen0 = fr1.ln().powf(2.0);
     let screen1 = 0.000005*dxpbe*(dxpbe/x_max).exp()/fr1;
 
-    let e_scc_1 = (2.5735*lnfr1.powf(3.0)/(x_max*fr1.exp())*erf(screen0)-
-                       0.6688*lnfr1.powf(3.0)/(x_max*fr1.powf(1.0/3.0))*erf(screen0)-
+    let e_scc_1 = (2.5734773954673504*lnfr1.powf(3.0)/(x_max*fr1.exp())*erf(screen0)-
+                       0.6687902606008397*lnfr1.powf(3.0)/(x_max*fr1.powf(1.0/3.0))*erf(screen0)-
                        0.00002756*dxpbe*(dxpbe/x_max).exp()/fr1*erfc(screen1))/EV;
 
     //let e_scc_r = 0.0f64;
 
-    let pref = (x_max.ln()*energy_gap/x_max).exp()/EV;
+    let pref = 0.5*(x_max.ln()*energy_gap/x_max).exp()/EV;
+    //let pref = 0.5/EV;
     //println!("debug pref: {:?}", (pref, x_max, energy_gap));
 
     let e_scc_r = pref * fr_vec[1..].iter().fold(0.0f64, |e_scc_r,fr| {
-        let screen0 = (2.3*dxpbe).exp()*fr.ln().powf(4.0);
+        //let screen0 = (2.3*dxpbe).exp()*fr.ln().powf(4.0);
+        let screen0 = fr.ln().powf(2.0);
         let pref = erf(screen0);
         let a1 = fr.ln().powf(3.0)/x_max;
 
-        e_scc_r + pref * (1.298042947*a1/fr.exp() - 0.340437683*a1/fr.cbrt())
+        //e_scc_r + pref * (1.298042947*a1/fr.exp() - 0.340437683*a1/fr.cbrt())
+        e_scc_r + pref * (2.5734773954673504*a1/fr.exp() -0.6687902606008397*a1/fr.cbrt())
     });
     //desc1 = (2.5734773954673504*(np.log(i))**3/(Xa*np.exp(i)))*math.erf(np.exp(2.3*dxpbe)*np.log(i)**4);
     //desc2 = (-0.6687902606008397*(np.log(i))**3/(Xa*i**(1/3)))*math.erf(np.exp(2.3*dxpbe)*np.log(i)**4);
