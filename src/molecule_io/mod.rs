@@ -9,7 +9,7 @@ use libc::regerror;
 use statrs::distribution::Continuous;
 use tensors::BasicMatrix;
 use tensors::external_libs::{ri_copy_from_ri, matr_copy_from_ri};
-use tensors::matrix_blas_lapack::{_dgemm, _dgemm_full, _power, _power_rayon};
+use tensors::matrix_blas_lapack::{_dgemm, _dgemm_full, _power, _power_rayon, _newton_schulz_inverse_square_root_v02};
 use std::fmt::format;
 use std::fs;
 use std::ops::Range;
@@ -2038,9 +2038,16 @@ impl Molecule {
         let mut aux_v = self.int_ij_aux_columb();
         time_records.count("aux_ij");
         time_records.count_start("inv_sqrt");
-        //aux_v = aux_v.lapack_power(-0.5, AUXBAS_THRESHOLD).unwrap();
         aux_v = _power_rayon(&aux_v, -0.5, AUXBAS_THRESHOLD).unwrap();
-        //aux_v = aux_v.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap();
+        //aux_v = aux_v.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap_or(
+        //    _power_rayon(&aux_v, -0.5, AUXBAS_THRESHOLD).unwrap()
+        //);
+        //let (tmp_aux_v, n_sigular, converge_flag) = _newton_schulz_inverse_square_root(&aux_v, 1.0e-8, 0.1, 100);
+        //if ! converge_flag {
+        //    aux_v = _power_rayon(&aux_v, -0.5, AUXBAS_THRESHOLD).unwrap();
+        //} else {
+        //    aux_v = tmp_aux_v.clone()
+        //}
         time_records.count("inv_sqrt");
 
         // Then, prepare the 3-center integrals: O_V = (ij|\nu), and multiple with `L`
@@ -2143,17 +2150,6 @@ impl Molecule {
 
             cint_data.final_c2r();
 
-            //for loc_j in 0..basis_len_j {
-            //    let gj = loc_j + basis_start_j;
-            //    let loc_x_start = (gj+1)*gj/2 - global_start;
-
-            //    let tmp_matr = ri_rayon.get_reducing_matrix(loc_j).unwrap();
-
-            //    loc_rimatr.iter_columns_mut(loc_x_start..loc_x_start+gj+1).zip(tmp_matr.iter_columns(0..gj+1).unwrap())
-            //    .for_each(|(to, from)| {
-            //        to.copy_from_slice(from)
-            //    })
-            //}
 
             s.send((loc_rimatr,global_start,pair_length)).unwrap();
             //s.send((loc_rimatr,global_start,pair_length, sub_time_records)).unwrap();

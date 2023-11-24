@@ -9,7 +9,7 @@ use tensors::{BasicMatrix, MathMatrix, ParMathMatrix};
 use tensors::external_libs::{general_dgemm_f, matr_copy};
 use tensors::matrix_blas_lapack::{_dgemm, contract_vxc_0_serial};
 //use numgrid::{self, radial_grid_lmg_bse};
-use self::gen_grids::{radial_grid_lmg_bse};
+use self::gen_grids::radial_grid_lmg_bse;
 use rayon::iter::{IntoParallelRefIterator, IndexedParallelIterator, ParallelIterator, IntoParallelRefMutIterator};
 use regex::Regex;
 use crate::basis_io::{Basis4Elem, cartesian_gto_cint, cartesian_gto_std, gto_value, BasCell, gto_value_debug, cint_norm_factor, gto_1st_value, spheric_gto_value_matrixfull, spheric_gto_1st_value_batch, spheric_gto_value_matrixfull_serial, spheric_gto_1st_value_batch_serial, spheric_gto_value_serial, spheric_gto_1st_value_serial};

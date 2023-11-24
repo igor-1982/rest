@@ -99,6 +99,9 @@ pub fn rpa_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
                             xc_energy_xdh-xc_energy_scf +
                             xdh_rpa_energy;
     println!("E[{:?}]=: {:?}, Ex[HF]: {:?}, Ec[RPA]: {:?}", scf_data.mol.ctrl.xc, total_energy, x_energy, rpa_c_energy);
+
+    scf_data.energies.insert(String::from("rpa_energy"), vec![total_energy]);
+
     Ok(total_energy)
 }
 

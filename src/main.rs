@@ -121,7 +121,7 @@ fn main() -> anyhow::Result<()> {
     time_mark.count("SCF");
 
     if scf_data.mol.ctrl.restart {
-        //println!("now save the converged SCF results");
+        println!("now save the converged SCF results");
         save_chkfile(&scf_data)
     };
 
@@ -177,7 +177,9 @@ fn main() -> anyhow::Result<()> {
     //====================================
     // Now for post ai correction
     //====================================
-    post_ai_correction(&mut scf_data);
+    if let Some(scc) = post_ai_correction(&mut scf_data) {
+        scf_data.energies.insert("ai_correction".to_string(), scc);
+    }
 
     //====================================
     // Now for post-correlation calculations
@@ -186,7 +188,6 @@ fn main() -> anyhow::Result<()> {
         post_scf_correlation(&mut scf_data);
     }
 
-
     time_mark.count("Overall");
 
     println!("");
@@ -194,13 +195,38 @@ fn main() -> anyhow::Result<()> {
     println!("              REST: Mission accomplished");
     println!("====================================================");
 
-    println!("The SCF ({}) energy: {:16.8} Ha", 
-        scf_data.mol.ctrl.xc.to_uppercase(),
-        scf_data.scf_energy);
+    output_result(&scf_data);
+
 
     time_mark.report_all();
 
     Ok(())
+}
+
+
+pub fn output_result(scf_data: &scf_io::SCF) {
+    println!("The SCF energy        : {:18.10} Ha", 
+        //scf_data.mol.ctrl.xc.to_uppercase(),
+        scf_data.scf_energy);
+    
+    let xc_name = scf_data.mol.ctrl.xc.to_lowercase();
+    if xc_name.eq("mp2") || xc_name.eq("xyg3") || xc_name.eq("xygjos") || xc_name.eq("r-xdh7") || xc_name.eq("xyg7") || xc_name.eq("zrps") || xc_name.eq("scsrpa") {
+        let total_energy = scf_data.energies.get("xdh_energy").unwrap()[0];
+        let post_ai_correction = scf_data.mol.ctrl.post_ai_correction.to_lowercase();
+        let ai_correction = if xc_name.eq("r-xdh7") && post_ai_correction.eq("scc23") {
+            let ai_correction = scf_data.energies.get("ai_correction").unwrap()[0];
+            println!("AI Correction         : {:18.10} Ha", ai_correction);
+            ai_correction
+        } else {
+            0.0
+        };
+        println!("The (R)-xDH energy    : {:18.10} Ha", total_energy+ ai_correction);
+    }
+    if xc_name.eq("rpa@pbe") {
+        let total_energy = scf_data.energies.get("rpa_energy").unwrap()[0];
+        println!("The RPA energy        : {:18.10} Ha", total_energy);
+    }
+
 }
 
 

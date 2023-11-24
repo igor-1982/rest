@@ -210,14 +210,18 @@ pub fn print_out_dfa(scf_data: &SCF) {
     });
 }
 
-pub fn post_ai_correction(scf_data: &mut SCF) {
-    let xc_method = &scf_data.mol.ctrl.xc;
-    let post_ai_corr = &scf_data.mol.ctrl.post_ai_correction;
+pub fn post_ai_correction(scf_data: &mut SCF) -> Option<Vec<f64>> {
+    let xc_method = &scf_data.mol.ctrl.xc.to_lowercase();
+    let post_ai_corr = &scf_data.mol.ctrl.post_ai_correction.to_lowercase();
+    let mut scc = 0.0;
     if post_ai_corr.eq("scc23") && xc_method.eq("r-xdh7") {
-        let scc = scc23_for_rxdh7(scf_data);
+        scc = scc23_for_rxdh7(scf_data);
         let total_energy = scf_data.energies.get("xdh_energy").unwrap()[0];
         println!("E(R-xDH7-SCC23): {:16.8} Ha", total_energy + scc);
+        //scf_data.energies.insert("scc23".to_string(), vec![scc]);
+        return Some(vec![scc])
     };
+    None
 }
 
 /// NOTE: only support symmetric RI-V tensors
