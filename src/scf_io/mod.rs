@@ -3878,10 +3878,21 @@ impl ScfTraceRecord {
             }
             
         };
-        //}
-        //now store the target_vector for diis and its variants.
-        //if self.mixer.eq(&"ddiis") {
-        //}
+
+        if let Some(level_shift) = scf.mol.ctrl.level_shift {
+            let num_state = scf.mol.num_state;
+            for i_spin in 0..scf.mol.spin_channel {
+                let i_homo = scf.homo.get(i_spin).unwrap().clone();
+                let i_lumo = scf.lumo.get(i_spin).unwrap().clone();
+                let mut i_fock = scf.hamiltonian.get_mut(i_spin).unwrap();
+                for j in i_lumo..num_state {
+                    let i_start = j*(j+1)/2 + i_lumo;
+                    let i_length = j - i_lumo + 1;
+                    //println!("debug: lumo: {}, num_state: {}, {}..{}", i_lumo, num_state, i_start, i_start+i_length);
+                    i_fock.data[i_start..i_start+i_length].par_iter_mut().for_each(|f| {*f += level_shift});
+                }
+            }
+        }
     }
 }
 

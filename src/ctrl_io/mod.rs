@@ -121,7 +121,10 @@ pub struct InputKeywords {
     pub num_max_diis: usize,
     #[pyo3(get, set)]
     pub start_diis_cycle: usize,
+    #[pyo3(get, set)]
     pub start_check_oscillation: usize,
+    #[pyo3(get, set)]
+    pub level_shift: Option<f64>,
     #[pyo3(get, set)]
     pub max_scf_cycle: usize,
     #[pyo3(get, set)]
@@ -227,6 +230,7 @@ impl InputKeywords {
             num_max_diis: 8,
             start_diis_cycle: 1,
             start_check_oscillation: 20,
+            level_shift : None, 
             max_scf_cycle: 100,
             scf_acc_rho: 1.0e-6,
             scf_acc_eev: 1.0e-5,
@@ -642,6 +646,25 @@ impl InputKeywords {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(100_usize)},
                     serde_json::Value::Number(tmp_num) => {tmp_num.as_i64().unwrap_or(100) as usize},
                     other => {100_usize}
+                };
+                tmp_input.level_shift = match tmp_ctrl.get("level_shift").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_str) => {
+                        let num = tmp_str.to_lowercase().parse().unwrap_or(0.0);
+                        if num == 0.0 {
+                            None
+                        } else {
+                            Some(num)
+                        }
+                    },
+                    serde_json::Value::Number(tmp_num) => {
+                        let num = tmp_num.as_f64().unwrap_or(0.0);
+                        if num == 0.0 {
+                            None
+                        } else {
+                            Some(num)
+                        }
+                    },
+                    other => {None}
                 };
                 tmp_input.scf_acc_rho = match tmp_ctrl.get("scf_acc_rho").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(1.0e-6)},
