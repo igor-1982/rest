@@ -3879,17 +3879,23 @@ impl ScfTraceRecord {
             
         };
 
+        // now consider if level_shift is applied
+        // at present only a constant level shift is implemented for both spin channels and for the whole SCF procedure
         if let Some(level_shift) = scf.mol.ctrl.level_shift {
-            let num_state = scf.mol.num_state;
-            for i_spin in 0..scf.mol.spin_channel {
-                let i_homo = scf.homo.get(i_spin).unwrap().clone();
-                let i_lumo = scf.lumo.get(i_spin).unwrap().clone();
-                let mut i_fock = scf.hamiltonian.get_mut(i_spin).unwrap();
-                for j in i_lumo..num_state {
-                    let i_start = j*(j+1)/2 + i_lumo;
-                    let i_length = j - i_lumo + 1;
-                    //println!("debug: lumo: {}, num_state: {}, {}..{}", i_lumo, num_state, i_start, i_start+i_length);
-                    i_fock.data[i_start..i_start+i_length].par_iter_mut().for_each(|f| {*f += level_shift});
+
+            if scf.mol.spin_channel == 1 {
+                let mut fock = scf.hamiltonian.get_mut(0).unwrap();
+                let ovlp = &scf.ovlp;
+                let dm = scf.density_matrix.get(0).unwrap();
+                let dm_scaling_factor = 0.5;
+                level_shift_fock(fock, ovlp, level_shift, dm, dm_scaling_factor)
+            } else {
+                for i_spin in 0..scf.mol.spin_channel {
+                    let mut fock = scf.hamiltonian.get_mut(i_spin).unwrap();
+                    let ovlp = &scf.ovlp;
+                    let dm = scf.density_matrix.get(i_spin).unwrap();
+                    let dm_scaling_factor = 1.0;
+                    level_shift_fock(fock, ovlp, level_shift, dm, dm_scaling_factor)
                 }
             }
         }
@@ -4167,6 +4173,22 @@ fn ao2mo_rayon_v02<'a, T, P>(eigenvector: &T, rimat_chunk: &P, row_dim: std::ops
     utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
 
     Ok((rimo, row_dim, column_dim))
+}
+
+pub fn level_shift_fock(fock: &mut MatrixUpper<f64>, ovlp: &MatrixUpper<f64>, level_shift: f64,  dm: &MatrixFull<f64>, dm_scaling_factor: f64) {
+    // FC = SCE
+    // F' = F + SC \Lambda C^\dagger S
+    // F' = F + LF * (S - SDS) 
+
+    let num_basis = dm.size()[0];
+
+    let mut tmp_s = MatrixFull::new([num_basis, num_basis], 0.0);
+    tmp_s.iter_matrixupper_mut().unwrap().zip(ovlp.data.iter()).for_each(|(to, from)| {*to = *from});
+    let mut tmp_s2 = tmp_s.clone();
+    let mut tmp_s3 = tmp_s.clone();
+    _dsymm(&tmp_s, dm, &mut tmp_s2, 'L', 'U', -dm_scaling_factor, 0.0);
+    _dsymm(&tmp_s, &mut tmp_s2, &mut tmp_s3, 'R', 'U', 1.0, 1.0);
+    fock.data.iter_mut().zip(tmp_s3.iter_matrixupper().unwrap()).for_each(|(to, from)| {*to += *from*level_shift});
 }
 
 

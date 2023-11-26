@@ -167,8 +167,7 @@ pub fn get_cube(scf_data:&SCF, n_p: usize) -> MatrixFull<f64>{
         });
 
         //write
-        let mut path = "src/post_scf_analysis/generated_file/".to_owned();
-        path +=  &mol.geom.name;
+        let mut path = mol.geom.name.clone();
         path += &index.to_string();
         path += ".cube";
         let file = File::create(path);
