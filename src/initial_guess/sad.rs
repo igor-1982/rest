@@ -49,7 +49,7 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
 
             let mut atom_scf = scf(atom_mol).unwrap();
 
-            println!("debug: elem prepared in this loop: {}, size: {:?}", ielem, atom_scf.density_matrix[0].size());
+            //println!("debug: elem prepared in this loop: {}, size: {:?}", ielem, atom_scf.density_matrix[0].size());
 
 
             let mut dms: Vec<MatrixFull<f64>> = vec![];
@@ -402,6 +402,26 @@ pub fn generate_occupation(elem: &String,num_basis: usize) -> ([Vec<f64>;2],[usi
             let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0 ,2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.666666667,1.666666667,1.666666667];
             occ_a.extend(vec![0.0;num_basis-27]);
             ([occ_a,vec![0.0;num_basis]],[26,0],[27,0])
+        },
+        "He" => {
+            let mut occ_a = vec![2.0];
+            occ_a.extend(vec![0.0;num_basis-1]);
+            ([occ_a,vec![0.0;num_basis]],[0,0],[1,0])
+        },
+        "Ne" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0];
+            occ_a.extend(vec![0.0;num_basis-5]);
+            ([occ_a,vec![0.0;num_basis]],[4,0],[5,0])
+        },
+        "Ar" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
+            occ_a.extend(vec![0.0;num_basis-9]);
+            ([occ_a,vec![0.0;num_basis]],[8,0],[9,0])
+        },
+        "Kr" => {
+            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
+            occ_a.extend(vec![0.0;num_basis-18]);
+            ([occ_a,vec![0.0;num_basis]],[17,0],[18,0])
         },
         
         _ => ([vec![],vec![]],[0,0],[0,0])
