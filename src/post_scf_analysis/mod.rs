@@ -31,7 +31,8 @@ pub fn post_scf_output(scf_data: &SCF) {
             let mut file = std::fs::File::create("./wf_in_real_space.txt").unwrap();
             std::io::Write::write(&mut file, output.as_bytes());
         } else if output_type.eq("cube") {
-            cube_build::get_cube(&scf_data,80);
+            let grids = scf_data.mol.ctrl.cube_setting[1] as usize;
+            cube_build::get_cube(&scf_data,grids);
         } else if output_type.eq("molden") {
             molden_build::gen_molden(&scf_data);
         } else if output_type.eq("hamiltonian") {

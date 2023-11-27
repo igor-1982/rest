@@ -158,6 +158,7 @@ pub struct InputKeywords {
     pub fciqmc_dump: bool,
     // Kyewords for post scf analysis
     pub outputs: Vec<String>,
+    pub cube_setting: [f64;2],
     //pub output_wfn_in_real_space: usize,
     //pub output_cube: bool,
     //pub output_molden: bool,
@@ -248,6 +249,7 @@ impl InputKeywords {
             fciqmc_dump: false,
             // Kyewords for post scf
             outputs: vec![],
+            cube_setting: [3.0,80.0],
             //output_wfn_in_real_space: 0,
             //output_cube: false,
             //output_molden: false,
@@ -767,6 +769,20 @@ impl InputKeywords {
                         tmp_vec
                     },
                     other => {vec![]},
+                };
+                tmp_input.cube_setting = match tmp_ctrl.get("cube_setting").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::Array(tmp_op) => {
+                        let mut tmp_array = [0.0;2];
+                        tmp_array.iter_mut().zip(tmp_op[0..2].iter()).for_each(|(to, from)| {
+                            match from {
+                                serde_json::Value::String(tmp_str) => {*to = tmp_str.parse().unwrap_or(0.0)},
+                                serde_json::Value::Number(tmp_num) => {*to = tmp_num.as_f64().unwrap_or(0.0)},
+                                other => {*to = 0.0},
+                            }
+                        });
+                        tmp_array
+                    },
+                    other => {[3.0,80.0]},
                 };
                 //tmp_input.output_wfn_in_real_space = match tmp_ctrl.get("output_wfn_in_real_space").unwrap_or(&serde_json::Value::Null) {
                 //    serde_json::Value::String(tmp_wfn) => {tmp_wfn.to_lowercase().parse().unwrap_or(0)},

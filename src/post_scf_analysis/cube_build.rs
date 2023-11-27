@@ -11,6 +11,7 @@ use std::io::prelude::*;
 use std::io::LineWriter;
 
 pub fn gen_box (mol: &Molecule) -> (Vec<f64>, Vec<f64>){
+    let margin = mol.ctrl.cube_setting[0];
     let atom_coord = &mol.geom.position; //by column
     let natm = mol.geom.elem.len();
     let mut max = vec![0.0;3];
@@ -28,12 +29,12 @@ pub fn gen_box (mol: &Molecule) -> (Vec<f64>, Vec<f64>){
     //println!("min:{:?} max:{:?}", &min,&max);
     let mut box_extent = vec![0.0; 3];
     box_extent.iter_mut().zip(max.iter().zip(min.iter())).for_each(|(a,(max,min))|{
-        *a = max - min + 6.0;
+        *a = max - min + 2.0*margin;
     });
 
     let mut boxorig = vec![0.0; 3];
     boxorig.iter_mut().zip(min.iter()).for_each(|(a,min)|{
-        *a = min - 3.0;
+        *a = min - margin;
     });
     //println!("{:?}",(&box_extent, &boxorig));
     (box_extent, boxorig)
