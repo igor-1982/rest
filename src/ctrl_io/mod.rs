@@ -158,7 +158,8 @@ pub struct InputKeywords {
     pub fciqmc_dump: bool,
     // Kyewords for post scf analysis
     pub outputs: Vec<String>,
-    pub cube_setting: [f64;2],
+    pub cube_orb_setting: [f64;2],
+    pub cube_orb_indices: Vec<[usize;2]>,
     //pub output_wfn_in_real_space: usize,
     //pub output_cube: bool,
     //pub output_molden: bool,
@@ -249,7 +250,8 @@ impl InputKeywords {
             fciqmc_dump: false,
             // Kyewords for post scf
             outputs: vec![],
-            cube_setting: [3.0,80.0],
+            cube_orb_setting: [3.0,80.0],
+            cube_orb_indices: vec![],
             //output_wfn_in_real_space: 0,
             //output_cube: false,
             //output_molden: false,
@@ -288,9 +290,9 @@ impl InputKeywords {
                 if tmp_input.print_level>0 {println!("Print level:                {}", tmp_input.print_level)};
                 //let default_rayon_current_num_threads = rayon::current_num_threads();
                 tmp_input.num_threads = match tmp_ctrl.get("num_threads").unwrap_or(&serde_json::Value::Null) {
-                    serde_json::Value::String(tmp_str) => {Some(tmp_str.to_lowercase().parse().unwrap())},
-                    serde_json::Value::Number(tmp_num) => {Some(tmp_num.as_i64().unwrap() as usize)},
-                    other => {None},
+                    serde_json::Value::String(tmp_str) => {Some(tmp_str.to_lowercase().parse().unwrap_or(1))},
+                    serde_json::Value::Number(tmp_num) => {Some(tmp_num.as_i64().unwrap_or(1) as usize)},
+                    other => {Some(1)},
                 };
                 if let Some(num_threads) = tmp_input.num_threads {
                     if tmp_input.print_level>0 {println!("The number of threads used for parallelism:      {}", num_threads)};
@@ -770,7 +772,7 @@ impl InputKeywords {
                     },
                     other => {vec![]},
                 };
-                tmp_input.cube_setting = match tmp_ctrl.get("cube_setting").unwrap_or(&serde_json::Value::Null) {
+                tmp_input.cube_orb_setting = match tmp_ctrl.get("cube_orb_setting").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::Array(tmp_op) => {
                         let mut tmp_array = [0.0;2];
                         tmp_array.iter_mut().zip(tmp_op[0..2].iter()).for_each(|(to, from)| {
@@ -783,6 +785,33 @@ impl InputKeywords {
                         tmp_array
                     },
                     other => {[3.0,80.0]},
+                };
+                tmp_input.cube_orb_indices = match tmp_ctrl.get("cube_orb_indices").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::Array(tmp_op) => {
+                        //let mut tmp_array = [0.0;2];
+                        let mut tmp_indices = vec![[0;2];tmp_op.len()];
+                        tmp_indices.iter_mut().zip(tmp_op.iter()).for_each(|(to, from)| {
+                            let tmp_to = match from {
+                                serde_json::Value::Array(tmp_opp) => {
+                                    let mut tmp_array = [0_usize;2];
+                                    tmp_array.iter_mut().zip(tmp_opp[0..2].iter()).for_each(|(to, from)| {
+                                        match from {
+                                            serde_json::Value::String(tmp_str) => {*to = tmp_str.parse().unwrap_or(0)},
+                                            serde_json::Value::Number(tmp_num) => {*to = tmp_num.as_u64().unwrap_or(0) as usize},
+                                            other => {*to = 0},
+                                        }
+                                    });
+                                    Some(tmp_array)
+                                },
+                                other => {None},
+                            };
+                            if let Some(tmp_array) = tmp_to {
+                                *to = tmp_array;
+                            };
+                        });
+                        tmp_indices 
+                    },
+                    other => {vec![]},
                 };
                 //tmp_input.output_wfn_in_real_space = match tmp_ctrl.get("output_wfn_in_real_space").unwrap_or(&serde_json::Value::Null) {
                 //    serde_json::Value::String(tmp_wfn) => {tmp_wfn.to_lowercase().parse().unwrap_or(0)},
