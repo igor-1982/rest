@@ -74,10 +74,23 @@ pub fn initial_guess(scf_data: &mut SCF) {
         };
         scf_data.diagonalize_hamiltonian();
         scf_data.generate_density_matrix();
+    } else if scf_data.mol.ctrl.initial_guess.eq(&"deeph") {
+
+
     };
 }
 
 
+pub fn initial_guess_from_deeph(mol: &Molecule) -> Vec<MatrixUpper<f64>> {
+    //return Hamiltonian
+    let mut h_a = MatrixFull::new([mol.num_basis,mol.num_basis],0.0);
+    let mut h_b = MatrixFull::new([mol.num_basis,mol.num_basis],0.0);
+
+    
+
+    vec![h_a.to_matrixupper(),h_b.to_matrixupper()]
+
+}
 pub fn initial_guess_from_hdf5guess(mol: &Molecule) -> Vec<MatrixFull<f64>> {
     if mol.ctrl.print_level>0 {println!("Importing density matrix from external inital guess file")};
     let file = hdf5::File::open(&mol.ctrl.guessfile).unwrap();

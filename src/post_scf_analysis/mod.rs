@@ -31,6 +31,7 @@ pub fn post_scf_output(scf_data: &SCF) {
             let mut file = std::fs::File::create("./wf_in_real_space.txt").unwrap();
             std::io::Write::write(&mut file, output.as_bytes());
         } else if output_type.eq("cube_orb") {
+            println!("Now generating the cube files for given orbitals");
             //let grids = scf_data.mol.ctrl.cube_orb_setting[1] as usize;
             //cube_build::get_cube_orb(&scf_data,grids);
             cube_build::get_cube_orb(&scf_data);

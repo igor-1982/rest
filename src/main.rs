@@ -144,12 +144,16 @@ fn main() -> anyhow::Result<()> {
     //====================================
     // Now for post-SCF analysis
     //====================================
+    let mulliken = mulliken_pop(&scf_data);
+    println!("Mulliken population analysis:");
+    for (i, (pop, atom)) in mulliken.iter().zip(scf_data.mol.geom.elem.iter()).enumerate() {
+        println!("{:3}-{:3}: {:10.6}", i, atom, pop);
+    }
+
     post_scf_analysis::post_scf_output(&scf_data);
 
     //let error_isdf = error_isdf(12..20, &scf_data);
     //println!("k_mu:{:?}, abs_error: {:?}, rel_error: {:?}", error_isdf.0, error_isdf.1, error_isdf.2);
-    /* let mulliken = mulliken_pop(&scf_data);
-    println!("The result of mulliken population analysis is: {:?}", &mulliken); */
 
     if let Some(dft_method) = &scf_data.mol.xc_data.dfa_family_pos {
         match dft_method {

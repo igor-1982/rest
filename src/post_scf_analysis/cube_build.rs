@@ -4,6 +4,7 @@ use crate::geom_io;
 use crate::basis_io;
 use crate::scf_io::SCF;
 use rest_tensors::MatrixFull;
+use tensors::matrix_blas_lapack::_dgemm_full;
 use std::path::Iter;
 use rayon::iter::{IntoParallelRefIterator, IndexedParallelIterator, ParallelIterator, IntoParallelRefMutIterator};
 use std::fs::{self, File};
@@ -114,8 +115,8 @@ pub fn get_cube_orb(scf_data:&SCF) -> MatrixFull<f64>{
         });
     }
     orb_indices_2.sort_by(|a,b| a.cmp(b));
-    println!("{:?}", &orb_indices);
-    println!("{:?}", &orb_indices_2);
+    //println!("{:?}", &orb_indices);
+    //println!("{:?}", &orb_indices_2);
 
     
 
@@ -130,9 +131,10 @@ pub fn get_cube_orb(scf_data:&SCF) -> MatrixFull<f64>{
     let coords = gen_coords(&init_points, &box_extent, &boxorig);
     let delta = gen_delta(n_p, &box_extent);
     let ao = tabulated_ao_fig(&mol, &coords);
-    let all_orb = scf_data.eigenvectors[0].clone();
-    let mut prod = MatrixFull::new([ao.size[0], all_orb.size[1]],0.0);
-    prod.to_matrixfullslicemut().lapack_dgemm(&mut ao.to_matrixfullslice(), &mut all_orb.to_matrixfullslice(), 'N', 'N', 1.0, 0.0);
+    //let all_orb = scf_data.eigenvectors[0].clone();
+    let mut prod = MatrixFull::new([ao.size[0],scf_data.eigenvectors[0].size[1]],0.0);
+    //prod.to_matrixfullslicemut().lapack_dgemm(&mut ao.to_matrixfullslice(), &mut all_orb.to_matrixfullslice(), 'N', 'N', 1.0, 0.0);
+    _dgemm_full(&ao, 'N', &scf_data.eigenvectors[0], 'N', &mut prod, 1.0, 0.0);
     
     // generate cube file  
     prod.iter_columns_full().enumerate().for_each(|(index, x)|{
