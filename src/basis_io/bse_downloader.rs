@@ -346,7 +346,7 @@ pub fn bse_auxbas_getter_v2(basis_set: &String, cell: &GeomCell, path: &String, 
 
     let url = format!("http://basissetexchange.org/api/basis/{}/format/json?elements={}", basis_set, elem_set);
 
-    //println!("url = {}", url);
+    println!("url = {}", url);
     
     let resp = reqwest::blocking::Client::new()
         .get(&url)

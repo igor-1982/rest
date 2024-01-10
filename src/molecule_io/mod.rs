@@ -406,11 +406,15 @@ impl Molecule {
         let local_elem = local_element_checker(&ctrl.auxbas_path);
         //println!("local elements are {:?}", local_elem);
         //println!("ctrl elements are {:?}", ctrl_elem);
+        let etb_elem = get_etb_elem(geom, &ctrl.etb_start_atom_number);
+
         let elem_intersection = ctrl_elem.intersect(local_elem.clone());
         let mut required_elem = vec![];
         for ctrl_item in ctrl_elem {
             if !elem_intersection.contains(&ctrl_item) {
-                required_elem.push(ctrl_item)
+                if ! etb_elem.contains(&ctrl_item) {
+                    required_elem.push(ctrl_item)
+                }
             }
         }
     
