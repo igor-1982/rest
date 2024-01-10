@@ -3,7 +3,7 @@ use rest_tensors::{MatrixFull, RIFull};
 use itertools::izip;
 use rayon::prelude::*;
 use serde::{Deserialize,Serialize};
-use serde_json::Result;
+use serde_json::{Result,Value};
 use anyhow;
 use tensors::{MathMatrix,ParMathMatrix};
 use tensors::matrix_blas_lapack::_dgemm_nn_serial;
@@ -164,7 +164,18 @@ impl Basis4Elem {
     }
     pub fn parse_json_from_file(file_name: String, cint_type: &CintType)-> anyhow::Result<Basis4Elem> {
         let tmp_cont = fs::read_to_string(&file_name[..])?;
-        let tmp_basis:Basis4ElemRaw = serde_json::from_str(&tmp_cont[..])?;
+        //let tmp_basis:Basis4ElemRaw = serde_json::from_str(&tmp_cont[..])?;
+        let raw:Value = serde_json::from_str(&tmp_cont[..])?;
+        let tmp_basis:Basis4ElemRaw = if !raw["electron_shells"].is_null() {
+            serde_json::from_value(raw)?
+        } else if !raw["elements"].is_null() {
+            // Treat json from `bse convert-basis`, which looks like
+            //     { "elements": { "1": { "electron_shells": [ ... ] } }
+            // assume there's only one element
+            serde_json::from_value(raw["elements"].as_object().unwrap().values().next().unwrap().clone())?
+        } else {
+            panic!("The basis set file is not in the right format: {:?}", &file_name);
+        };
         let mut tmp_vec:Vec<BasCell> = vec![];
         &tmp_basis.electron_shells.iter().for_each(|x: &BasCellRaw| {
             let tmp_bas_cell = x.parse();
