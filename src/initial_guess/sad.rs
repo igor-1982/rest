@@ -6,9 +6,6 @@ use crate::scf_io::scf;
 use std::collections::HashMap;
 
 pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
-    //let mut elem_name: Vec<String> = vec![];
-    //let mut dms_alpha: Vec<MatrixFull<f64>> = vec![];
-    //let mut dms_beta: Vec<MatrixFull<f64>> = vec![];
     let mut atom_dms: HashMap<String, Vec<MatrixFull<f64>>> = HashMap::new();
 
     mol.geom.elem.iter().for_each(|ielem| {
@@ -16,8 +13,6 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
 
 
             if mol.ctrl.print_level>0 {println!("Generate SAD of {}", &ielem)};
-
-            //elem_name.push(ielem.to_string());
 
             let mut atom_ctrl = InputKeywords::init_ctrl();
             atom_ctrl.xc = String::from("hf");
@@ -117,7 +112,6 @@ pub fn block_diag_specific(atom_dms: &HashMap<String,Vec<MatrixFull<f64>>>,elem:
 }
 
 pub fn block_diag(dms: &Vec<MatrixFull<f64>>) -> MatrixFull<f64>{
-    //scipy.linalg.block_diag()
     let mut atom_size = 0;
     dms.iter().for_each(|dm_atom|{
         atom_size += dm_atom.size[0];

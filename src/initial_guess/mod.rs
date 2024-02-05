@@ -60,6 +60,9 @@ pub fn initial_guess(scf_data: &mut SCF) {
     // generate the initial guess from hcore
     } else if scf_data.mol.ctrl.initial_guess.eq(&"hcore") {
         let init_fock = scf_data.h_core.clone();
+        /* let fock = &init_fock.to_matrixfull().unwrap();
+        &fock.formated_output_e(5, "full"); */
+
         if scf_data.mol.spin_channel==1 {
             scf_data.hamiltonian = [init_fock,MatrixUpper::new(1,0.0)];
         } else {

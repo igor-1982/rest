@@ -61,7 +61,7 @@ use std::sync::mpsc::{channel, Receiver};
 //use crate::basis_io::{Basis4Elem,BasInfo};
 //use crate::post_scf_analysis::save_chkfile;
 //use crate::dft::{Grids, numerical_density, par_numerical_density};
-use crate::isdf::{prepare_for_ri_isdf, init_by_rho, prepare_m_isdf};
+use crate::isdf::{prepare_for_ri_isdf, init_by_rho, prepare_m_isdf, prepare_m_isdf_weight};
 use crate::molecule_io::{Molecule, generate_ri3fn_from_rimatr};
 use crate::tensors::{TensorOpt,TensorOptMut,TensorSlice};
 use crate::dft::Grids;
@@ -369,6 +369,7 @@ impl SCF {
         (new_scf.tab_ao, new_scf.m) = if isdf && new_scf.mol.ctrl.isdf_new{
             if let Some(grids) = &new_scf.grids {
                 let isdf = prepare_m_isdf(new_scf.mol.ctrl.isdf_k_mu, &new_scf.mol, &grids);
+                //let isdf = prepare_m_isdf_weight(new_scf.mol.ctrl.isdf_k_mu, &new_scf.mol, &grids, &new_scf.occupation, new_scf.scftype);
                 (Some(isdf.0), Some(isdf.1))
             } else {
                 (None,None)
@@ -2140,6 +2141,8 @@ impl SCF {
             SCFType::RHF => {
                 // D*(H^{core}+F)
                 let dm_s = &dm[0];
+                //&dm_s.formated_output_e(5, "full");
+
                 let hc = &self.h_core;
                 let ht_s = &self.hamiltonian[0];
                 let dm_upper = dm_s.to_matrixupper();
@@ -2147,7 +2150,11 @@ impl SCF {
                 hc_and_ht.data.par_iter_mut().zip(ht_s.data.par_iter()).for_each(|value| {
                     *value.0 += value.1
                 });
+                /* let h_debug = &hc_and_ht.to_matrixfull().unwrap();
+                &h_debug.formated_output_e(5, "full"); */
+
                 self.scf_energy += SCF::par_energy_contraction(&dm_upper, &hc_and_ht);
+                println!("scf_energy: {:?}", &self.scf_energy);
             },
             _ => {
                 let dm_a = &dm[0];

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::mpsc::channel;
 use crate::basis_io::{spheric_gto_value_serial, spheric_gto_1st_value_serial};
-use crate::scf_io::SCF;
+use crate::scf_io::{SCF, SCFType};
 use crate::{geom_io,dft,molecule_io, basis_io, utilities};
 use crate::dft::Grids as dftgrids;
 use crate::molecule_io::Molecule;
@@ -126,8 +126,9 @@ pub fn cvt_find_corresponding_point(rgrids: &Vec<[f64;3]>, lambda_r: &Vec<f64>, 
 }
 
 pub fn cvt_isdf_v2(rgrids_old: &Vec<[f64;3]>, lambda_r_old: &Vec<f64>, n_mu: usize) ->  (Vec<[f64;3]>, Vec<f64>){
-    // 筛选权重在阈值之上的格点并存为新格点rgrids
-    let threshold = 1.0e-8;
+    // select grids whose weights are larger than threshold
+    let threshold = 0.0; 
+    //let threshold = 1.0e-15; 
     let effective_ind = lambda_r_old.iter()
     .enumerate()
     .filter(|(_, &r)| r >= threshold)
@@ -163,7 +164,7 @@ pub fn cvt_isdf_v2(rgrids_old: &Vec<[f64;3]>, lambda_r_old: &Vec<f64>, n_mu: usi
         *z =c;
     }); */
 
-    //类manual_seed
+    //manual_seed
     let seed: [usize; 64] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64];
     let mut rng: StdRng = SeedableRng::from_seed(&seed[..]);
     let mut c_mu: Vec<[f64;3]> = vec![[0.0;3];n_mu];
@@ -231,7 +232,6 @@ pub fn cvt_isdf_v2(rgrids_old: &Vec<[f64;3]>, lambda_r_old: &Vec<f64>, n_mu: usi
     (inter_points, inter_weights)
     
 } 
-
 
 pub fn prod_states_gw (phi: &MatrixFull<f64>, psi: &MatrixFull<f64>) -> MatrixFull<f64>{
     //Generate P: n_1n_2 \times n_r, P_{ij}(r) = \phi_i(r)\psi_j(r)
@@ -1059,8 +1059,10 @@ pub fn init_by_rho(grids: &mut dftgrids, dm: &Vec<MatrixFull<f64>>, spin_channel
 
 }
 
+/// weight function: weights of grids
+/// \Omega = \Lambda Z (\Lambda_{ISDF}C)^T (\Lambda_{ISDF}C (\Lambda_{ISDF}C)^T)^{-1}
 pub fn prepare_m_isdf(k_mu: usize, mol: &Molecule, grids: &dft::Grids) -> (MatrixFull<f64>, MatrixUpper<f64>) {
-    //used for isdf_k 
+    //mainly used in on-the-fly isdf
     let nao = mol.num_basis;
     let nri = mol.num_auxbas;
 
@@ -1169,8 +1171,6 @@ pub fn prepare_m_isdf(k_mu: usize, mol: &Molecule, grids: &dft::Grids) -> (Matri
     time_mark.new_item("test pinv", "pseudo inverse of c2");
     time_mark.count_start("test pinv");
     let mut inv_cctrans = c2.pinv(1.0e-12);
-    //let mut inv_cctrans = c2.eigenvalue_pinv(1.0e-8);
-    //let mut inv_cctrans = _dpinverse(&mut c2, 1.0e-12).unwrap();
     time_mark.count("test pinv");
     time_mark.report_all();
     //=============================================================
@@ -1186,5 +1186,176 @@ pub fn prepare_m_isdf(k_mu: usize, mol: &Molecule, grids: &dft::Grids) -> (Matri
             kernel_part[[i,j]] *= ip_weights[i] * ip_weights[j]
         }
     }
+    (varphi, kernel_part.to_matrixupper())
+}
+
+/// weight function: \omega(r_j) = (\sum_1^{N_e}|\phi_i|^\alpha)+(\sum_1^{N}|\phi_i|^\alpha)
+/// \alpha = 1.0, 2.0, 3.0
+/// \Omega = ZC^T(CC^T)^{-1}
+pub fn prepare_m_isdf_weight(k_mu: usize, mol: &Molecule, grids: &dft::Grids, occupation: &[Vec<f64>; 2], scftype: SCFType) -> (MatrixFull<f64>, MatrixUpper<f64>) {
+    let nao = mol.num_basis;
+    let nri = mol.num_auxbas;
+
+    let rgrids = &grids.coordinates;
+    let ngrids = rgrids.len();
+    let mut phi = tabulated_ao(&mol, &rgrids);
+
+    //prepare weight function
+    let mut lambda_r = vec![0.0; ngrids];
+    let alpha = 1.0;
+    for i in 0..ngrids{
+        let mut sum = 1.0;
+        let scaling_factor = match scftype {
+            crate::scf_io::SCFType::RHF => 2.0,
+            _ => 1.0,
+        };
+
+        //===========================weight_function================================
+        //\omega(r_j) = (\sum_1^{N_e}|\phi_i|^\alpha)+(\sum_1^{N}|\phi_i|^\alpha)
+        if scaling_factor == 2.0{
+            phi.iter_column(i).zip(occupation[0].iter()).for_each(|(ao, occ)|{
+                sum += occ * ao.powf(alpha) + scaling_factor * ao.powf(alpha);
+            });
+        }else{
+            phi.iter_column(i).zip(occupation[0].iter()).for_each(|(ao, occ)|{
+                sum += occ * ao.powf(alpha) + scaling_factor * ao.powf(alpha);
+            });
+            phi.iter_column(i).zip(occupation[1].iter()).for_each(|(ao, occ)|{
+                sum += occ * ao.powf(alpha) + scaling_factor * ao.powf(alpha);
+            });
+        }
+
+        //\omega(r_j) = \sum_1^{N_e}|\phi_i|^\alpha
+        /* if scaling_factor == 2.0{
+            phi.iter_column(i).zip(occupation[0].iter()).for_each(|(ao, occ)|{
+                sum += occ * ao.powf(alpha);
+            });
+        }else{
+            phi.iter_column(i).zip(occupation[0].iter()).for_each(|(ao, occ)|{
+                sum += occ * ao.powf(alpha);
+            });
+            phi.iter_column(i).zip(occupation[1].iter()).for_each(|(ao, occ)|{
+                sum += occ * ao.powf(alpha);
+            });
+        } */
+
+        //\omega(r_j) = \sum_1^{N}|\phi_i|^\alpha
+        /* if scaling_factor == 2.0{
+            phi.iter_column(i).zip(occupation[0].iter()).for_each(|(ao, occ)|{
+                sum += scaling_factor * ao.powf(alpha);
+            });
+        }else{
+            phi.iter_column(i).zip(occupation[0].iter()).for_each(|(ao, occ)|{
+                sum += scaling_factor * ao.powf(alpha);
+            });
+            phi.iter_column(i).zip(occupation[1].iter()).for_each(|(ao, occ)|{
+                sum += scaling_factor * ao.powf(alpha);
+            });
+        } */
+        //====================================================================
+
+        lambda_r[i] = sum;
+
+    }
+
+
+    let n_mu = k_mu * nao;
+    let mut lambda_r_for_isdf = vec![0.0; ngrids];
+    lambda_r_for_isdf.iter_mut().zip(lambda_r.iter()).for_each(|(x,y)|{
+        *x = y.abs();
+    });
+    let mut lambda_phi = phi.clone();
+
+    let (ip, ip_weights) = cvt_isdf_v2(&rgrids, &lambda_r_for_isdf, n_mu);
+    let mut varphi = tabulated_ao(&mol, &ip);
+    let mut lambda_varphi = varphi.clone();
+
+    let mut c21 = MatrixFull::new([n_mu, n_mu], 0.0);
+    let mut lambda_varphi_mid = lambda_varphi.clone();
+    c21.lapack_dgemm(&mut lambda_varphi, &mut lambda_varphi_mid, 'T', 'N', 1.0, 0.0);
+    let mut c22 = MatrixFull::new([n_mu, n_mu], 0.0);
+    let mut varphi_mid = varphi.clone();
+    c22.lapack_dgemm(&mut varphi, &mut varphi_mid, 'T', 'N', 1.0, 0.0);
+    let mut c2 = MatrixFull::new([n_mu, n_mu], 0.0);
+    c2.iter_columns_full_mut().zip(c21.iter_columns_full()).zip(c22.iter_columns_full())
+        .for_each(|((x,a),b)|{
+            x.iter_mut().zip(a.iter()).zip(b.iter()).for_each(|((x1,a1),b1)|{
+                *x1 = a1 * b1;
+            });
+        });
+
+    let mut cint_data = mol.initialize_cint(true);
+    let n_basis_shell = mol.cint_bas.len();
+    let n_auxbas_shell = mol.cint_aux_bas.len();
+    let mut ri3fn = RIFull::new([nao,nao,nri],0.0);
+    cint_data.cint2c2e_optimizer_rust();
+    let mut ri_v_ri = MatrixFull::new([nri,nri],0.0);
+    for l in 0..n_auxbas_shell {
+        let basis_start_l = mol.cint_aux_fdqc[l][0];
+        let basis_len_l = mol.cint_aux_fdqc[l][1];
+        let gl  = l + n_basis_shell;
+        for k in 0..n_auxbas_shell {
+            let basis_start_k = mol.cint_aux_fdqc[k][0];
+            let basis_len_k = mol.cint_aux_fdqc[k][1];
+            let gk  = k + n_basis_shell;
+            let buf = cint_data.cint_2c2e(gk as i32, gl as i32);
+            
+            let mut tmp_slices = ri_v_ri.iter_submatrix_mut(
+                basis_start_k..basis_start_k+basis_len_k,
+                basis_start_l..basis_start_l+basis_len_l);
+            tmp_slices.zip(buf.iter()).for_each(|value| {*value.0 = *value.1});
+
+        }
+    }
+    cint_data.cint3c2e_optimizer_rust();
+    for k in 0..n_auxbas_shell {
+        let basis_start_k = mol.cint_aux_fdqc[k][0];
+        let basis_len_k = mol.cint_aux_fdqc[k][1];
+        let gk  = k + n_basis_shell;
+        for j in 0..n_basis_shell {
+            let basis_start_j = mol.cint_fdqc[j][0];
+            let basis_len_j = mol.cint_fdqc[j][1];
+            // can be optimized with "for i in 0..(j+1)"
+            for i in 0..n_basis_shell {
+                let basis_start_i = mol.cint_fdqc[i][0];
+                let basis_len_i = mol.cint_fdqc[i][1];
+                let buf = RIFull::from_vec([basis_len_i, basis_len_j,basis_len_k], 
+                    cint_data.cint_3c2e(i as i32, j as i32, gk as i32)).unwrap();
+                ri3fn.copy_from_ri(
+                    basis_start_i..basis_start_i+basis_len_i,
+                    basis_start_j..basis_start_j+basis_len_j,
+                    basis_start_k..basis_start_k+basis_len_k,
+                    & buf, 
+                    0..basis_len_i, 
+                    0..basis_len_j, 
+                    0..basis_len_k);
+            }
+        }
+    }
+        cint_data.final_c2r();
+
+    let mut ri_v_ao_t = MatrixFull::from_vec([nao*nao, nri],ri3fn.data).unwrap();
+
+    let mut c = prod_states_gw(&lambda_varphi.transpose(), &varphi.transpose());
+    let mut tmp1 = MatrixFull::new([nri, n_mu],0.0);
+    tmp1.lapack_dgemm(&mut ri_v_ao_t, &mut c, 'T', 'T', 1.0, 0.0);
+
+    let mut tmp0 = MatrixFull::new([nri,n_mu],0.0);
+
+    //=====================test_pinv_time==========================
+    let mut time_mark = utilities::TimeRecords::new();
+    time_mark.new_item("test pinv", "pseudo inverse of c2");
+    time_mark.count_start("test pinv");
+    let mut inv_cctrans = c2.pinv(1.0e-12);
+    time_mark.count("test pinv");
+    time_mark.report_all();
+    //=============================================================
+
+    tmp0.lapack_dgemm(&mut tmp1, &mut inv_cctrans, 'N', 'N', 1.0, 0.0);
+
+    let mut tmp01 = tmp0.clone();
+    let mut tmp = ri_v_ri.lapack_dgesv(&mut tmp01, nri as i32);
+    let mut kernel_part = MatrixFull::new([n_mu,n_mu], 0.0);
+    kernel_part.lapack_dgemm(&mut tmp0, &mut tmp, 'T', 'N', 1.0, 0.0);
     (varphi, kernel_part.to_matrixupper())
 }
