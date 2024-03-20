@@ -94,6 +94,7 @@ pub const E7: f64 = 1.0e7;
 pub const E8: f64 = 1.0e8;
 pub const E9: f64 = 1.0e9;
 
+
 pub struct DMatrix<const L: usize> {
     size:[usize;2],
     indicing:[usize;2],
@@ -226,10 +227,22 @@ pub const BAS_ATM: usize = 0;
 pub const BAS_ANG: usize = 1;
 pub const BAS_PRM: usize = 2;
 pub const BAS_CTR: usize = 3;
+pub const BAS_SLOTS: usize = 6;
 
 // for the atm index - libcint 
 pub const ATM_NUC: usize = 0;
 pub const ATM_ENV: usize = 1;
+pub const ATM_NUC_MOD_OF: usize = 2;
+pub const ATM_SLOTS: usize = 6;
 
-// for ECP
+// for ECP - libcint
 pub const ECP_LMAX: i32 = 5;
+pub const NUC_ECP:  i32 = 4;
+
+//// for the atm index - libcint
+//pub const ATM_CHARGE_OF: usize = 0;
+//pub const ATM_PRT_COORD: usize = 1;
+//pub const ATM_NUC_MOD_OF: usize = 2;
+//pub const ATM_PRT_ZETA: usize = 3;
+
+pub const ENV_PRT_START: usize = 20;

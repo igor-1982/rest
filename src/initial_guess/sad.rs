@@ -153,275 +153,281 @@ pub fn ctrl_setting_atom_sad(elem: &String) -> (f64,usize,bool) {
     }
 }
 
-pub fn generate_occupation(elem: &String,num_basis: usize) -> ([Vec<f64>;2],[usize;2],[usize;2]) {
+pub fn cut_ecp_occ(occ: Vec<f64>, num_ecp: usize) -> Vec<f64> {
+    occ[num_ecp/2..].iter().map(|x| *x).collect::<Vec<f64>>()
+}
+
+pub fn generate_occupation(elem: &String,num_basis: usize, num_ecp: usize) -> ([Vec<f64>;2],[usize;2],[usize;2]) {
+    let frozen_orb = num_ecp/2;
     match &formated_element_name(elem)[..] {
         "H" => {
-            let mut occ_a = vec![1.0];
-            occ_a.extend(vec![0.0;num_basis-1]);
-            ([occ_a,vec![0.0;num_basis]],[0,0],[1,0])
+            let mut occ_a = cut_ecp_occ(vec![1.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-1]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[0-frozen_orb,0],[1-frozen_orb,0])
         },
         "Li" => {
-            let mut occ_a = vec![2.0, 1.0];
-            occ_a.extend(vec![0.0;num_basis-2]);
-            ([occ_a,vec![0.0;num_basis]],[1,0],[2,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 1.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-2]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[1-frozen_orb,0],[2-frozen_orb,0])
         },
         "Na" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 1.0];
-            occ_a.extend(vec![0.0;num_basis-6]);
-            ([occ_a,vec![0.0;num_basis]],[5,0],[6,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 1.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-6]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[5-frozen_orb,0],[6-frozen_orb,0])
         },
         "K" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0];
-            occ_a.extend(vec![0.0;num_basis-10]);
-            ([occ_a,vec![0.0;num_basis]],[9,0],[10,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-10]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[9-frozen_orb,0],[10-frozen_orb,0])
         },
 
         "Be" => {
-            let mut occ_a = vec![2.0, 2.0];
-            occ_a.extend(vec![0.0;num_basis-2]);
-            ([occ_a,vec![0.0;num_basis]],[1,0],[2,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-2]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[1-frozen_orb,0],[2-frozen_orb,0])
         },
         "Mg" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
-            occ_a.extend(vec![0.0;num_basis-6]);
-            ([occ_a,vec![0.0;num_basis]],[5,0],[6,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-6]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[5-frozen_orb,0],[6-frozen_orb,0])
         },
         "Ca" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
-            occ_a.extend(vec![0.0;num_basis-10]);
-            ([occ_a,vec![0.0;num_basis]],[9,0],[10,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-10]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[9-frozen_orb,0],[10-frozen_orb,0])
         },
         "Sr" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
-            occ_a.extend(vec![0.0;num_basis-19]);
-            ([occ_a,vec![0.0;num_basis]],[18,0],[19,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-19]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[18-frozen_orb,0],[19-frozen_orb,0])
         },
 
         "Sc" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.2, 0.2, 0.2, 0.2, 0.2, 2.0];
-            occ_a.extend(vec![0.0;num_basis-15]);
-            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.2, 0.2, 0.2, 0.2, 0.2, 2.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-15]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[14-frozen_orb,0],[15-frozen_orb,0])
         },
         "Ti" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.4, 0.4, 0.4, 0.4, 0.4, 2.0];
-            occ_a.extend(vec![0.0;num_basis-15]);
-            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.4, 0.4, 0.4, 0.4, 0.4, 2.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-15]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[14-frozen_orb,0],[15-frozen_orb,0])
         },
         "V" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.6, 0.6, 0.6, 0.6, 0.6, 2.0];
-            occ_a.extend(vec![0.0;num_basis-15]);
-            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.6, 0.6, 0.6, 0.6, 0.6, 2.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-15]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[14-frozen_orb,0],[15-frozen_orb,0])
         },
         "Cr" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
-            occ_a.extend(vec![0.0;num_basis-15]);
-            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-15]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[14-frozen_orb,0],[15-frozen_orb,0])
         },
         "Mn" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0];
-            occ_a.extend(vec![0.0;num_basis-15]);
-            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-15]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[14-frozen_orb,0],[15-frozen_orb,0])
         },
         "Fe" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.2, 1.2, 1.2, 1.2, 1.2, 2.0];
-            occ_a.extend(vec![0.0;num_basis-15]);
-            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.2, 1.2, 1.2, 1.2, 1.2, 2.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-15]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[14-frozen_orb,0],[15-frozen_orb,0])
         },
         "Co" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.4, 1.4, 1.4, 1.4, 1.4, 2.0];
-            occ_a.extend(vec![0.0;num_basis-15]);
-            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.4, 1.4, 1.4, 1.4, 1.4, 2.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-15]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[14-frozen_orb,0],[15-frozen_orb,0])
         },
         "Ni" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.6, 1.6, 1.6, 1.6, 1.6, 2.0];
-            occ_a.extend(vec![0.0;num_basis-15]);
-            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.6, 1.6, 1.6, 1.6, 1.6, 2.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-15]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[14-frozen_orb,0],[15-frozen_orb,0])
         },
         "Cu" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0];
-            occ_a.extend(vec![0.0;num_basis-15]);
-            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-15]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[14-frozen_orb,0],[15-frozen_orb,0])
         },
         "Zn" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
-            occ_a.extend(vec![0.0;num_basis-15]);
-            ([occ_a,vec![0.0;num_basis]],[14,0],[15,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-15]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[14-frozen_orb,0],[15-frozen_orb,0])
         },
 
         "Y" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.2, 0.2, 0.2, 0.2, 0.2, 2.0, 2.0];
-            occ_a.extend(vec![0.0;num_basis-24]);
-            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.2, 0.2, 0.2, 0.2, 0.2, 2.0, 2.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-24]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[23-frozen_orb,0],[24-frozen_orb,0])
         },
         "Zr" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.4, 0.4, 0.4, 0.4, 0.4, 2.0];
-            occ_a.extend(vec![0.0;num_basis-24]);
-            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.4, 0.4, 0.4, 0.4, 0.4, 2.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-24]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[23-frozen_orb,0],[24-frozen_orb,0])
         },
         "Nb" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.8, 0.8, 0.8, 0.8, 0.8, 1.0];
-            occ_a.extend(vec![0.0;num_basis-24]);
-            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.8, 0.8, 0.8, 0.8, 0.8, 1.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-24]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[23-frozen_orb,0],[24-frozen_orb,0])
         },
         "Mo" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
-            occ_a.extend(vec![0.0;num_basis-24]);
-            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-24]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[23-frozen_orb,0],[24-frozen_orb,0])
         },
         "Tc" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0];
-            occ_a.extend(vec![0.0;num_basis-24]);
-            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-24]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[23-frozen_orb,0],[24-frozen_orb,0])
         },
         "Ru" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.4, 1.4, 1.4, 1.4, 1.4, 1.0];
-            occ_a.extend(vec![0.0;num_basis-24]);
-            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.4, 1.4, 1.4, 1.4, 1.4, 1.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-24]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[23-frozen_orb,0],[24-frozen_orb,0])
         },
         "Rh" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.6, 1.6, 1.6, 1.6, 1.6, 1.0];
-            occ_a.extend(vec![0.0;num_basis-24]);
-            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.6, 1.6, 1.6, 1.6, 1.6, 1.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-24]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[23-frozen_orb,0],[24-frozen_orb,0])
         },
         "Pd" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0,2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
-            occ_a.extend(vec![0.0;num_basis-24]);
-            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0,2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-24]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[23-frozen_orb,0],[24-frozen_orb,0])
         },
         "Ag" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0,2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0];
-            occ_a.extend(vec![0.0;num_basis-24]);
-            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0,2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-24]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[23-frozen_orb,0],[24-frozen_orb,0])
         },
         "Cd" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
-            occ_a.extend(vec![0.0;num_basis-24]);
-            ([occ_a,vec![0.0;num_basis]],[23,0],[24,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-24]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[23-frozen_orb,0],[24-frozen_orb,0])
         },
 
         "B" => {
-            let mut occ_a = vec![2.0, 2.0, 0.333333333, 0.33333333, 0.333333333];
-            occ_a.extend(vec![0.0;num_basis-5]);
-            ([occ_a,vec![0.0;num_basis]],[4,0],[5,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 0.333333333, 0.33333333, 0.333333333],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-5]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[4-frozen_orb,0],[5-frozen_orb,0])
         },
         "Al" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.333333333, 0.33333333, 0.333333333];
-            occ_a.extend(vec![0.0;num_basis-9]);
-            ([occ_a,vec![0.0;num_basis]],[8,0],[9,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.333333333, 0.33333333, 0.333333333],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-9]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[8-frozen_orb,0],[9-frozen_orb,0])
         },
         "Ga" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.333333333, 0.33333333, 0.333333333];
-            occ_a.extend(vec![0.0;num_basis-18]);
-            ([occ_a,vec![0.0;num_basis]],[17,0],[18,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.333333333, 0.33333333, 0.333333333],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-18]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[17-frozen_orb,0],[18-frozen_orb,0])
         },
         "In" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0 ,2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.333333333, 0.33333333, 0.333333333];
-            occ_a.extend(vec![0.0;num_basis-27]);
-            ([occ_a,vec![0.0;num_basis]],[26,0],[27,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0 ,2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.333333333, 0.33333333, 0.333333333],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-27]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[26-frozen_orb,0],[27-frozen_orb,0])
         },
         "C" => {
-            let mut occ_a = vec![2.0, 2.0, 0.666666667, 0.666666667, 0.666666667];
-            occ_a.extend(vec![0.0;num_basis-5]);
-            ([occ_a,vec![0.0;num_basis]],[4,0],[5,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 0.666666667, 0.666666667, 0.666666667],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-5]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[4-frozen_orb,0],[5-frozen_orb,0])
         },
         "Si" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.666666667, 0.666666667, 0.666666667];
-            occ_a.extend(vec![0.0;num_basis-9]);
-            ([occ_a,vec![0.0;num_basis]],[8,0],[9,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.666666667, 0.666666667, 0.666666667],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-9]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[8-frozen_orb,0],[9-frozen_orb,0])
         },
         "Ge" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.666666667, 0.666666667, 0.666666667];
-            occ_a.extend(vec![0.0;num_basis-18]);
-            ([occ_a,vec![0.0;num_basis]],[17,0],[18,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.666666667, 0.666666667, 0.666666667],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-18]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[17-frozen_orb,0],[18-frozen_orb,0])
         },
         "Sn" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0 ,2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.666666667, 0.666666667, 0.666666667];
-            occ_a.extend(vec![0.0;num_basis-27]);
-            ([occ_a,vec![0.0;num_basis]],[26,0],[27,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0 ,2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.666666667, 0.666666667, 0.666666667],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-27]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[26-frozen_orb,0],[27-frozen_orb,0])
         },
         "N" => {
-            let mut occ_a = vec![2.0, 2.0, 1.0, 1.0, 1.0];
-            occ_a.extend(vec![0.0;num_basis-5]);
-            ([occ_a,vec![0.0;num_basis]],[4,0],[5,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 1.0, 1.0, 1.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-5]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[4-frozen_orb,0],[5-frozen_orb,0])
         },
         "P" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0];
-            occ_a.extend(vec![0.0;num_basis-9]);
-            ([occ_a,vec![0.0;num_basis]],[8,0],[9,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-9]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[8-frozen_orb,0],[9-frozen_orb,0])
         },
         "As" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0];
-            occ_a.extend(vec![0.0;num_basis-18]);
-            ([occ_a,vec![0.0;num_basis]],[17,0],[18,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-18]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[17-frozen_orb,0],[18-frozen_orb,0])
         },
         "Sb" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0 ,2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0];
-            occ_a.extend(vec![0.0;num_basis-27]);
-            ([occ_a,vec![0.0;num_basis]],[26,0],[27,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0 ,2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-27]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[26-frozen_orb,0],[27-frozen_orb,0])
         },
         "O" => {
-            let mut occ_a = vec![2.0,2.0,1.33333333,1.33333333,1.33333333];
-            occ_a.extend(vec![0.0;num_basis-5]);
-            //occ_b.extend(vec![0.0;num_basis-5]);
+            let mut occ_a = cut_ecp_occ(vec![2.0,2.0,1.33333333,1.33333333,1.33333333],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-5]);
+            //occ_b.extend(vec![0.0;frozen_orb+num_basis-5]);
             //([occ_a,occ_b],[4,2],[5,3])
-            ([occ_a,vec![]],[4,0],[5,0])
+            ([occ_a,vec![]],[4-frozen_orb,0],[5-frozen_orb,0])
         },
         "S" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.33333333,1.33333333,1.33333333];
-            occ_a.extend(vec![0.0;num_basis-9]);
-            ([occ_a,vec![0.0;num_basis]],[8,0],[9,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.33333333,1.33333333,1.33333333],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-9]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[8-frozen_orb,0],[9-frozen_orb,0])
         },
         "Se" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.33333333,1.33333333,1.33333333];
-            occ_a.extend(vec![0.0;num_basis-18]);
-            ([occ_a,vec![0.0;num_basis]],[17,0],[18,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.33333333,1.33333333,1.33333333],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-18]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[17-frozen_orb,0],[18-frozen_orb,0])
         },
         "Te" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0 ,2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.33333333,1.33333333,1.33333333];
-            occ_a.extend(vec![0.0;num_basis-27]);
-            ([occ_a,vec![0.0;num_basis]],[26,0],[27,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0 ,2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.33333333,1.33333333,1.33333333],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-27]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[26-frozen_orb,0],[27-frozen_orb,0])
         },
         "F" => {
-            let mut occ_a = vec![2.0,2.0,1.666666667,1.666666667,1.666666667];
-            occ_a.extend(vec![0.0;num_basis-5]);
-            //occ_b.extend(vec![0.0;num_basis-5]);
+            let mut occ_a = cut_ecp_occ(vec![2.0,2.0,1.666666667,1.666666667,1.666666667],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-5]);
+            //occ_b.extend(vec![0.0;frozen_orb+num_basis-5]);
             //([occ_a,occ_b],[4,2],[5,3])
-            ([occ_a,vec![]],[4,0],[5,0])
+            ([occ_a,vec![]],[4-frozen_orb,0],[5-frozen_orb,0])
         },
         "Cl" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.666666667,1.666666667,1.666666667];
-            occ_a.extend(vec![0.0;num_basis-9]);
-            ([occ_a,vec![0.0;num_basis]],[8,0],[9,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.666666667,1.666666667,1.666666667],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-9]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[8-frozen_orb,0],[9-frozen_orb,0])
         },
         "Br" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.666666667,1.666666667,1.666666667];
-            occ_a.extend(vec![0.0;num_basis-18]);
-            ([occ_a,vec![0.0;num_basis]],[17,0],[18,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.666666667,1.666666667,1.666666667],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-18]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[17-frozen_orb,0],[18-frozen_orb,0])
         },
         "I" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0 ,2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.666666667,1.666666667,1.666666667];
-            occ_a.extend(vec![0.0;num_basis-27]);
-            ([occ_a,vec![0.0;num_basis]],[26,0],[27,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0 ,2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 1.666666667,1.666666667,1.666666667],num_ecp);
+            //println!("{}, {}, {:?}", num_basis, frozen_orb, &occ_a);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-27]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[26-frozen_orb,0],[27-frozen_orb,0])
         },
         "He" => {
-            let mut occ_a = vec![2.0];
-            occ_a.extend(vec![0.0;num_basis-1]);
-            ([occ_a,vec![0.0;num_basis]],[0,0],[1,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-1]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[0-frozen_orb,0],[1-frozen_orb,0])
         },
         "Ne" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0];
-            occ_a.extend(vec![0.0;num_basis-5]);
-            ([occ_a,vec![0.0;num_basis]],[4,0],[5,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-5]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[4-frozen_orb,0],[5-frozen_orb,0])
         },
         "Ar" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
-            occ_a.extend(vec![0.0;num_basis-9]);
-            ([occ_a,vec![0.0;num_basis]],[8,0],[9,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-9]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[8-frozen_orb,0],[9-frozen_orb,0])
         },
         "Kr" => {
-            let mut occ_a = vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
-            occ_a.extend(vec![0.0;num_basis-18]);
-            ([occ_a,vec![0.0;num_basis]],[17,0],[18,0])
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-18]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[17-frozen_orb,0],[18-frozen_orb,0])
         },
         
         _ => ([vec![],vec![]],[0,0],[0,0])

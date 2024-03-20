@@ -82,6 +82,7 @@ pub struct BasCell {
     pub angular_momentum: Vec<i32>,
     pub exponents: Vec<f64>,
     pub coefficients: Vec<Vec<f64>>,
+    pub native_coefficients: Vec<Vec<f64>>,
 }
 
 #[derive(Clone, Debug,Serialize,Deserialize)]
@@ -154,6 +155,15 @@ impl Basis4Elem {
         } else {
             (None, None)
         };
+        println!("debug 0");
+        if let Some(ecp_electrons_unwrap)=&ecp_electrons {
+            println!("ecp_electrons: {}", &ecp_electrons_unwrap)
+        };
+        if let Some(ecp_potentials_unwrap)=&ecp_potentials {
+            for tmp_ecp in ecp_potentials_unwrap {
+                println!("ecp_potentials: {:?}", tmp_ecp);
+            }
+        };
         Ok(Basis4Elem{
             electron_shells: tmp_vec,
             references: tmp_basis.references,
@@ -185,13 +195,30 @@ impl Basis4Elem {
                 tmp_vec.push(x_bascell);
             }
         });
+        let (ecp_electrons, ecp_potentials) = if let (Some(ecp_electrons), Some(ecp_potentials))= (&tmp_basis.ecp_electrons, &tmp_basis.ecp_potentials)  {
+            (
+                Some(ecp_electrons.clone()), 
+                Some(ecp_potentials.iter().map(|x| x.parse()).collect::<Vec<ECPCell>>())
+            )
+        } else {
+            (None, None)
+        };
+        //println!("debug 1");
+        //if let Some(ecp_electrons_unwrap)=&ecp_electrons {
+        //    println!("ecp_electrons: {}", &ecp_electrons_unwrap)
+        //};
+        //if let Some(ecp_potentials_unwrap)=&ecp_potentials {
+        //    for tmp_ecp in ecp_potentials_unwrap {
+        //        println!("ecp_potentials: {:?}", tmp_ecp);
+        //    }
+        //};
         // Re-ordering the basis function shells according to the angular momentum
         tmp_vec.sort_by(|a,b| a.angular_momentum[0].cmp(&b.angular_momentum[0]));
         Ok(Basis4Elem{
             electron_shells: tmp_vec,
             references: tmp_basis.references,
-            ecp_electrons: tmp_basis.ecp_electrons,
-            ecp_potentials: None,
+            ecp_electrons,
+            ecp_potentials,
             global_index: (0,0)
         })
     }
@@ -263,7 +290,8 @@ impl BasCellRaw {
                         region: self.region.clone(), 
                         angular_momentum: vec![tmp_vec_0[i_bas]], 
                         exponents: tmp_vec_1.clone(), 
-                        coefficients: vec![tmp_vec_2[i_bas].clone()]
+                        coefficients: vec![tmp_vec_2[i_bas].clone()],
+                        native_coefficients: vec![tmp_vec_2[i_bas].clone()]
                     }
                 );
             }
@@ -291,7 +319,8 @@ impl BasCellRaw {
                     region: self.region.clone(), 
                     angular_momentum: tmp_vec_0.clone(), 
                     exponents: tmp_vec_1.clone(), 
-                    coefficients: tmp_vec_2.clone() 
+                    coefficients: tmp_vec_2.clone(), 
+                    native_coefficients: tmp_vec_2.clone()
                 }
             );
             //// now consider the contracted (or primitive) GTOs that use part of primitive GTOs in the given shell

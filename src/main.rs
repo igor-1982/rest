@@ -55,6 +55,7 @@ extern crate lazy_static;
 use std::{f64, fs::File, io::Write};
 use std::path::PathBuf;
 use pyo3::prelude::*;
+use autocxx::prelude::*;
 
 mod geom_io;
 mod basis_io;
@@ -90,6 +91,26 @@ use crate::molecule_io::Molecule;
 //use crate::dft::DFA4REST;
 use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa, save_chkfile, rand_wf_real_space, cube_build, molden_build, post_ai_correction};
 
+//use autocxx::prelude::*;
+//
+//include_cpp! {
+//    #include "libecpint/api.hpp"
+//    #include "run.h"
+//    safety!(unsafe)
+//    generate!("ECPIntWrapper")
+//    generate!("rest_ecpint")
+//}
+
+//#[test]
+//pub fn test_ecp() -> anyhow::Result<()> {
+//    let mut ecpint = ffi::ECPIntWrapper::new("/usr/share/libecpint").within_box();
+//    let ints = ecpint.as_mut().get_integrals();
+//    println!("length: {}", ints.len());
+//    println!("{:?}", ints);
+//
+//    //let basis_list = 
+//    Ok(())
+//}
 
 //pub use crate::initial_guess::sap::*;
 //use crate::{post_scf_analysis::{rand_wf_real_space, cube_build, molden_build}, isdf::error_isdf, molecule_io::Molecule};
@@ -107,9 +128,11 @@ fn main() -> anyhow::Result<()> {
         panic!("Input file ({:}) does not exist", ctrl_file);
     }
 
-
     let mut mol = Molecule::build(ctrl_file)?;
     println!("Molecule_name: {}", &mol.geom.name);
+
+
+    //test_ecp();
 
     let mut scf_data = scf_io::scf(mol).unwrap();
 

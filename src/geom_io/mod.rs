@@ -13,6 +13,7 @@ use serde::{Deserialize,Serialize};
 use serde_json::Value;
 //use tensors::Tensors;
 
+use crate::basis_io::Basis4Elem;
 use crate::constants::{SPECIES_NAME,MASS_CHARGE,ANG,SPECIES_INFO};
 mod pyrest_geom_io;
 
@@ -499,6 +500,29 @@ impl GeomCell {
             write!(input, "{:3}{:16.8}{:16.8}{:16.8}\n", elem, pos[0]*ang,pos[1]*ang,pos[2]*ang);
         });
     }
+}
+
+pub fn calc_nuc_energy_with_ecp(geom: &GeomCell, basis4elem: &Vec<Basis4Elem>) -> f64 {
+    let mass_charge = get_mass_charge(&geom.elem);
+    let mut nuc_energy = 0.0;
+    let tmp_range1 = (0..geom.position.size[1]);
+    geom.position.iter_columns(tmp_range1).enumerate().for_each(|(i,ri)| {
+        let mut i_charge = mass_charge[i].1;
+        if let Some(i_ecp) = basis4elem.get(i).unwrap().ecp_electrons {
+            i_charge -= i_ecp as f64;
+        };
+        let tmp_range2 = (0..i);
+        geom.position.iter_columns(tmp_range2).enumerate().for_each(|(j,rj)| {
+            let mut j_charge = mass_charge[j].1;
+            if let Some(j_ecp) = basis4elem.get(j).unwrap().ecp_electrons {
+                j_charge -= j_ecp as f64;
+            };
+            let dd = ri.iter().zip(rj.iter())
+                .fold(0.0,|acc,(ri,rj)| acc + (ri-rj).powf(2.0)).sqrt();
+            nuc_energy += i_charge*j_charge/dd;
+        });
+    });
+    nuc_energy
 }
 
 #[test]
