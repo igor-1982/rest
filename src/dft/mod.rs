@@ -2364,6 +2364,7 @@ fn debug_num_density_for_atom() {
                 angular_momentum: vec![angular as i32],
                 exponents: vec![0.122],
                 coefficients: vec![vec![1.0/cint_norm_factor(angular as i32, 0.122)]],
+                native_coefficients: vec![vec![1.0/cint_norm_factor(angular as i32, 0.122)]]
             }
         ],
         references: None,

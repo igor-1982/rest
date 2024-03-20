@@ -399,6 +399,7 @@ pub fn etb_gen_contracted(l: &usize, n: &usize, alpha: &f64, beta: &f64) -> BasC
         angular_momentum: vec![*l as i32],
         exponents: vec![],
         coefficients: vec![vec![1.0_f64; *n]],
+        native_coefficients: vec![vec![1.0_f64; *n]]
     };
 /*
     for i in (0..n).rev() {
@@ -435,6 +436,7 @@ pub fn etb_gen_primitive(l: &usize, i: &usize, alpha: &f64, beta: &f64) -> BasCe
         angular_momentum: vec![*l as i32],
         exponents: vec![],
         coefficients: vec![vec![1.0_f64]],
+        native_coefficients: vec![vec![1.0_f64]],
     };
 /*
     for i in (0..n).rev() {

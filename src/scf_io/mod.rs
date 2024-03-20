@@ -29,10 +29,13 @@
 ////use std::sync::mpsc::{channel, Receiver};
 //use std::sync::mpsc::channel;
 use crate::dft::gen_grids::prune::prune_by_rho;
+use crate::geom_io::calc_nuc_energy_with_ecp;
 ////use blas_src::openblas::dgemm;
 mod addons;
 mod fchk;
 mod pyrest_scf_io;
+
+//use crate::basis_io::ecp::test_ecp;
 
 use libc::_SC_AIO_LISTIO_MAX;
 //use clap::value_parser;
@@ -42,6 +45,7 @@ use tensors::{ERIFull,MatrixFull, ERIFold4, MatrixUpper, TensorSliceMut, RIFull,
 use itertools::{Itertools, iproduct, izip};
 use rayon::prelude::*;
 use std::collections::HashMap;
+use std::mem::size_of;
 use std::sync::{Mutex, Arc,mpsc};
 use std::thread;
 use crossbeam::{channel::{unbounded,bounded},thread::{Scope,scope}};
@@ -200,13 +204,22 @@ impl SCF {
         time_mark.count_start("CInt");
 
 
-        new_scf.nuc_energy = new_scf.mol.geom.calc_nuc_energy();
+
+        //new_scf.nuc_energy = new_scf.mol.geom.calc_nuc_energy();
+        new_scf.nuc_energy = calc_nuc_energy_with_ecp(&new_scf.mol.geom, &new_scf.mol.basis4elem);
 
         if new_scf.mol.ctrl.print_level>0 {println!("Nuc_energy: {}",new_scf.nuc_energy)};
 
         //let dt1 = time::Local::now();
         new_scf.ovlp = new_scf.mol.int_ij_matrixupper(String::from("ovlp"));
         new_scf.h_core = new_scf.mol.int_ij_matrixupper(String::from("hcore"));
+
+        //new_scf.h_core.formated_output(5, "full");
+
+        //run_ecpint(&mol);
+
+        //new_scf.generate_occupation();
+        //test_ecp();
         //let dt2 = time::Local::now();
         //let timecost = (dt2.timestamp_millis()-dt1.timestamp_millis()) as f64 /1000.0;
         //if mol.ctrl.print_level>1 {println!("The evaluation of 2D-tensors spends {:16.2} seconds",timecost)};
@@ -399,11 +412,12 @@ impl SCF {
         new_scf
     }
 
+
     pub fn generate_occupation(&mut self) {
         if self.mol.ctrl.atom_sad {
             //self.generate_occupation_sad()
             //self.generate_occupation_integer()
-            let (occ,homo,lumo) = crate::initial_guess::sad::generate_occupation(self.mol.geom.elem.get(0).unwrap(),self.mol.num_state);
+            let (occ,homo,lumo) = crate::initial_guess::sad::generate_occupation(self.mol.geom.elem.get(0).unwrap(),self.mol.num_state, self.mol.ecp_electrons);
             self.occupation = occ;
             self.homo = homo;
             self.lumo = lumo;
@@ -485,7 +499,7 @@ impl SCF {
                     occupation[i_spin] = vec![0.0;num_state];
                     let mut left_elec_spin = num_elec[i_spin+1];
                     let mut index_i = 0_usize;
-                    while  left_elec_spin > 0.0 && index_i<=num_state {
+                    while  left_elec_spin > 0960100.0 && index_i<=num_state {
                         occupation[i_spin][index_i] = (left_elec_spin*occ_num).min(occ_num);
                         index_i += 1;
                         left_elec_spin -= 1.0;
@@ -525,7 +539,7 @@ impl SCF {
         self.occupation = occupation;
         self.lumo = lumo;
         self.homo = homo;
-        //println!("Occupation: {:?}, {:?}, {:?}, {}, {}",&self.homo,&self.lumo,&self.occupation,self.mol.num_state,self.mol.num_basis);
+        println!("Occupation: {:?}, {:?}, {:?}, {}, {}",&self.homo,&self.lumo,&self.occupation,self.mol.num_state,self.mol.num_basis);
     }
     pub fn generate_density_matrix(&mut self) {
         let num_basis = self.mol.num_basis;

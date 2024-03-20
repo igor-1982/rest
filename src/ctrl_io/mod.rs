@@ -388,7 +388,7 @@ impl InputKeywords {
 
                 tmp_input.use_ri_symm = match tmp_ctrl.get("use_ri_symm").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::Bool(tmp_str) => {*tmp_str},
-                    other => {false},
+                    other => {true},
                 };
                 if tmp_input.print_level>0 {
                     if tmp_input.use_ri_symm {
