@@ -1,0 +1,227 @@
+{
+    "electron_shells": [
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.8935000",
+                "0.4424000",
+                "0.1162000"
+            ],
+            "coefficients": [
+                [
+                    "-2.1756591",
+                    "2.4493467",
+                    "0.0000000"
+                ],
+                [
+                    "0.0000000",
+                    "0.0000000",
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "1.8770000",
+                "0.2623000",
+                "0.0798000"
+            ],
+            "coefficients": [
+                [
+                    "-0.1006779",
+                    "1.0306256",
+                    "0.0000000"
+                ],
+                [
+                    "0.0000000",
+                    "0.0000000",
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "0.0209"
+            ],
+            "coefficients": [
+                [
+                    "1.0"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto_spherical",
+            "region": "",
+            "angular_momentum": [
+                2
+            ],
+            "exponents": [
+                "0.2460"
+            ],
+            "coefficients": [
+                [
+                    "1.0"
+                ]
+            ]
+        }
+    ],
+    "references": [
+        {
+            "reference_description": "LANL2DZ ECP",
+            "reference_keys": [
+                "wadt1985a"
+            ]
+        },
+        {
+            "reference_description": "LANL2DZ diffuse functions",
+            "reference_keys": [
+                "check2001a"
+            ]
+        },
+        {
+            "reference_description": "LANL2DZ polarization functions",
+            "reference_keys": [
+                "check2001a"
+            ]
+        },
+        {
+            "reference_description": "LANL2DZ ECP",
+            "reference_keys": [
+                "wadt1985a"
+            ]
+        }
+    ],
+    "ecp_potentials": [
+        {
+            "angular_momentum": [
+                3
+            ],
+            "coefficients": [
+                [
+                    "-28.0000000",
+                    "-180.9891676",
+                    "-55.0043909",
+                    "-19.7906526",
+                    "-1.8533572"
+                ]
+            ],
+            "ecp_type": "scalar_ecp",
+            "r_exponents": [
+                1,
+                2,
+                2,
+                2,
+                2
+            ],
+            "gaussian_exponents": [
+                "318.2167583",
+                "61.5370967",
+                "13.2986899",
+                "3.8985215",
+                "1.2137666"
+            ]
+        },
+        {
+            "angular_momentum": [
+                0
+            ],
+            "coefficients": [
+                [
+                    "3.0000000",
+                    "65.2262558",
+                    "225.2354522",
+                    "94.0125472",
+                    "29.9415005"
+                ]
+            ],
+            "ecp_type": "scalar_ecp",
+            "r_exponents": [
+                0,
+                1,
+                2,
+                2,
+                2
+            ],
+            "gaussian_exponents": [
+                "205.1886932",
+                "68.9790278",
+                "27.9194879",
+                "8.5481650",
+                "2.3173734"
+            ]
+        },
+        {
+            "angular_momentum": [
+                1
+            ],
+            "coefficients": [
+                [
+                    "5.0000000",
+                    "23.4778157",
+                    "45.0980414",
+                    "56.3326957",
+                    "16.6058640"
+                ]
+            ],
+            "ecp_type": "scalar_ecp",
+            "r_exponents": [
+                0,
+                1,
+                2,
+                2,
+                2
+            ],
+            "gaussian_exponents": [
+                "33.2488002",
+                "15.7777247",
+                "14.9260722",
+                "5.8416394",
+                "1.8349575"
+            ]
+        },
+        {
+            "angular_momentum": [
+                2
+            ],
+            "coefficients": [
+                [
+                    "3.0000000",
+                    "23.7371518",
+                    "56.4792249",
+                    "25.8901835",
+                    "3.0229836"
+                ]
+            ],
+            "ecp_type": "scalar_ecp",
+            "r_exponents": [
+                0,
+                1,
+                2,
+                2,
+                2
+            ],
+            "gaussian_exponents": [
+                "42.0206343",
+                "19.2096363",
+                "9.4133917",
+                "3.3282907",
+                "0.8522331"
+            ]
+        }
+    ], 
+    "ecp_electrons": 28
+}

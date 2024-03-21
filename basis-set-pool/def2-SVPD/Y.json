@@ -222,5 +222,106 @@
                 "andrae1990a"
             ]
         }
-    ]
+    ],
+    "ecp_potentials": [
+        {
+            "angular_momentum": [
+                3
+            ],
+            "coefficients": [
+                [
+                    "-19.12219811",
+                    "-2.43637543"
+                ]
+            ],
+            "ecp_type": "scalar_ecp",
+            "r_exponents": [
+                2,
+                2
+            ],
+            "gaussian_exponents": [
+                "6.5842120",
+                "3.2921060"
+            ]
+        },
+        {
+            "angular_momentum": [
+                0
+            ],
+            "coefficients": [
+                [
+                    "135.15384412",
+                    "15.55244130",
+                    "19.12219811",
+                    "2.43637543"
+                ]
+            ],
+            "ecp_type": "scalar_ecp",
+            "r_exponents": [
+                2,
+                2,
+                2,
+                2
+            ],
+            "gaussian_exponents": [
+                "7.4880494",
+                "3.7440247",
+                "6.5842120",
+                "3.2921060"
+            ]
+        },
+        {
+            "angular_momentum": [
+                1
+            ],
+            "coefficients": [
+                [
+                    "87.78499167",
+                    "11.56406599",
+                    "19.12219811",
+                    "2.43637543"
+                ]
+            ],
+            "ecp_type": "scalar_ecp",
+            "r_exponents": [
+                2,
+                2,
+                2,
+                2
+            ],
+            "gaussian_exponents": [
+                "6.4453772",
+                "3.2226886",
+                "6.5842120",
+                "3.2921060"
+            ]
+        },
+        {
+            "angular_momentum": [
+                2
+            ],
+            "coefficients": [
+                [
+                    "29.70100072",
+                    "5.53996847",
+                    "19.12219811",
+                    "2.43637543"
+                ]
+            ],
+            "ecp_type": "scalar_ecp",
+            "r_exponents": [
+                2,
+                2,
+                2,
+                2
+            ],
+            "gaussian_exponents": [
+                "4.6584472",
+                "2.3292236",
+                "6.5842120",
+                "3.2921060"
+            ]
+        }
+    ], 
+    "ecp_electrons": 28
 }

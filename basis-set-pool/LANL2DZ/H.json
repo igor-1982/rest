@@ -1,0 +1,39 @@
+{
+    "electron_shells": [
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "19.2384000",
+                "2.8987000",
+                "0.6535000",
+                "0.1776000"
+            ],
+            "coefficients": [
+                [
+                    "0.0328280",
+                    "0.2312040",
+                    "0.8172260",
+                    "0.0000000"
+                ],
+                [
+                    "0.0000000",
+                    "0.0000000",
+                    "0.0000000",
+                    "1.0000000"
+                ]
+            ]
+        }
+    ],
+    "references": [
+        {
+            "reference_description": "LANL2DZ ECP",
+            "reference_keys": [
+                "dunning1977b"
+            ]
+        }
+    ]
+}
