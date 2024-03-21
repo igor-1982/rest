@@ -246,5 +246,94 @@
                 "andrae1990a"
             ]
         }
-    ]
+    ],
+    "ecp_potentials": [
+        {
+            "angular_momentum": [
+                3
+            ],
+            "coefficients": [
+                [
+                    "10.04672251"
+                ]
+            ],
+            "ecp_type": "scalar_ecp",
+            "r_exponents": [
+                2
+            ],
+            "gaussian_exponents": [
+                "1.78576984"
+            ]
+        },
+        {
+            "angular_momentum": [
+                0
+            ],
+            "coefficients": [
+                [
+                    "1499.28471073",
+                    "40.28210136",
+                    "-10.04672251"
+                ]
+            ],
+            "ecp_type": "scalar_ecp",
+            "r_exponents": [
+                2,
+                2,
+                2
+            ],
+            "gaussian_exponents": [
+                "14.76995900",
+                "7.38497940",
+                "1.78576984"
+            ]
+        },
+        {
+            "angular_momentum": [
+                1
+            ],
+            "coefficients": [
+                [
+                    "397.73300533",
+                    "19.31640586",
+                    "-10.04672251"
+                ]
+            ],
+            "ecp_type": "scalar_ecp",
+            "r_exponents": [
+                2,
+                2,
+                2
+            ],
+            "gaussian_exponents": [
+                "9.84948950",
+                "4.92474450",
+                "1.78576984"
+            ]
+        },
+        {
+            "angular_momentum": [
+                2
+            ],
+            "coefficients": [
+                [
+                    "101.32980526",
+                    "5.87343821",
+                    "-10.04672251"
+                ]
+            ],
+            "ecp_type": "scalar_ecp",
+            "r_exponents": [
+                2,
+                2,
+                2
+            ],
+            "gaussian_exponents": [
+                "6.09675640",
+                "3.04837820",
+                "1.78576984"
+            ]
+        }
+    ], 
+    "ecp_electrons": 60
 }

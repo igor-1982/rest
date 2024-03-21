@@ -2,7 +2,7 @@
     "electron_shells": [
         {
             "function_type": "gto",
-            "region": "",
+            "region": "valence",
             "angular_momentum": [
                 0
             ],
@@ -165,7 +165,7 @@
         },
         {
             "function_type": "gto",
-            "region": "",
+            "region": "valence",
             "angular_momentum": [
                 1
             ],
@@ -282,7 +282,7 @@
         },
         {
             "function_type": "gto_spherical",
-            "region": "",
+            "region": "valence",
             "angular_momentum": [
                 2
             ],
@@ -331,7 +331,7 @@
         },
         {
             "function_type": "gto_spherical",
-            "region": "",
+            "region": "valence",
             "angular_momentum": [
                 3
             ],
@@ -349,7 +349,7 @@
     ],
     "references": [
         {
-            "reference_description": "The cc-pVDZ basis set",
+            "reference_description": "cc-pVDZ",
             "reference_keys": [
                 "balabanov2005a",
                 "balabanov2006a"

@@ -1,0 +1,159 @@
+{
+    "electron_shells": [
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                0
+            ],
+            "exponents": [
+                "0.9615000",
+                "0.1819000",
+                "0.0657000"
+            ],
+            "coefficients": [
+                [
+                    "-0.5021546",
+                    "1.2342547",
+                    "0.0000000"
+                ],
+                [
+                    "0.0000000",
+                    "0.0000000",
+                    "1.0000000"
+                ]
+            ]
+        },
+        {
+            "function_type": "gto",
+            "region": "valence",
+            "angular_momentum": [
+                1
+            ],
+            "exponents": [
+                "1.9280000",
+                "0.2013000",
+                "0.0580000"
+            ],
+            "coefficients": [
+                [
+                    "-0.0712584",
+                    "1.0162966",
+                    "0.0000000"
+                ],
+                [
+                    "0.0000000",
+                    "0.0000000",
+                    "1.0000000"
+                ]
+            ]
+        }
+    ],
+    "references": [
+        {
+            "reference_description": "LANL2DZ ECP",
+            "reference_keys": [
+                "wadt1985a"
+            ]
+        },
+        {
+            "reference_description": "LANL2DZ ECP",
+            "reference_keys": [
+                "wadt1985a"
+            ]
+        }
+    ],
+    "ecp_potentials": [
+        {
+            "angular_momentum": [
+                2
+            ],
+            "coefficients": [
+                [
+                    "-10.0000000",
+                    "-63.8079837",
+                    "-22.8972174",
+                    "-8.0063232",
+                    "-0.8829345"
+                ]
+            ],
+            "ecp_type": "scalar_ecp",
+            "r_exponents": [
+                1,
+                2,
+                2,
+                2,
+                2
+            ],
+            "gaussian_exponents": [
+                "304.7291926",
+                "61.5299768",
+                "13.9259006",
+                "4.1463626",
+                "1.3715443"
+            ]
+        },
+        {
+            "angular_momentum": [
+                0
+            ],
+            "coefficients": [
+                [
+                    "3.0000000",
+                    "50.9705682",
+                    "143.8716460",
+                    "48.0055753",
+                    "14.0114180"
+                ]
+            ],
+            "ecp_type": "scalar_ecp",
+            "r_exponents": [
+                0,
+                1,
+                2,
+                2,
+                2
+            ],
+            "gaussian_exponents": [
+                "467.8437756",
+                "79.3992216",
+                "25.4035967",
+                "6.9954696",
+                "1.7860129"
+            ]
+        },
+        {
+            "angular_momentum": [
+                1
+            ],
+            "coefficients": [
+                [
+                    "5.0000000",
+                    "93.0595424",
+                    "266.7686329",
+                    "70.0725805",
+                    "17.2290839",
+                    "0.7105331"
+                ]
+            ],
+            "ecp_type": "scalar_ecp",
+            "r_exponents": [
+                0,
+                1,
+                2,
+                2,
+                2,
+                2
+            ],
+            "gaussian_exponents": [
+                "776.2717190",
+                "118.4992254",
+                "34.4107276",
+                "8.7859563",
+                "2.3406228",
+                "0.7398386"
+            ]
+        }
+    ], 
+    "ecp_electrons": 10
+}
