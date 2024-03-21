@@ -419,10 +419,6 @@ impl Molecule {
         let local_elem = local_element_checker(&ctrl.auxbas_path);
         //println!("local elements are {:?}", local_elem);
         //println!("ctrl elements are {:?}", ctrl_elem);
-<<<<<<< HEAD
-=======
-
->>>>>>> 206e933507964b749cbc3c79ad8016171c4000a0
         let etb_elem = get_etb_elem(geom, &ctrl.etb_start_atom_number);
 
         let elem_intersection = ctrl_elem.intersect(local_elem.clone());
