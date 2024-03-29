@@ -539,7 +539,7 @@ impl SCF {
         self.occupation = occupation;
         self.lumo = lumo;
         self.homo = homo;
-        println!("Occupation: {:?}, {:?}, {:?}, {}, {}",&self.homo,&self.lumo,&self.occupation,self.mol.num_state,self.mol.num_basis);
+        //println!("Occupation: {:?}, {:?}, {:?}, {}, {}",&self.homo,&self.lumo,&self.occupation,self.mol.num_state,self.mol.num_basis);
     }
     pub fn generate_density_matrix(&mut self) {
         let num_basis = self.mol.num_basis;
@@ -569,6 +569,8 @@ impl SCF {
                     })
                 });
             // prepare weighted eigenvalue matrix wC
+            //println!("debug: {:?}", nw);
+            //println!("debug: {:?}", &occ_s);
             weight_eigv.par_iter_columns_mut(0..nw).unwrap().zip(occ_s[0..nw].par_iter()).for_each(|(we,occ)| {
             //weight_eigv.data.chunks_exact_mut(weight_eigv.size[0]).zip(occ_s.iter()).for_each(|(we,occ)| {
                 we.iter_mut().for_each(|c| *c = *c*occ);

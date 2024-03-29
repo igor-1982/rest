@@ -703,6 +703,7 @@ impl Molecule {
                 num_elec[0] -= *necp as f64;
 
                 // import ecpbas and ecp for env
+                let ecp_ang_start = (ecp.len()-1) as i32;
                 for ecpcell in ecp.iter() {
                     let angl = ecpcell.angular_momentum[0];
                     let coeffs = &ecpcell.coefficients;
@@ -724,7 +725,7 @@ impl Molecule {
                         }
                         let mut ecp_coeff_start = env.len() as i32;
                         let mut tmp_ecpbas_vec: Vec<i32> = vec![atm_index as i32, 
-                                    if angl==4 {-1} else {angl},
+                                    if angl==ecp_ang_start {-1} else {angl},
                                     num_exp,
                                     r_exponents,
                                     0,
@@ -767,7 +768,7 @@ impl Molecule {
             cur_op = String::from("kinetic");
         } else if op_name == String::from("ecp") {
             cint_data.cint1e_ecp_optimizer_rust();
-            cur_op = String::from("kinetic");
+            cur_op = String::from("ecp");
         } else if op_name == String::from("nuclear") {
             cint_data.cint1e_nuc_optimizer_rust();
         } else {

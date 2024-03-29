@@ -1,10 +1,12 @@
 use tensors::{MatrixFull, BasicMatrix};
+use crate::constants::{F_SHELL, KR_SHELL, NELE_IN_SHELLS, SPECIES_INFO, S_SHELL, XE_SHELL};
 use crate::molecule_io::Molecule;
 use crate::ctrl_io::InputKeywords;
 use crate::geom_io::{GeomCell, formated_element_name};
 use crate::scf_io::scf;
 use crate::utilities;
 use std::collections::HashMap;
+
 
 pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
     //let mut elem_name: Vec<String> = vec![];
@@ -29,7 +31,7 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
             atom_ctrl.eri_type = String::from("ri_v");
             atom_ctrl.num_threads = Some(mol.ctrl.num_threads.unwrap());
             atom_ctrl.mixer = "diis".to_string();
-            atom_ctrl.initial_guess = "hcore".to_string();
+            atom_ctrl.initial_guess = "vsap".to_string();
             atom_ctrl.print_level = 1;
             atom_ctrl.atom_sad = true;
             atom_ctrl.charge = 0.0_f64;
@@ -158,6 +160,34 @@ pub fn cut_ecp_occ(occ: Vec<f64>, num_ecp: usize) -> Vec<f64> {
 }
 
 pub fn generate_occupation(elem: &String,num_basis: usize, num_ecp: usize) -> ([Vec<f64>;2],[usize;2],[usize;2]) {
+    generate_occupation_v01(elem,num_basis, num_ecp)
+}
+
+pub fn generate_occupation_v02(elem: &String,num_basis: usize, num_ecp: usize) -> ([Vec<f64>;2],[usize;2],[usize;2]) {
+    let frozen_orb = num_ecp/2;
+    let num_elec = SPECIES_INFO.get(&elem.as_str()).unwrap().1;
+    let mut occ_o: Vec<f64> = vec![];
+    let mut rest_elem = num_elec;
+    NELE_IN_SHELLS.iter().for_each(|x| {
+        let num_orbs = (x/2.0) as usize;
+        if rest_elem >= *x {
+            occ_o.extend(vec![2.0; num_orbs]);
+            rest_elem -= x;
+        } else if rest_elem < *x && rest_elem >= 1.0 {
+            let num_elec_per_orb = rest_elem / (num_orbs as f64);
+            occ_o.extend(vec![num_elec_per_orb; num_orbs]);
+            rest_elem = -1.0;
+        }
+    });
+    let num_occ_o = occ_o.len();
+    let mut occ_a = cut_ecp_occ(occ_o,num_ecp);
+    let num_occ_a = occ_a.len();
+    occ_a.extend(vec![0.0;frozen_orb+num_basis-num_occ_o]);
+    println!("{:?}", &occ_a);
+    ([occ_a, vec![0.0;num_occ_a]], [num_occ_a-1, 0], [num_occ_a, 0])
+}
+
+pub fn generate_occupation_v01(elem: &String,num_basis: usize, num_ecp: usize) -> ([Vec<f64>;2],[usize;2],[usize;2]) {
     let frozen_orb = num_ecp/2;
     match &formated_element_name(elem)[..] {
         "H" => {
@@ -428,6 +458,20 @@ pub fn generate_occupation(elem: &String,num_basis: usize, num_ecp: usize) -> ([
             let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0],num_ecp);
             occ_a.extend(vec![0.0;frozen_orb+num_basis-18]);
             ([occ_a,vec![0.0;frozen_orb+num_basis]],[17-frozen_orb,0],[18-frozen_orb,0])
+        },
+        // for 5d elements
+        "Os" => {
+            let mut occ_o: Vec<f64> = vec![];
+            occ_o.extend_from_slice(&XE_SHELL);
+            occ_o.extend_from_slice(&F_SHELL);
+            occ_o.extend_from_slice(&[1.6;5]);
+            let num_occ_o = occ_o.len();
+            println!("{:?}", &occ_o);
+            let mut occ_a = cut_ecp_occ(occ_o,num_ecp);
+            let num_occ_a = occ_a.len();
+            println!("{:?}", &occ_a);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-num_occ_o]);
+            ([occ_a, vec![0.0;num_occ_a]], [num_occ_a-1, 0], [num_occ_a, 0])
         },
         
         _ => ([vec![],vec![]],[0,0],[0,0])

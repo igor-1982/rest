@@ -246,3 +246,19 @@ pub const NUC_ECP:  i32 = 4;
 //pub const ATM_PRT_ZETA: usize = 3;
 
 pub const ENV_PRT_START: usize = 20;
+
+
+// SAD and ECP configuration
+pub const S_SHELL: [f64; 1] = [2.0];
+pub const P_SHELL: [f64; 3] = [2.0, 2.0, 2.0];
+pub const D_SHELL: [f64; 5] = [2.0, 2.0, 2.0, 2.0, 2.0];
+pub const F_SHELL: [f64; 7] = [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
+pub const XE_SHELL: [f64; 27] =
+//   1s   2s   2p   2p   2p   3s   3p   3p   3p   4s   3d   3d   3d   3d   3d   4p   4p   4p   5s   4d   4d   4d   4d   4d   5p   5p   5p  
+    [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
+pub const KR_SHELL: [f64; 18] =
+//   1s   2s   2p   2p   2p   3s   3p   3p   3p   4s   3d   3d   3d   3d   3d   4p   4p   4p  
+    [2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0];
+
+//                                    1s   2s   2p   3s   3p   4s   3d    4p   5s   4d    5p   4f    5d    6s   6p 
+pub const NELE_IN_SHELLS: [f64; 15] = [2.0, 2.0, 6.0, 2.0, 6.0, 2.0, 10.0, 6.0, 2.0, 10.0, 6.0, 14.0, 10.0, 2.0, 6.0];
