@@ -209,14 +209,17 @@ impl Molecule {
 
         // frozen-core pt2 and rpa are not yet implemented.
         let mut start_mo = count_frozen_core_states(ctrl.frozen_core_postscf, &geom.elem);
+        let ecp_orbs = ecp_electrons/2;
 
-        if start_mo < ecp_electrons {
-            println!("The counted start_mo for the frozen-core post-scf methods {} is smaller than the number of ecp electrons {}. Take the start_mo = ecp_electrons",
-                    start_mo, ecp_electrons);
+        if start_mo < ecp_orbs {
+            println!("The counted start_mo for the frozen-core post-scf methods {} is smaller than the number of ecp orbitals {}. Take the start_mo = ecp_orbitals",
+                    start_mo, ecp_orbs);
             //start_mo = ecp_electrons;
             start_mo = 0;
         } else {
-            start_mo = start_mo - ecp_electrons
+            println!("The counted start_mo for the frozen-core post-scf methods {} is larger than the number of ecp orbitals {}. Take the start_mo -= ecp_orbitals",
+                    start_mo, ecp_orbs);
+            start_mo = start_mo - ecp_orbs
         }
 
         if ctrl.print_level>0 {
