@@ -168,8 +168,9 @@ pub struct InputKeywords {
     // Keywords for sad initial guess
     #[pyo3(get, set)]
     pub atom_sad: bool,
-    // Keywords for DeepPot
     pub occupation_type: OCCType,
+    pub frac_tolerant: f64,
+    // Keywords for DeepPot
     #[pyo3(get, set)]
     pub deep_pot: bool,
     // Keywords for parallism
@@ -267,7 +268,8 @@ impl InputKeywords {
             //use_dft: false,
             //dft_type: None,
             deep_pot: false,
-            occupation_type: OCCType::INTEGER
+            occupation_type: OCCType::INTEGER,
+            frac_tolerant: 1.0e-3,
         }
     }
 
@@ -779,6 +781,11 @@ impl InputKeywords {
                         }
                     },
                     other => OCCType::INTEGER,
+                };
+                tmp_input.frac_tolerant = match tmp_ctrl.get("frac_tolerant").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(1.0e-3)},
+                    serde_json::Value::Number(tmp_num) => {tmp_num.as_f64().unwrap_or(1.0e-3)},
+                    other => {1.0e-3}
                 };
                 // ================================================
                 //  Keywords associated with the post-SCF analyais

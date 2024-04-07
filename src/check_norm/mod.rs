@@ -10,7 +10,7 @@ pub enum OCCType {
     ATMSAD,
 }
 
-pub fn generate_occupation_frac_occ(mol: &Molecule, scftype: &SCFType, eigenvalues: &[Vec<f64>;2]) -> ([Vec<f64>;2],[usize;2],[usize;2]) {
+pub fn generate_occupation_frac_occ(mol: &Molecule, scftype: &SCFType, eigenvalues: &[Vec<f64>;2], tolerant: f64) -> ([Vec<f64>;2],[usize;2],[usize;2]) {
     let num_state = mol.num_state;
     let spin_channel = mol.ctrl.spin_channel;
     let num_elec = &mol.num_elec;
@@ -29,7 +29,7 @@ pub fn generate_occupation_frac_occ(mol: &Molecule, scftype: &SCFType, eigenvalu
             let mut frac_orb_list: Vec<usize> = vec![];
             // determine which orbitals are degenerated with HOMO
             mo_energy.iter().enumerate().for_each(|(i, orb_ene)| {
-                if (orb_ene - tmp_homo).abs() < 1.0e-3 {
+                if (orb_ene - tmp_homo).abs() < tolerant {
                     frac_orb_list.push(i)
                 };
             });

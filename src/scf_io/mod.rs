@@ -432,7 +432,7 @@ impl SCF {
             },
             OCCType::FRAC => {
                 //println!("debug generate_occupation_frac");
-                let (occ,homo,lumo) = generate_occupation_frac_occ(&self.mol,&self.scftype, &self.eigenvalues);
+                let (occ,homo,lumo) = generate_occupation_frac_occ(&self.mol,&self.scftype, &self.eigenvalues, self.mol.ctrl.frac_tolerant);
                 self.occupation = occ;
                 self.homo = homo;
                 self.lumo = lumo;
