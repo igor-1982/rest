@@ -10,7 +10,7 @@ use self::sad::initial_guess_from_sad;
 //use crate::initial_guess::*;
 pub mod sap;
 pub mod sad;
-
+pub mod enxc;
 
 
 pub fn initial_guess(scf_data: &mut SCF) {
@@ -22,6 +22,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
         //scf_data.generate_hf_hamiltonian();
         if scf_data.mol.ctrl.print_level>0 {println!("Initial guess energy: {:16.8}", scf_data.evaluate_hf_total_energy())};
         scf_data.diagonalize_hamiltonian();
+        scf_data.generate_occupation();
         scf_data.generate_density_matrix();
 
     // import the eigenvalues and eigen vectors from a hdf5 file directly
@@ -31,6 +32,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
                 let (eigenvectors, eigenvalues) = initial_guess_from_hdf5chk(&scf_data.mol);
                 scf_data.eigenvalues = eigenvalues;
                 scf_data.eigenvectors = eigenvectors;
+                scf_data.generate_occupation();
                 scf_data.generate_density_matrix();
             } else {
                 panic!("WARNNING: at present only hdf5 type check file is supported");
@@ -45,6 +47,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
             scf_data.hamiltonian = [init_fock,init_fock_beta];
         };
         scf_data.diagonalize_hamiltonian();
+        scf_data.generate_occupation();
         scf_data.generate_density_matrix();
         //scf_data.generate_hf_hamiltonian();
     } else if scf_data.mol.ctrl.initial_guess.eq(&"sad") {
@@ -60,6 +63,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
         if scf_data.mol.ctrl.print_level>0 {println!("Initial guess HF energy: {:16.8}", scf_data.scf_energy)};
 
         scf_data.diagonalize_hamiltonian();
+        scf_data.generate_occupation();
         scf_data.generate_density_matrix();
         //scf_data.generate_hf_hamiltonian();
         //if scf_data.mol.ctrl.print_level>0 {println!("Initial guess HF energy: {:16.8}", scf_data.scf_energy)};
@@ -74,6 +78,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
             scf_data.hamiltonian = [init_fock,init_fock_beta];
         };
         scf_data.diagonalize_hamiltonian();
+        scf_data.generate_occupation();
         scf_data.generate_density_matrix();
         scf_data.generate_hf_hamiltonian();
         let homo_id = scf_data.homo[0];

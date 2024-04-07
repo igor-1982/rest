@@ -1,3 +1,4 @@
+use crate::check_norm::{self, generate_occupation_frac_occ, generate_occupation_integer, generate_occupation_sad, OCCType};
 //use clap::value_parser;
 //use pyo3::{pyclass, pymethods, pyfunction};
 //use tensors::matrix_blas_lapack::{_dgemm, _dinverse, _dsymm};
@@ -37,7 +38,7 @@ mod pyrest_scf_io;
 
 //use crate::basis_io::ecp::test_ecp;
 
-use libc::_SC_AIO_LISTIO_MAX;
+//use libc::{abs, _SC_AIO_LISTIO_MAX};
 //use clap::value_parser;
 use pyo3::{pyclass, pymethods, pyfunction};
 use tensors::matrix_blas_lapack::{_dgemm, _dinverse, _dsymm, _dsyrk, _dgemv, _power, _power_rayon};
@@ -124,7 +125,6 @@ pub enum SCFType {
 }
 
 
-
 impl SCF {
     pub fn init_scf(mol: &Molecule) -> SCF {
         let mut scf_data = SCF {
@@ -181,7 +181,7 @@ impl SCF {
             },
         };
 
-        scf_data.generate_occupation();
+        //scf_data.generate_occupation();
 
         //if scf_data.mol.ctrl.use_auxbas {scf_data.mol.initialize_auxbas()};
         //if scf_data.mol.ctrl.print_level>0 {
@@ -350,6 +350,7 @@ impl SCF {
                 new_scf.hamiltonian = [init_fock,init_fock_beta];
             };
             new_scf.diagonalize_hamiltonian();
+            new_scf.generate_occupation();
             new_scf.generate_density_matrix();
 
             new_scf.grids = Some(prune_by_rho(&mut new_scf.grids.unwrap(), &new_scf.density_matrix, new_scf.mol.spin_channel));
@@ -414,134 +415,184 @@ impl SCF {
 
 
     pub fn generate_occupation(&mut self) {
-        if self.mol.ctrl.atom_sad {
-            //self.generate_occupation_sad()
-            //self.generate_occupation_integer()
-            let (occ,homo,lumo) = crate::initial_guess::sad::generate_occupation(self.mol.geom.elem.get(0).unwrap(),self.mol.num_state, self.mol.ecp_electrons);
-            self.occupation = occ;
-            self.homo = homo;
-            self.lumo = lumo;
-            //println!("{:?}",self.occupation)
-        } else {
-            self.generate_occupation_integer()
-        }
-    }
-
-    pub fn generate_occupation_sad(&mut self) {
-        let num_state = self.mol.num_state;
-        let spin_channel = self.mol.ctrl.spin_channel;
-        let num_elec = &self.mol.num_elec;
-        let mut occupation:[Vec<f64>;2] = [vec![],vec![]];
-        let mut lumo:[usize;2] = [0,0];
-        let mut homo:[usize;2] = [0,0];
-        //println!("{:?}", num_elec);
-
-        // by default, it should be spin unpolarization with RHF
-        let occ_num = 2.0;
-        let i_spin = 0_usize;
-        occupation[i_spin] = vec![0.0;num_state];
-        let mut left_elec_spin = num_elec[i_spin+1];
-        let mut index_i = 0_usize;
-        while  left_elec_spin > 0.0 && index_i<=num_state {
-            occupation[i_spin][index_i] = (left_elec_spin*occ_num).min(occ_num);
-            index_i += 1;
-            left_elec_spin -= 1.0;
-        }
-        // make sure there is at least one LUMO
-        if index_i > num_state-1 && left_elec_spin>0.0 {
-            panic!("Error:: the number of molecular orbitals is smaller than the number of electrons in the {}-spin channel\n num_state: {}; num_elec_alpha: {}", 
-                   i_spin,num_state, num_elec[i_spin]);
-        } else {
-            lumo[i_spin] = index_i;
-            homo[i_spin] = index_i-1;
-        }; 
-
-        //println!("{:?}", num_elec);
-        //println!("{:?}", &occupation);
-        self.occupation = occupation;
-        self.lumo = lumo;
-        self.homo = homo;
-
-    }
-
-    pub fn generate_occupation_integer(&mut self) {
-        let num_state = self.mol.num_state;
-        let spin_channel = self.mol.ctrl.spin_channel;
-        let num_elec = &self.mol.num_elec;
-        let mut occupation:[Vec<f64>;2] = [vec![],vec![]];
-        let mut lumo:[usize;2] = [0,0];
-        let mut homo:[usize;2] = [0,0];
-        //let occ_num = 
-        match self.scftype {
-            SCFType::RHF => {
-                let occ_num = 2.0;
-                let i_spin = 0_usize;
-                occupation[i_spin] = vec![0.0;num_state];
-                let mut left_elec_spin = num_elec[i_spin+1];
-                let mut index_i = 0_usize;
-                while  left_elec_spin > 0.0 && index_i<=num_state {
-                    occupation[i_spin][index_i] = (left_elec_spin*occ_num).min(occ_num);
-                    index_i += 1;
-                    left_elec_spin -= 1.0;
-                }
-                // make sure there is at least one LUMO
-                if index_i > num_state-1 && left_elec_spin>0.0 {
-                    panic!("Error:: the number of molecular orbitals is smaller than the number of electrons in the {}-spin channel\n num_state: {}; num_elec_alpha: {}", 
-                           i_spin,num_state, num_elec[i_spin]);
-                } else {
-                    lumo[i_spin] = index_i;
-                    homo[i_spin] = index_i-1;
-                }; 
+        match self.mol.ctrl.occupation_type {
+            OCCType::INTEGER => {
+                //println!("debug generate_occupation_integer");
+                let (occ,homo,lumo) = generate_occupation_integer(&self.mol,&self.scftype);
+                self.occupation = occ;
+                self.homo = homo;
+                self.lumo = lumo;
             },
-            SCFType::ROHF => {
-                let occ_num = 1.0;
-                (0..2).for_each(|i_spin| {
-                    occupation[i_spin] = vec![0.0;num_state];
-                    let mut left_elec_spin = num_elec[i_spin+1];
-                    let mut index_i = 0_usize;
-                    while  left_elec_spin > 0960100.0 && index_i<=num_state {
-                        occupation[i_spin][index_i] = (left_elec_spin*occ_num).min(occ_num);
-                        index_i += 1;
-                        left_elec_spin -= 1.0;
-                    }
-                    // make sure there is at least one LUMO
-                    if index_i > num_state-1 && left_elec_spin>0.0 {
-                        panic!("Error:: the number of molecular orbitals is smaller than the number of electrons in the {}-spin channel\n num_state: {}; num_elec_alpha: {}", 
-                               i_spin,num_state, num_elec[i_spin]);
-                    } else {
-                        lumo[i_spin] = index_i;
-                        homo[i_spin] = index_i-1;
-                    }; 
-                });
+            OCCType::ATMSAD => {
+                //println!("debug generate_occupation_sad");
+                let (occ,homo,lumo) = generate_occupation_sad(self.mol.geom.elem.get(0).unwrap(),self.mol.num_state, self.mol.ecp_electrons);
+                self.occupation = occ;
+                self.homo = homo;
+                self.lumo = lumo;
             },
-            SCFType::UHF => {
-                let occ_num = 1.0;
-                (0..2).for_each(|i_spin| {
-                    occupation[i_spin] = vec![0.0;num_state];
-                    let mut left_elec_spin = num_elec[i_spin+1];
-                    let mut index_i = 0_usize;
-                    while  left_elec_spin > 0.0 && index_i<=num_state {
-                        occupation[i_spin][index_i] = (left_elec_spin*occ_num).min(occ_num);
-                        index_i += 1;
-                        left_elec_spin -= 1.0;
-                    }
-                    // make sure there is at least one LUMO
-                    if index_i > num_state-1 && left_elec_spin>0.0 {
-                        panic!("Error:: the number of molecular orbitals is smaller than the number of electrons in the {}-spin channel\n num_state: {}; num_elec_alpha: {}", 
-                               i_spin,num_state, num_elec[i_spin]);
-                    } else {
-                        lumo[i_spin] = index_i;
-                        homo[i_spin] = if index_i==0 {0} else {index_i-1};
-                    }; 
-                });
+            OCCType::FRAC => {
+                //println!("debug generate_occupation_frac");
+                let (occ,homo,lumo) = generate_occupation_frac_occ(&self.mol,&self.scftype, &self.eigenvalues);
+                self.occupation = occ;
+                self.homo = homo;
+                self.lumo = lumo;
             }
-        };
-        self.occupation = occupation;
-        self.lumo = lumo;
-        self.homo = homo;
-        //println!("Occupation: {:?}, {:?}, {:?}, {}, {}",&self.homo,&self.lumo,&self.occupation,self.mol.num_state,self.mol.num_basis);
+        }
+        //if self.mol.ctrl.atom_sad {
+        //    //self.generate_occupation_sad()
+        //    //self.generate_occupation_integer()
+        //    let (occ,homo,lumo) = generate_occupation_sad(self.mol.geom.elem.get(0).unwrap(),self.mol.num_state, self.mol.ecp_electrons);
+        //    self.occupation = occ;
+        //    self.homo = homo;
+        //    self.lumo = lumo;
+        //    //println!("{:?}",self.occupation)
+        //} else {
+        //    let (occ,homo,lumo) = generate_occupation_integer(&self.mol,&self.scftype);
+        //    self.occupation = occ;
+        //    self.homo = homo;
+        //    self.lumo = lumo;
+        //}
     }
+
+    //pub fn generate_occupation_frac_occ(&mut self) {
+    //    let num_state = self.mol.num_state;
+    //    let spin_channel = self.mol.ctrl.spin_channel;
+    //    let num_elec = &self.mol.num_elec;
+    //    let mut occupation:[Vec<f64>;2] = [vec![],vec![]];
+    //    let mut lumo:[usize;2] = [0,0];
+    //    let mut homo:[usize;2] = [0,0];
+    //    //let occ_num = 
+    //    match self.scftype {
+    //        SCFType::RHF => {
+    //            let occ_num = 2.0;
+    //            let i_spin = 0_usize;
+
+    //            let num_occs = (self.mol.num_elec[0] as usize + 1)/2;
+    //            let mo_energy = &self.eigenvalues[0];
+    //            let tmp_homo = mo_energy[num_occs-1];
+    //            let tmp_lumo = mo_energy[num_occs];
+    //            let mut frac_orb_list: Vec<usize> = vec![];
+    //            mo_energy.iter().enumerate().for_each(|(i, orb_ene)| {
+    //                if (orb_ene - tmp_homo).abs() < 1.0e-3 {
+    //                    frac_orb_list.push(i)
+    //                };
+    //            })  ;
+    //            occupation[i_spin] = vec![0.0;num_state];
+    //            occupation[i_spin].iter_mut().enumerate().for_each(|(i,occ_num)| {
+    //                if ! frac_orb_list.contains(&i) {
+    //                    *occ_num = occ_num;
+    //                }
+    //            });
+    //            //occupation[i_spin].iter().fold(init, f)
+    //            //Stop here IGOR
+
+    //            let mut left_elec_spin = num_elec[i_spin+1];
+    //            let mut index_i = 0_usize;
+    //            while  left_elec_spin > 0.0 && index_i<=num_state {
+    //                occupation[i_spin][index_i] = (left_elec_spin*occ_num).min(occ_num);
+    //                index_i += 1;
+    //                left_elec_spin -= 1.0;
+    //            }
+    //            // make sure there is at least one LUMO
+    //            if index_i > num_state-1 && left_elec_spin>0.0 {
+    //                panic!("Error:: the number of molecular orbitals is smaller than the number of electrons in the {}-spin channel\n num_state: {}; num_elec_alpha: {}", 
+    //                       i_spin,num_state, num_elec[i_spin]);
+    //            } else {
+    //                lumo[i_spin] = index_i;
+    //                homo[i_spin] = index_i-1;
+    //            }; 
+    //        },
+    //        _ => {}
+    //        //SCFType::ROHF => {
+    //        //    let occ_num = 1.0;
+    //        //    (0..2).for_each(|i_spin| {
+    //        //        occupation[i_spin] = vec![0.0;num_state];
+    //        //        let mut left_elec_spin = num_elec[i_spin+1];
+    //        //        let mut index_i = 0_usize;
+    //        //        while  left_elec_spin > 0960100.0 && index_i<=num_state {
+    //        //            occupation[i_spin][index_i] = (left_elec_spin*occ_num).min(occ_num);
+    //        //            index_i += 1;
+    //        //            left_elec_spin -= 1.0;
+    //        //        }
+    //        //        // make sure there is at least one LUMO
+    //        //        if index_i > num_state-1 && left_elec_spin>0.0 {
+    //        //            panic!("Error:: the number of molecular orbitals is smaller than the number of electrons in the {}-spin channel\n num_state: {}; num_elec_alpha: {}", 
+    //        //                   i_spin,num_state, num_elec[i_spin]);
+    //        //        } else {
+    //        //            lumo[i_spin] = index_i;
+    //        //            homo[i_spin] = index_i-1;
+    //        //        }; 
+    //        //    });
+    //        //},
+    //        //SCFType::UHF => {
+    //        //    let occ_num = 1.0;
+    //        //    (0..2).for_each(|i_spin| {
+    //        //        occupation[i_spin] = vec![0.0;num_state];
+    //        //        let mut left_elec_spin = num_elec[i_spin+1];
+    //        //        let mut index_i = 0_usize;
+    //        //        while  left_elec_spin > 0.0 && index_i<=num_state {
+    //        //            occupation[i_spin][index_i] = (left_elec_spin*occ_num).min(occ_num);
+    //        //            index_i += 1;
+    //        //            left_elec_spin -= 1.0;
+    //        //        }
+    //        //        // make sure there is at least one LUMO
+    //        //        if index_i > num_state-1 && left_elec_spin>0.0 {
+    //        //            panic!("Error:: the number of molecular orbitals is smaller than the number of electrons in the {}-spin channel\n num_state: {}; num_elec_alpha: {}", 
+    //        //                   i_spin,num_state, num_elec[i_spin]);
+    //        //        } else {
+    //        //            lumo[i_spin] = index_i;
+    //        //            homo[i_spin] = if index_i==0 {0} else {index_i-1};
+    //        //        }; 
+    //        //    });
+    //        //}
+    //    };
+    //    self.occupation = occupation;
+    //    self.lumo = lumo;
+    //    self.homo = homo;
+    //    //println!("Occupation: {:?}, {:?}, {:?}, {}, {}",&self.homo,&self.lumo,&self.occupation,self.mol.num_state,self.mol.num_basis);
+    //}
+
+
+    //pub fn generate_occupation_sad(&mut self) {
+    //    let num_state = self.mol.num_state;
+    //    let spin_channel = self.mol.ctrl.spin_channel;
+    //    let num_elec = &self.mol.num_elec;
+    //    let mut occupation:[Vec<f64>;2] = [vec![],vec![]];
+    //    let mut lumo:[usize;2] = [0,0];
+    //    let mut homo:[usize;2] = [0,0];
+    //    //println!("{:?}", num_elec);
+
+    //    // by default, it should be spin unpolarization with RHF
+    //    let occ_num = 2.0;
+    //    let i_spin = 0_usize;
+    //    occupation[i_spin] = vec![0.0;num_state];
+    //    let mut left_elec_spin = num_elec[i_spin+1];
+    //    let mut index_i = 0_usize;
+    //    while  left_elec_spin > 0.0 && index_i<=num_state {
+    //        occupation[i_spin][index_i] = (left_elec_spin*occ_num).min(occ_num);
+    //        index_i += 1;
+    //        left_elec_spin -= 1.0;
+    //    }
+    //    // make sure there is at least one LUMO
+    //    if index_i > num_state-1 && left_elec_spin>0.0 {
+    //        panic!("Error:: the number of molecular orbitals is smaller than the number of electrons in the {}-spin channel\n num_state: {}; num_elec_alpha: {}", 
+    //               i_spin,num_state, num_elec[i_spin]);
+    //    } else {
+    //        lumo[i_spin] = index_i;
+    //        homo[i_spin] = index_i-1;
+    //    }; 
+
+    //    //println!("{:?}", num_elec);
+    //    //println!("{:?}", &occupation);
+    //    self.occupation = occupation;
+    //    self.lumo = lumo;
+    //    self.homo = homo;
+
+    //}
+
+
     pub fn generate_density_matrix(&mut self) {
+
         let num_basis = self.mol.num_basis;
         let num_state = self.mol.num_state;
         let spin_channel = self.mol.spin_channel;
@@ -4032,6 +4083,7 @@ pub fn scf(mol:Molecule) -> anyhow::Result<SCF> {
 
     // now prepare the input density matrix for the first iteration and initialize the records
     scf_data.diagonalize_hamiltonian();
+    scf_data.generate_occupation();
     scf_data.generate_density_matrix();
     scf_records.update(&scf_data);
 
@@ -4045,6 +4097,7 @@ pub fn scf(mol:Molecule) -> anyhow::Result<SCF> {
 
         scf_data.diagonalize_hamiltonian();
         let dt1_2 = time::Local::now();
+        scf_data.generate_occupation();
         scf_data.generate_density_matrix();
         let dt1_3 = time::Local::now();
         scf_converge = scf_data.check_scf_convergence(&scf_records);
@@ -4080,6 +4133,19 @@ pub fn scf(mol:Molecule) -> anyhow::Result<SCF> {
         }
         if scf_data.mol.ctrl.print_level>3 {
             scf_data.formated_eigenvectors();
+        }
+        match scf_data.mol.ctrl.occupation_type {
+            OCCType::FRAC => {
+                //println!("debug: final energy evaluation after occupation_type = frac");
+                let (occupation, homo, lumo) = check_norm::generate_occupation_integer(&scf_data.mol, &scf_data.scftype);
+                scf_data.occupation = occupation;
+                scf_data.homo = homo;
+                scf_data.lumo = lumo;
+                scf_data.generate_density_matrix();
+                scf_data.generate_hf_hamiltonian();
+
+            }
+            _ => {}
         }
         // not yet implemented. Just an empty subroutine
         scf_data.save_chkfile();

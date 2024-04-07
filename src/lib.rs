@@ -53,6 +53,7 @@ extern crate anyhow;
 extern crate lazy_static;
 pub mod basis_io;
 pub mod constants;
+pub mod check_norm;
 pub mod ctrl_io;
 pub mod dft;
 pub mod geom_io;

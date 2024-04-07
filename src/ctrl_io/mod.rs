@@ -5,6 +5,7 @@ use serde::{Deserialize,Serialize};
 use std::{fs, sync::Arc};
 use crate::{geom_io::{GeomCell,MOrC, GeomUnit}, dft::{DFAFamily, DFA4REST}, utilities};
 use rayon::ThreadPoolBuilder;
+use crate::check_norm::OCCType;
 
 use serde_json;
 use toml;
@@ -167,6 +168,10 @@ pub struct InputKeywords {
     // Keywords for sad initial guess
     #[pyo3(get, set)]
     pub atom_sad: bool,
+    // Keywords for DeepPot
+    pub occupation_type: OCCType,
+    #[pyo3(get, set)]
+    pub deep_pot: bool,
     // Keywords for parallism
     #[pyo3(get, set)]
     pub num_threads: Option<usize>
@@ -261,6 +266,8 @@ impl InputKeywords {
             // Derived keywords of identifying the method used
             //use_dft: false,
             //dft_type: None,
+            deep_pot: false,
+            occupation_type: OCCType::INTEGER
         }
     }
 
@@ -739,8 +746,6 @@ impl InputKeywords {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase()},
                     other => {String::from("vsap")},
                 };
-
-
                 tmp_input.noiter = match tmp_ctrl.get("noiter").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
                     serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
@@ -755,6 +760,25 @@ impl InputKeywords {
                     serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
                     serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
                     other => false,
+                };
+                // ================================================
+                //  Keywords associated with the elec occupation 
+                // ================================================
+                tmp_input.occupation_type = 
+                match tmp_ctrl.get("occupation_type").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_type) => {
+                        let tmp_occupation_type = tmp_type.to_lowercase();
+                        if tmp_occupation_type.eq("integer") {
+                            OCCType::INTEGER
+                        } else if tmp_occupation_type.eq("sad") {
+                            OCCType::ATMSAD
+                        } else if tmp_occupation_type.eq("frac") {
+                            OCCType::FRAC
+                        } else {
+                            OCCType::INTEGER
+                        }
+                    },
+                    other => OCCType::INTEGER,
                 };
                 // ================================================
                 //  Keywords associated with the post-SCF analyais
@@ -812,6 +836,11 @@ impl InputKeywords {
                         tmp_indices 
                     },
                     other => {vec![]},
+                };
+                tmp_input.deep_pot = match tmp_ctrl.get("deep_potential").unwrap_or(&serde_json::Value::Null) {
+                //tmp_input.use_ri_symm = match tmp_ctrl.get("use_ri_symm").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::Bool(tmp_str) => {*tmp_str},
+                    other => {false},
                 };
                 //tmp_input.output_wfn_in_real_space = match tmp_ctrl.get("output_wfn_in_real_space").unwrap_or(&serde_json::Value::Null) {
                 //    serde_json::Value::String(tmp_wfn) => {tmp_wfn.to_lowercase().parse().unwrap_or(0)},

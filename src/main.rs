@@ -65,6 +65,7 @@ mod utilities;
 mod molecule_io;
 mod scf_io;
 mod initial_guess;
+mod check_norm;
 mod ri_pt2;
 //mod grad;
 mod ri_rpa;
@@ -75,6 +76,7 @@ mod external_libs;
 //use rayon;
 #[global_allocator]
 static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
+use crate::initial_guess::enxc::effective_nxc_matrix;
 //static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 //use crate::grad::rhf::Gradient;
 use crate::initial_guess::sap::*;
@@ -133,6 +135,15 @@ fn main() -> anyhow::Result<()> {
 
 
     //test_ecp();
+    if mol.ctrl.deep_pot {
+        //let mut scf_data = scf_io::SCF::build(&mut mol);
+        let mut effective_hamiltonian = mol.int_ij_matrixupper(String::from("hcore"));
+        effective_hamiltonian.formated_output(5, "full");
+        let effective_nxc = effective_nxc_matrix(&mut mol);
+        effective_nxc.formated_output(5, "full");
+        effective_hamiltonian.data.iter_mut().zip(effective_nxc.data.iter()).for_each(|(to,from)| {*to += from});
+        return Ok(())
+    }
 
     let mut scf_data = scf_io::scf(mol).unwrap();
 

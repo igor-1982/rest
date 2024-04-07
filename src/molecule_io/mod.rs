@@ -757,11 +757,8 @@ impl Molecule {
     #[inline]
     pub fn int_ij_matrixupper(&self,op_name: String) -> MatrixUpper<f64> {
         let mut cur_op = op_name.clone();
-        let mut cint_data = if let Some(ecpbas) = &self.cint_ecpbas {
-            self.initialize_cint(false)
-        } else {
-            self.initialize_cint(false)
-        };
+        let mut cint_data = self.initialize_cint(false);
+
         if op_name == String::from("ovlp") {
             cint_data.cint1e_ovlp_optimizer_rust();
         } else if op_name == String::from("kinetic") {
