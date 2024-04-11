@@ -32,7 +32,7 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
             atom_ctrl.eri_type = String::from("ri_v");
             atom_ctrl.num_threads = Some(mol.ctrl.num_threads.unwrap());
             atom_ctrl.mixer = "diis".to_string();
-            atom_ctrl.initial_guess = "hcore".to_string();
+            atom_ctrl.initial_guess = "vsap".to_string();
             atom_ctrl.print_level = 1;
             atom_ctrl.atom_sad = true;
             atom_ctrl.occupation_type = OCCType::ATMSAD;

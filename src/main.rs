@@ -76,7 +76,7 @@ mod external_libs;
 //use rayon;
 #[global_allocator]
 static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
-use crate::initial_guess::enxc::effective_nxc_matrix;
+use crate::initial_guess::enxc::{effective_nxc_matrix, effective_nxc_tensors};
 //static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 //use crate::grad::rhf::Gradient;
 use crate::initial_guess::sap::*;
@@ -142,6 +142,12 @@ fn main() -> anyhow::Result<()> {
         let effective_nxc = effective_nxc_matrix(&mut mol);
         effective_nxc.formated_output(5, "full");
         effective_hamiltonian.data.iter_mut().zip(effective_nxc.data.iter()).for_each(|(to,from)| {*to += from});
+
+        let effective_nxc = effective_nxc_tensors(&mut mol);
+        effective_nxc.formated_output(5, "full");
+
+        //let mut ecp = mol.int_ij_matrixupper(String::from("ecp"));
+        //ecp.formated_output(5, "full");
         return Ok(())
     }
 
