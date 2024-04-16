@@ -213,13 +213,17 @@ impl Molecule {
         let ecp_orbs = ecp_electrons/2;
 
         if start_mo < ecp_orbs {
-            println!("The counted start_mo for the frozen-core post-scf methods {} is smaller than the number of ecp orbitals {}. Take the start_mo = ecp_orbitals",
+            if ctrl.print_level >= 1 {
+                println!("The counted start_mo for the frozen-core post-scf methods {} is smaller than the number of ecp orbitals {}. Take the start_mo = ecp_orbitals",
                     start_mo, ecp_orbs);
+            }
             //start_mo = ecp_electrons;
             start_mo = 0;
         } else {
-            println!("The counted start_mo for the frozen-core post-scf methods {} is larger than the number of ecp orbitals {}. Take the start_mo -= ecp_orbitals",
-                    start_mo, ecp_orbs);
+            if ctrl.print_level >= 1 {
+                println!("The counted start_mo for the frozen-core post-scf methods {} is larger than the number of ecp orbitals {}. Take the start_mo -= ecp_orbitals",
+                        start_mo, ecp_orbs);
+            }
             start_mo = start_mo - ecp_orbs
         }
 
@@ -576,7 +580,7 @@ impl Molecule {
         let ctrl_elem = ctrl_element_checker(geom);
         let local_elem = local_element_checker(&ctrl.basis_path);
         //println!("local elements are {:?}", local_elem);
-        println!("ctrl elements are {:?}", ctrl_elem);
+        //println!("ctrl elements are {:?}", ctrl_elem);
         let elem_intersection = ctrl_elem.intersect(local_elem.clone());
         let mut required_elem = vec![];
         for ctrl_item in ctrl_elem {

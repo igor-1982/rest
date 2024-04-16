@@ -305,7 +305,9 @@ impl InputKeywords {
                 };
                 if let Some(num_threads) = tmp_input.num_threads {
                     if tmp_input.print_level>0 {println!("The number of threads used for parallelism:      {}", num_threads)};
-                    rayon::ThreadPoolBuilder::new().num_threads(num_threads).build_global()?;
+                    // Now move the setting of rayon thread numbers to the main.rs
+                    //rayon::ThreadPoolBuilder::new().num_threads(num_threads);
+                    rayon::ThreadPoolBuilder::new().num_threads(num_threads).build_global().unwrap_or_else(|x| {println!("{:?}", &x)});
                     utilities::omp_set_num_threads_wrapper(num_threads);
                 } else {
                     utilities::omp_set_num_threads_wrapper(rayon::current_num_threads());

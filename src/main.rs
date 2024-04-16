@@ -118,6 +118,8 @@ use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa, save_chkfile
 //use crate::{post_scf_analysis::{rand_wf_real_space, cube_build, molden_build}, isdf::error_isdf, molecule_io::Molecule};
 
 fn main() -> anyhow::Result<()> {
+
+                                  
     let mut time_mark = utilities::TimeRecords::new();
     time_mark.new_item("Overall", "the whole job");
     time_mark.count_start("Overall");
@@ -130,8 +132,17 @@ fn main() -> anyhow::Result<()> {
         panic!("Input file ({:}) does not exist", ctrl_file);
     }
 
+    
+
     let mut mol = Molecule::build(ctrl_file)?;
-    println!("Molecule_name: {}", &mol.geom.name);
+
+    //let mut rayon_obj = rayon::ThreadPoolBuilder::new();
+    //if let Some(num_threads) = mol.ctrl.num_threads {
+    //    rayon_obj.num_threads(num_threads).build_global().unwrap_or(println!("debug: the rayon environment has been initialized before"));
+    //}
+    //rayon_obj.num_threads(mol.ctrl.num_threads).unwrap();
+
+    if mol.ctrl.print_level>0 {println!("Molecule_name: {}", &mol.geom.name)};
 
 
     //test_ecp();
@@ -184,10 +195,12 @@ fn main() -> anyhow::Result<()> {
     //====================================
     // Now for post-SCF analysis
     //====================================
-    let mulliken = mulliken_pop(&scf_data);
-    println!("Mulliken population analysis:");
-    for (i, (pop, atom)) in mulliken.iter().zip(scf_data.mol.geom.elem.iter()).enumerate() {
-        println!("{:3}-{:3}: {:10.6}", i, atom, pop);
+    if scf_data.mol.ctrl.print_level > 0 {
+        let mulliken = mulliken_pop(&scf_data);
+        println!("Mulliken population analysis:");
+        for (i, (pop, atom)) in mulliken.iter().zip(scf_data.mol.geom.elem.iter()).enumerate() {
+            println!("{:3}-{:3}: {:10.6}", i, atom, pop);
+        }
     }
 
     post_scf_analysis::post_scf_output(&scf_data);

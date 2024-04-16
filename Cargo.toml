@@ -50,7 +50,7 @@ dunce = "1.0.0"
 
 
 [dependencies.pyo3]
-version = "0.18.1"
+version = "0.21.1"
 features = ["extension-module"]
 
 [package.metadata.docs.rs]
@@ -74,7 +74,7 @@ name = "rest"
 path = "src/main.rs"
 
 # for pyrest
-#[lib]
-#name = "pyrest"
-#path = "src/lib.rs"
-#crate-type=["cdylib","lib"]
+[lib]
+name = "pyrest"
+path = "src/lib.rs"
+crate-type=["cdylib","lib"]

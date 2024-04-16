@@ -66,12 +66,14 @@ pub mod external_libs;
 
 //extern crate rest;
 
+use initial_guess::enxc::ENXC;
 use pyo3::prelude::*;
+use tensors::MatrixUpper;
 
+use crate::initial_guess::enxc::PotCell;
 use crate::{molecule_io::Molecule, scf_io::SCF, scf_io::scf};
 use crate::geom_io::GeomCell;
 use crate::ctrl_io::InputKeywords;
-
 
 #[pyfunction]
 fn read_ctrl(ctrlfile: String) -> PyResult<Molecule> {
@@ -82,15 +84,59 @@ fn do_scf(mol: Molecule) -> PyResult<SCF> {
     Ok(scf(mol).unwrap())
 }
 
+
+
 #[pymodule]
 #[pyo3(name = "pyrest")]
-fn pyrest(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
+fn pyrest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(read_ctrl, m)?)?;
     m.add_function(wrap_pyfunction!(do_scf, m)?)?;
     m.add_class::<Molecule>()?;
     m.add_class::<SCF>()?;
     m.add_class::<GeomCell>()?;
     m.add_class::<InputKeywords>()?;
+
+    // ==================================================
+    // add functions for effective potential
+    // ==================================================
+    m.add_class::<ENXC>()?;
+    m.add_class::<PotCell>()?;
+    m.add_function(wrap_pyfunction!(effective_nxc_matrix, m)?)?;
+    m.add_function(wrap_pyfunction!(effective_nxc_tensors, m)?)?;
+    m.add_function(wrap_pyfunction!(effective_nxc_pymatrix, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_enxc_potential, m)?)?;
+    m.add_function(wrap_pyfunction!(evaluate_derive_enxc, m)?)?;
     
     Ok(())
+}
+
+
+#[pyfunction]
+fn effective_nxc_pymatrix(mut mol: Molecule, exnc: Vec<ENXC>) -> PyResult<Vec<f64>> {
+    let output_matrix = crate::initial_guess::enxc::effective_nxc_matrix_v02(&mut mol, &exnc);
+    Ok(output_matrix.data)
+}
+
+#[pyfunction]
+fn parse_enxc_potential(file_name: String) -> PyResult<ENXC> {
+    let output_enxc = crate::initial_guess::enxc::parse_enxc_potential(&file_name[..]).unwrap();
+    Ok(output_enxc)
+}
+
+#[pyfunction]
+fn effective_nxc_matrix(mut mol: Molecule) -> PyResult<Vec<f64>> {
+    let output_matrix = crate::initial_guess::enxc::effective_nxc_matrix(&mut mol);
+    Ok(output_matrix.data)
+}
+
+#[pyfunction]
+fn effective_nxc_tensors(mut mol: Molecule) -> PyResult<Vec<f64>> {
+    let output_matrix = crate::initial_guess::enxc::effective_nxc_tensors(&mut mol);
+    Ok(output_matrix.data)
+}
+
+#[pyfunction]
+fn evaluate_derive_enxc(mut mol: Molecule, enxc: Vec<ENXC>, atm_index: usize, coeff_index: usize) -> PyResult<Vec<f64>> {
+    let output_matrix = crate::initial_guess::enxc::evaluate_derive_enxc(&mut mol, &enxc, atm_index, coeff_index);
+    Ok(output_matrix.data)
 }

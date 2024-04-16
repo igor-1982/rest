@@ -11,6 +11,7 @@ use self::sad::initial_guess_from_sad;
 pub mod sap;
 pub mod sad;
 pub mod enxc;
+mod pyrest_enxc;
 
 
 pub fn initial_guess(scf_data: &mut SCF) {

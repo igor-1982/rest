@@ -438,9 +438,11 @@ impl SCF {
                 self.lumo = lumo;
             }
         }
-        println!("Occupation in Alpha Channel: {:?}", &self.occupation[0]);
-        if self.mol.spin_channel == 2{
-            println!("Occupation in Beta Channel:  {:?}", &self.occupation[1]);
+        if self.mol.ctrl.print_level>1 {
+            println!("Occupation in Alpha Channel: {:?}", &self.occupation[0]);
+            if self.mol.spin_channel == 2{
+                println!("Occupation in Beta Channel:  {:?}", &self.occupation[1]);
+            }
         }
         //if self.mol.ctrl.atom_sad {
         //    //self.generate_occupation_sad()
