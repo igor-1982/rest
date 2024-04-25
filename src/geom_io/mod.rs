@@ -500,6 +500,42 @@ impl GeomCell {
             write!(input, "{:3}{:16.8}{:16.8}{:16.8}\n", elem, pos[0]*ang,pos[1]*ang,pos[2]*ang);
         });
     }
+    
+    // evaluate the center of mass
+    pub fn evaluate_center_of_mass(&self) -> (Vec<f64>, f64) {
+        let mut mass_charge = get_mass_charge(&self.elem);
+        let mut com = vec![0.0;3];
+        let mut mass_sum = 0.0;
+        self.position.iter_columns_full().zip(mass_charge.iter()).for_each(|(pos, (mass, charge))| {
+            mass_sum += mass;
+            com[0] += mass*pos[0];
+            com[1] += mass*pos[1];
+            com[2] += mass*pos[2];
+        });
+        com[0] /= mass_sum;
+        com[1] /= mass_sum;
+        com[2] /= mass_sum;
+        (com, mass_sum)
+    }
+
+    // evalate the dipole moment of the nuclear charge
+    pub fn evaluate_dipole_moment(&self) -> (Vec<f64>, f64) {
+        let mut mass_charge = get_mass_charge(&self.elem);
+        let mut dipole = vec![0.0;3];
+        let mut mass_sum = 0.0;
+        self.position.iter_columns_full().zip(mass_charge.iter()).for_each(|(pos, (mass, charge))| {
+            mass_sum += mass;
+            dipole[0] += charge*pos[0];
+            dipole[1] += charge*pos[1];
+            dipole[2] += charge*pos[2];
+        });
+        //dipole[0] /= mass_sum;
+        //dipole[1] /= mass_sum;
+        //dipole[2] /= mass_sum;
+        (dipole, mass_sum)
+    }
+
+
 }
 
 pub fn calc_nuc_energy_with_ecp(geom: &GeomCell, basis4elem: &Vec<Basis4Elem>) -> f64 {

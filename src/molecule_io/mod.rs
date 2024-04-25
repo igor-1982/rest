@@ -806,26 +806,89 @@ impl Molecule {
         (basis_total, atm, bas, env,bas_info,cint_fdqc,num_elec,num_basis, num_state, final_ecpbas)
     }
 
-    #[inline]
-    pub fn int_ij_matrixupper(&self,op_name: String) -> MatrixUpper<f64> {
+    pub fn int_ij_matrixuppers(&self,op_name: String, comp: usize) -> Vec<MatrixUpper<f64>> {
         let mut cur_op = op_name.clone();
         let mut cint_data = self.initialize_cint(false);
 
-        if op_name == String::from("ovlp") {
-            cint_data.cint1e_ovlp_optimizer_rust();
-        } else if op_name == String::from("kinetic") {
-            cint_data.cint1e_kin_optimizer_rust();
-        } else if op_name == String::from("hcore") {
-            cint_data.cint1e_kin_optimizer_rust();
+        //if op_name == String::from("dipole") {
+        //    let comp = 3;
+        //}
+
+        let nbas = self.fdqc_bas.len();
+        let tmp_size:usize = nbas*(nbas+1)/2;
+        let mut mat_global = vec![MatrixUpper::new(tmp_size,0.0);comp];
+        let nbas_shell = self.cint_bas.len();
+        for j in 0..nbas_shell {
+            let bas_start_j = self.cint_fdqc[j][0];
+            let bas_len_j = self.cint_fdqc[j][1];
+            // for i < j
+            for i in 0..j {
+                let bas_start_i = self.cint_fdqc[i][0];
+                let bas_len_i = self.cint_fdqc[i][1];
+                let tmp_size = [bas_len_i,bas_len_j,comp];
+                let mat_local = RIFull::from_vec(tmp_size,
+                    cint_data.cint_ij(i as i32, j as i32, &cur_op)).unwrap();
+                (0..comp).into_iter().for_each(|tmp_comp| {
+                    let mat_local_full = mat_local.get_reducing_matrix(tmp_comp).unwrap();
+                    let mut mat_global_full = mat_global.get_mut(tmp_comp).unwrap();
+                    (0..bas_len_j).into_iter().for_each(|tmp_j| {
+                        let gj = tmp_j + bas_start_j;
+                        let global_ij_start = gj*(gj+1)/2+bas_start_i;
+                        let local_ij_start = tmp_j*bas_len_i;
+                        //let length = if bas_start_i+bas_len_i <= gj+1 {bas_len_i} else {gj+1-bas_start_i};
+                        let length = bas_len_i;
+                        let mat_global_j = mat_global_full.get1d_slice_mut(global_ij_start,length).unwrap();
+                        let mat_local_j = mat_local_full.get1d_slice(local_ij_start,length).unwrap();
+                        mat_global_j.iter_mut().zip(mat_local_j.iter()).for_each(|(gij,lij)| {
+                            *gij = *lij
+                        });
+                    });
+                });
+            };
+            // for i = j 
+            let tmp_size = [bas_len_j,bas_len_j,comp];
+            let vec_local = cint_data.cint_ij(j as i32, j as i32, &cur_op);
+            //println!("for {}, i=j={}: {:?}", &cur_op, j, &vec_local);
+            let mat_local = RIFull::from_vec(tmp_size,vec_local).unwrap();
+            //if j==0 {
+            //}
+            (0..comp).into_iter().for_each(|tmp_comp| {
+                let mat_local_full = mat_local.get_reducing_matrix(tmp_comp).unwrap();
+                let mut mat_global_full = mat_global.get_mut(tmp_comp).unwrap();
+                (0..bas_len_j).into_iter().for_each(|tmp_j| {
+                    let gj = bas_start_j + tmp_j;
+                    let global_ij_start = gj*(gj+1)/2+bas_start_j;
+                    let local_ij_start = tmp_j*bas_len_j;
+                    let length = tmp_j + 1;
+                    let mat_global_j = mat_global_full.get1d_slice_mut(global_ij_start,length).unwrap();
+                    let mat_local_j = mat_local_full.get1d_slice(local_ij_start,length).unwrap();
+                    mat_global_j.iter_mut().zip(mat_local_j.iter()).for_each(|(gij,lij)| {
+                        *gij = *lij
+                    });
+                })
+            });
+        }
+
+        cint_data.final_c2r();
+        //vec_2d
+        mat_global
+
+
+    }
+
+    #[inline]
+    pub fn int_ij_matrixupper(&self,op_name: String) -> MatrixUpper<f64> {
+        let mut cint_data = self.initialize_cint(false);
+
+        if op_name == String::from("dipole") {
+            panic!("Error:: for dipole moment calculation: {}, please use int_ij_matrxuppers",&op_name);
+        }
+
+        let mut cur_op = op_name.clone();
+        if op_name == String::from("hcore") {
             cur_op = String::from("kinetic");
-        } else if op_name == String::from("ecp") {
-            cint_data.cint1e_ecp_optimizer_rust();
-            cur_op = String::from("ecp");
-        } else if op_name == String::from("nuclear") {
-            cint_data.cint1e_nuc_optimizer_rust();
-        } else {
-            panic!("Error:: unknown operator for GTO-ij integrals: {}",&op_name);
         };
+
         let nbas = self.fdqc_bas.len();
         let tmp_size:usize = nbas*(nbas+1)/2;
         let mut mat_global = MatrixUpper::new(tmp_size,0.0);

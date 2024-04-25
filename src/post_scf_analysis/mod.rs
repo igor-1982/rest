@@ -5,7 +5,9 @@ pub mod mulliken;
 pub mod strong_correlation_correction;
 
 use std::path::Path;
-use crate::constants::SPECIES_INFO;
+use tensors::MathMatrix;
+
+use crate::constants::{AU2DEBYE, SPECIES_INFO};
 use crate::dft::DFAFamily;
 use crate::geom_io::get_mass_charge;
 use crate::ri_pt2::sbge2::{close_shell_sbge2_rayon, open_shell_sbge2_rayon, close_shell_sbge2_detailed_rayon, open_shell_sbge2_detailed_rayon};
@@ -50,6 +52,13 @@ pub fn post_scf_output(scf_data: &SCF) {
            save_hamiltonian(&scf_data);
            save_geometry(&scf_data);
            scf_data.mol.geom.to_xyz("geometry.xyz".to_string());
+        } else if output_type.eq("dipole") {
+            let dp = evaluate_dipole_moment(scf_data);
+            let mut tmp_s: String = format!("Dipole Moment in DEBYE: {:5}", "");
+            dp.iter().for_each(|x| {
+                tmp_s = format!("{},{:16.8}", tmp_s, x);
+            });
+            println!("{}", tmp_s);
         }
     });
 }
@@ -339,3 +348,32 @@ fn fciqmc_dump(scf_data: &SCF) {
 //    builder.with_data(&ndarray::arr1(&dd)).create("elem");
 //    file.close();
 //}
+
+// evaluate the dipole moment based on the converged density matrix (dm): scf_data.density_matrix
+// the dipole moment of the nuclear part (nucl_dip) is given by scf_data.mol.geom.evaluate_dipole_moment()
+// the dipole moment of the atomic orbitals (ao_dip) is given by scf_data.mol.int_ij_matrixuppers()
+// the dipole moment of the electronic part (el_dip) is given ('ij,ji', ao_dip[x], dm)
+pub fn evaluate_dipole_moment(scf_data: &SCF) -> Vec<f64> {
+    let (nucl_dip, mass_tot) = scf_data.mol.geom.evaluate_dipole_moment();
+    //println!("debug nucl_dip: {:?}",&nucl_dip);
+    let ao_dip = scf_data.mol.int_ij_matrixuppers(String::from("dipole"), 3);
+    //ao_dip[0].formated_output(5, "full");
+    let mut dm = scf_data.density_matrix[0].clone();
+    if scf_data.mol.spin_channel == 2 {
+        dm.self_add(&scf_data.density_matrix[1]);
+    }
+    let mut el_dip = [0.0;3];
+    for i in 0..3 {
+        let ao_dip_tmp = ao_dip[i].to_matrixfull().unwrap();
+        el_dip[i] = dm.iter_columns_full().zip(ao_dip_tmp.iter_columns_full()).fold(0.0,|acc_c,(dm_col, ao_dip_col)| {
+            let acc_r = dm_col.iter().zip(ao_dip_col.iter()).fold(0.0, |acc_r, (dm_val, ao_dip_val)| {acc_r + dm_val*ao_dip_val});
+            acc_c + acc_r
+        });
+        //el_dip[i] = ao_dip_tmp.dot(&dm).unwrap();
+        //for j in 0..3 {
+        //    el_dip[i] += ao_dip[i][j]*scf_data.density_matrix[j];
+        //}
+    }
+
+    nucl_dip.iter().zip(el_dip.iter()).map(|(nucl, el)| (*nucl - *el)*AU2DEBYE).collect::<Vec<f64>>()
+}

@@ -335,15 +335,15 @@ pub fn effective_nxc_matrix_v02(mol: &mut Molecule, exnc: &Vec<ENXC>) -> MatrixU
 
         cur_atm[ATM_NUC_MOD_OF] = NUC_ECP;
 
-        let (enxc_ang_max, enxc_ang_min) = tmp_enxc.get_angular_momentum_range();
-        let enxc_ang_l = if enxc_ang_min == -1 {-1} else {enxc_ang_max};
+        //let (enxc_ang_max, enxc_ang_min) = tmp_enxc.get_angular_momentum_range();
+        //let enxc_ang_l = if enxc_ang_min == -1 {-1} else {enxc_ang_max};
 
         for potcell in tmp_enxc.enxc_potentials.iter() {
-            let angl = if potcell.angular_momentum[0]==enxc_ang_l {-1} else {potcell.angular_momentum[0]};
-            let mut cur_potcell = potcell.clone();
-            cur_potcell.angular_momentum[0] = angl;
+            //let angl = if potcell.angular_momentum[0]==enxc_ang_l {-1} else {potcell.angular_momentum[0]};
+            //let mut cur_potcell = potcell.clone();
+            //cur_potcell.angular_momentum[0] = angl;
 
-            load_enxc_operator_to_cint(env, &mut enxcbas, &cur_potcell, atm_index);
+            load_enxc_operator_to_cint(env, &mut enxcbas, &potcell, atm_index);
         }
     });
 
@@ -377,12 +377,13 @@ pub fn effective_nxc_matrix(mol: &mut Molecule) -> MatrixUpper<f64> {
 
         cur_atm[ATM_NUC_MOD_OF] = NUC_ECP;
 
-        let (enxc_ang_max, enxc_ang_min) = tmp_enxc.get_angular_momentum_range();
-        let enxc_ang_l = if enxc_ang_min == -1 {-1} else {enxc_ang_max};
+        // Use the same definition for exc
+        //let (enxc_ang_max, enxc_ang_min) = tmp_enxc.get_angular_momentum_range();
+        //let enxc_ang_l = if enxc_ang_min == -1 {-1} else {enxc_ang_max};
 
         for potcell in tmp_enxc.enxc_potentials.iter_mut() {
-            let angl = if potcell.angular_momentum[0]==enxc_ang_l {-1} else {potcell.angular_momentum[0]};
-            potcell.angular_momentum[0] = angl;
+            //let angl = if potcell.angular_momentum[0]==enxc_ang_l {-1} else {potcell.angular_momentum[0]};
+            //potcell.angular_momentum[0] = angl;
 
             load_enxc_operator_to_cint(env, &mut enxcbas, potcell, atm_index);
 
