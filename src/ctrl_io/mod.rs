@@ -20,6 +20,12 @@ use toml;
 
 mod pyrest_ctrl_io;
 
+#[derive(Debug, Clone, Copy)]
+pub enum JobType {
+    SinglePoint,
+    GeomOpt,
+}
+
 /// **InputKeywords** for a specific calculation
 ///  ### System dependent keywords
 ///  - `print_level`:  default (1). `0` dose not print anything. larger number with more output information  
@@ -35,6 +41,7 @@ mod pyrest_ctrl_io;
 #[derive(Debug,Clone)]
 #[pyclass]
 pub struct InputKeywords {
+    pub job_type: JobType,
     #[pyo3(get, set)]
     pub print_level: usize,
     // Keywords for the (aux) basis sets
@@ -175,7 +182,8 @@ pub struct InputKeywords {
     pub deep_pot: bool,
     // Keywords for parallism
     #[pyo3(get, set)]
-    pub num_threads: Option<usize>
+    pub num_threads: Option<usize>,
+    pub nforce_displacement: f64
 }
 
 impl InputKeywords {
@@ -184,6 +192,8 @@ impl InputKeywords {
             // keywords for machine and debug info
             print_level: 0,
             num_threads: Some(1),
+            job_type: JobType::SinglePoint,
+            nforce_displacement: 0.0013,
             // Keywords for (aux)-basis sets
             basis_path: String::from("./STO-3G"),
             basis_type: String::from("spheric"),
@@ -450,6 +460,30 @@ impl InputKeywords {
                 tmp_input.auxbasis_response = match tmp_ctrl.get("auxbasis_response").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::Bool(tmp_str) => {*tmp_str},
                     other => {false},
+                };
+                // ==============================================
+                //  JobType
+                // ==============================================
+                tmp_input.job_type = match tmp_ctrl.get("job_type").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_xc) => {
+                        let tmp_xc_low = tmp_xc.to_lowercase();
+                        if tmp_xc_low.eq("opt") || tmp_xc_low.eq("geometry optimization") || 
+                           tmp_xc_low.eq("geometry relaxation") || tmp_xc_low.eq("geom_opt") ||
+                           tmp_xc_low.eq("geom_relax") || tmp_xc_low.eq("relax") {
+                            JobType::GeomOpt
+                        } else if tmp_xc_low.eq("energy") || tmp_xc_low.eq("single point") ||
+                          tmp_xc_low.eq("single_point") {
+                            JobType::SinglePoint
+                        } else {
+                            JobType::SinglePoint
+                        }
+                    },
+                    other => {JobType::SinglePoint},
+                };
+                tmp_input.nforce_displacement = match tmp_ctrl.get("nforce_displacement").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_nforce) => {tmp_nforce.to_lowercase().parse().unwrap_or(0.0013)},
+                    serde_json::Value::Number(tmp_nforce) => {tmp_nforce.as_f64().unwrap_or(0.0013)},
+                    other => {0.0013},
                 };
                 // ==============================================
                 //  Keywords associated with the method employed

@@ -254,6 +254,15 @@ impl GeomCell {
         Ok(gi-1)
     }
 
+    pub fn geom_shift(&mut self, atm_idx:usize, vec_xyz:Vec<f64>) {
+        let mut gi = self.get_relax_index(atm_idx).unwrap();
+        let mut given_atm = &mut self.position[(..,atm_idx)];
+        given_atm.iter_mut().zip(vec_xyz.iter()).for_each(|(to, from)| {
+            *to += from
+        });
+    }
+
+
     pub fn parse_position(position:&Vec<Value>,unit:&GeomUnit) -> anyhow::Result<(Vec<String>,Vec<bool>,MatrixFull<f64>,usize)> {
         // re0: the standard Cartesian position format with or without ',' as seperator
         //      no fix atom information
@@ -499,6 +508,17 @@ impl GeomCell {
         self.position.iter_columns_full().zip(self.elem.iter()).for_each(|(pos, elem)| {
             write!(input, "{:3}{:16.8}{:16.8}{:16.8}\n", elem, pos[0]*ang,pos[1]*ang,pos[2]*ang);
         });
+    }
+
+    pub fn formated_geometry(&self) -> String {
+        let ang = crate::constants::ANG;
+        let mut input = String::new();
+        //write!(input, "{}\n\n", self.elem.len());
+        self.position.iter_columns_full().zip(self.elem.iter()).for_each(|(pos, elem)| {
+            //write!(input, "{:3}{:16.8}{:16.8}{:16.8}\n", elem, pos[0]*ang,pos[1]*ang,pos[2]*ang);
+            input = format!("{}{:3}{:16.8}{:16.8}{:16.8}\n", input, elem, pos[0]*ang,pos[1]*ang,pos[2]*ang);
+        });
+        input
     }
     
     // evaluate the center of mass

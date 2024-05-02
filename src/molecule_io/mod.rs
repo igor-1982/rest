@@ -319,8 +319,12 @@ impl Molecule {
             if let Some(j) = i.get_mut(3) {*j += off};
         });
         self.cint_aux_bas.iter_mut().for_each(|i| {
+            // =========================================================
             // offset the atom index in the atm list
-            if let Some(j) = i.get_mut(0) {*j += natm_off};
+            // WARNNING:: do not offset the atom index in the atm list, such that the auxiliary basis sets
+            //            use the same cint_atm as the ordinary basis sets.
+            //if let Some(j) = i.get_mut(0) {*j += natm_off};
+            // =========================================================
             // offset the position that stores basis exponents in the env list
             if let Some(j) = i.get_mut(5) {*j += off};
             // offset the position that stores basis coefficients in the env list
@@ -361,6 +365,17 @@ impl Molecule {
         cint_data
     }
 
+    pub fn update_geom_poisition_in_cint_env(&self, position: &MatrixFull<f64>) -> Vec<f64> {
+        let mut cint_env = self.cint_env.clone();
+        self.cint_atm.iter().zip(position.iter_columns_full()).for_each(|(atm, position)| {
+            let pos_env_start = atm[1] as usize;
+            cint_env[pos_env_start] = position[0];
+            cint_env[pos_env_start+1] = position[1];
+            cint_env[pos_env_start+2] = position[2];
+        });
+        cint_env
+    }
+
     pub fn collect_auxbas(ctrl: &InputKeywords,geom: &mut GeomCell, etb: Option<InfoV2>) -> 
             (Vec<Basis4Elem>, Vec<Vec<i32>>, Vec<Vec<i32>>, Vec<f64>, Vec<BasInfo>, Vec<Vec<usize>>, usize) {
 
@@ -392,24 +407,7 @@ impl Molecule {
             aux_env.push(0.0);
             geom_start += 4;
         });
-        //for (atm_index, atm_elem) in geom.elem.iter().enumerate() {
-        //    let mut tmp_charge: i32 = 0;
-        //    let tmp_item = elem_name.iter()
-        //        .zip(elem_charge.iter()).find(|(x,y)| {x.eq(&atm_elem)});
-        //    if let Some((x,y)) = tmp_item {
-        //        tmp_charge = *y;
-        //    };
-        //    aux_atm.push(vec![tmp_charge,geom_start,1,geom_start+3,0,0]);
-        //    (0..3).into_iter().for_each(|i| {
-        //        if let Some(tmp_value) = geom.position.get(&[i,atm_index]) {
-        //            //for the coordinates
-        //            aux_env.push(*tmp_value);
-        //        }
-        //    });
-        //    //for the nuclear charge distribution parameter
-        //    aux_env.push(0.0);
-        //    geom_start += 4;
-        //}; 
+
         // Now for bas inf.
         let mut auxbas_total: Vec<Basis4Elem> = vec![];
         let mut aux_bas: Vec<Vec<i32>> = vec![];

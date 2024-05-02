@@ -7,9 +7,10 @@ pub mod strong_correlation_correction;
 use std::path::Path;
 use tensors::MathMatrix;
 
-use crate::constants::{AU2DEBYE, SPECIES_INFO};
+use crate::constants::{ANG, AU2DEBYE, SPECIES_INFO};
 use crate::dft::DFAFamily;
 use crate::geom_io::get_mass_charge;
+use crate::grad::{formated_force, numerical_force};
 use crate::ri_pt2::sbge2::{close_shell_sbge2_rayon, open_shell_sbge2_rayon, close_shell_sbge2_detailed_rayon, open_shell_sbge2_detailed_rayon};
 use crate::ri_rpa::scsrpa::{evaluate_osrpa_correlation_rayon, evaluate_spin_response_rayon, evaluate_special_radius_only};
 use crate::ri_rpa::{evaluate_rpa_correlation, evaluate_rpa_correlation_rayon};
@@ -18,7 +19,7 @@ use crate::ri_pt2::{close_shell_pt2_rayon, open_shell_pt2_rayon};
 use crate::utilities::TimeRecords;
 
 use self::molden_build::{gen_header, gen_molden};
-use self::strong_correlation_correction::scc23_for_rxdh7;
+use self::strong_correlation_correction::scc15_for_rxdh7;
 
 pub fn post_scf_output(scf_data: &SCF) {
     scf_data.mol.ctrl.outputs.iter().for_each(|output_type| {
@@ -59,6 +60,15 @@ pub fn post_scf_output(scf_data: &SCF) {
                 tmp_s = format!("{},{:16.8}", tmp_s, x);
             });
             println!("{}", tmp_s);
+        } else if output_type.eq("force") {
+            let displace = match scf_data.mol.geom.unit {
+                crate::geom_io::GeomUnit::Angstrom => scf_data.mol.ctrl.nforce_displacement/ANG,
+                crate::geom_io::GeomUnit::Bohr => scf_data.mol.ctrl.nforce_displacement,
+            };
+            let (energy, num_force) = numerical_force(scf_data, displace);
+            println!("Total atomic forces [a.u.]: ");
+            //num_force.formated_output(5, "full");
+            println!("{}", formated_force(&num_force, &scf_data.mol.geom.elem));
         }
     });
 }
@@ -226,10 +236,12 @@ pub fn post_ai_correction(scf_data: &mut SCF) -> Option<Vec<f64>> {
     let xc_method = &scf_data.mol.ctrl.xc.to_lowercase();
     let post_ai_corr = &scf_data.mol.ctrl.post_ai_correction.to_lowercase();
     let mut scc = 0.0;
-    if post_ai_corr.eq("scc23") && xc_method.eq("r-xdh7") {
-        scc = scc23_for_rxdh7(scf_data);
+    if post_ai_corr.eq("scc15") && xc_method.eq("r-xdh7") {
+        scc = scc15_for_rxdh7(scf_data);
         let total_energy = scf_data.energies.get("xdh_energy").unwrap()[0];
-        println!("E(R-xDH7-SCC23): {:16.8} Ha", total_energy + scc);
+        if scf_data.mol.ctrl.print_level>0 {
+            println!("E(R-xDH7-SCC15): {:16.8} Ha", total_energy + scc);
+        }
         //scf_data.energies.insert("scc23".to_string(), vec![scc]);
         return Some(vec![scc])
     };
@@ -302,15 +314,17 @@ pub fn post_scf_correlation(scf_data: &mut SCF) {
         }
     });
 
-    println!("----------------------------------------------------------------------");
-    println!("{:16}: {:>16}, {:>16}, {:>16}","Methods","Total Corr", "OS Corr", "SS Corr");
-    println!("----------------------------------------------------------------------");
+    if scf_data.mol.ctrl.print_level>0 {
+        println!("----------------------------------------------------------------------");
+        println!("{:16}: {:>16}, {:>16}, {:>16}","Methods","Total Corr", "OS Corr", "SS Corr");
+        println!("----------------------------------------------------------------------");
 
-    post_corr.iter().for_each(|(name,energy)| {
-        println!("{:16}: {:16.8}, {:16.8}, {:16.8}", name.to_name(), energy[0], energy[1], energy[2]);
-    });
-    println!("----------------------------------------------------------------------");
-    if scf_data.mol.ctrl.print_level>1 {timerecords.report_all()};
+        post_corr.iter().for_each(|(name,energy)| {
+            println!("{:16}: {:16.8}, {:16.8}, {:16.8}", name.to_name(), energy[0], energy[1], energy[2]);
+        });
+        println!("----------------------------------------------------------------------");
+        if scf_data.mol.ctrl.print_level>1 {timerecords.report_all()};
+    }
 }
 
 fn fciqmc_dump(scf_data: &SCF) {

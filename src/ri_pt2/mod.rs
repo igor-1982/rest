@@ -43,9 +43,11 @@ pub fn xdh_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
         crate::dft::DFAFamily::SCSRPA => "SCSRPA".to_string(),
         _ => panic!("Error: No post-scf calculation is needed"),
     };
-    println!("==========================================");
-    println!("Now evaluate the {:>6} correlation energy", postscf_method);
-    println!("==========================================");
+    if scf_data.mol.ctrl.print_level>0 {
+        println!("==========================================");
+        println!("Now evaluate the {:>6} correlation energy", postscf_method);
+        println!("==========================================");
+    }
 
     let mut pt2_c = [
         // total pt2 correlation energy;
@@ -121,29 +123,32 @@ pub fn xdh_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
         pt2_c[2] = pt2_c[0] - pt2_c[1];
     };
     
-    println!("----------------------------------------------------------------------");
-    println!("{:16}: {:>16}, {:>16}, {:>16}","Methods","Total Corr", "OS Corr", "SS Corr");
-    println!("----------------------------------------------------------------------");
-    println!("{:16}: {:16.8}, {:16.8}, {:16.8}", 
-        dfa_family_pos.to_name(), pt2_c[0], pt2_c[1], pt2_c[2]);
-    println!("----------------------------------------------------------------------");
     //println!("{:?}",&pt2_c);
     let hy_coeffi_scf = scf_data.mol.xc_data.dfa_hybrid_scf;
     let hy_coeffi_xdh = if let Some(coeff) = scf_data.mol.xc_data.dfa_hybrid_pos {coeff} else {0.0};
     let hy_coeffi_pt2 = if let Some(coeff) = &scf_data.mol.xc_data.dfa_paramr_adv {coeff.clone()} else {vec![0.0,0.0]};
     let xdh_pt2_energy: f64 = pt2_c[1..3].iter().zip(hy_coeffi_pt2.iter()).map(|(e,c)| e*c).sum();
     //println!("Exc_scf: ({:?},{:?}),Exc_pos: ({:?},{:?})",xc_energy_scf,hy_coeffi_scf,xc_energy_xdh,hy_coeffi_xdh);
-    println!("Fifth-rung correlation energy : {:20.12} Ha", xdh_pt2_energy);
     let total_energy = scf_data.scf_energy +
                             x_energy * (hy_coeffi_xdh-hy_coeffi_scf) +
                             xc_energy_xdh-xc_energy_scf +
                             xdh_pt2_energy;
-    println!("E[{:5}]=: {:16.8} Ha, Ex[HF]: {:16.8} Ha, Ec[{:5}]: {:16.8} Ha", 
-        scf_data.mol.ctrl.xc.to_uppercase(), 
-        total_energy, 
-        x_energy, 
-        postscf_method,
-        pt2_c[0]);
+
+    if scf_data.mol.ctrl.print_level>0 {
+        println!("----------------------------------------------------------------------");
+        println!("{:16}: {:>16}, {:>16}, {:>16}","Methods","Total Corr", "OS Corr", "SS Corr");
+        println!("----------------------------------------------------------------------");
+        println!("{:16}: {:16.8}, {:16.8}, {:16.8}", 
+            dfa_family_pos.to_name(), pt2_c[0], pt2_c[1], pt2_c[2]);
+        println!("----------------------------------------------------------------------");
+        println!("Fifth-rung correlation energy : {:20.12} Ha", xdh_pt2_energy);
+        println!("E[{:5}]=: {:16.8} Ha, Ex[HF]: {:16.8} Ha, Ec[{:5}]: {:16.8} Ha", 
+            scf_data.mol.ctrl.xc.to_uppercase(), 
+            total_energy, 
+            x_energy, 
+            postscf_method,
+            pt2_c[0]);
+    }
 
     scf_data.energies.insert(String::from("xdh_energy"), vec![total_energy]);
 

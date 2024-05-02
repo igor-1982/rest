@@ -7,7 +7,7 @@ use itertools::{Itertools, izip};
 use libc::access;
 use tensors::{BasicMatrix, MathMatrix, ParMathMatrix};
 use tensors::external_libs::{general_dgemm_f, matr_copy};
-use tensors::matrix_blas_lapack::{_dgemm, contract_vxc_0_serial};
+use tensors::matrix_blas_lapack::{_dgemm, _dgemm_full, contract_vxc_0_serial};
 //use numgrid::{self, radial_grid_lmg_bse};
 use self::gen_grids::radial_grid_lmg_bse;
 use rayon::iter::{IntoParallelRefIterator, IndexedParallelIterator, ParallelIterator, IntoParallelRefMutIterator};
@@ -128,23 +128,24 @@ impl DFA4REST {
         let post_dfa = DFA4REST::parse_postscf(&tmp_name, spin_channel);
         match post_dfa {
             Some(dfa) => {
-                println!("the scf functional for '{}' contains", &name);
-                &dfa.dfa_compnt_scf.iter().for_each(|xc_func| {
-                    dfa.init_libxc(xc_func).xc_func_info_printout()
-                });
-                //println!("debug {:?}",&dfa.dfa_paramr_scf);
-                if let (Some(dfatype),Some(dfacomp)) = 
-                    (&dfa.dfa_family_pos, &dfa.dfa_compnt_pos) {
-                    //match dfatype {
-                    //    DFAFamily::PT2 => println!("XYG3-type functional '{}' is employed", &name),
-                    //    DFAFamily::RPA => println!("RPA-type functional '{}' is employed", &name),
-                    //    _ => println!("Standard DFA '{}' is employed", &name),
-                    //}
-                    println!("the post-scf functional '{}' is employed, which contains", &name);
-                    dfacomp.into_iter().for_each(|xc_func| {
+                if print_level> 0 {
+                    println!("the scf functional for '{}' contains", &name);
+                    &dfa.dfa_compnt_scf.iter().for_each(|xc_func| {
                         dfa.init_libxc(xc_func).xc_func_info_printout()
-                    })
-                };
+                    });
+                    if let (Some(dfatype),Some(dfacomp)) = 
+                        (&dfa.dfa_family_pos, &dfa.dfa_compnt_pos) {
+                        //match dfatype {
+                        //    DFAFamily::PT2 => println!("XYG3-type functional '{}' is employed", &name),
+                        //    DFAFamily::RPA => println!("RPA-type functional '{}' is employed", &name),
+                        //    _ => println!("Standard DFA '{}' is employed", &name),
+                        //}
+                        println!("the post-scf functional '{}' is employed, which contains", &name);
+                        dfacomp.into_iter().for_each(|xc_func| {
+                            dfa.init_libxc(xc_func).xc_func_info_printout()
+                        })
+                    };
+                }
                 dfa
             },
             None => {
@@ -156,7 +157,6 @@ impl DFA4REST {
                         tmp_dfa.xc_func_info_printout();
                     });
                 };
-                //println!("debug {:?}",&dfa.dfa_paramr_scf);
                 dfa
             },
         }
@@ -1363,12 +1363,12 @@ impl DFA4REST {
             //exc.data.iter_mut().zip(rho.iter_j(i_spin)).for_each(|(exc,rho)| {
             //    *exc  = *exc* rho
         }
-        if spin_channel==1 {
-            println!("total electron number: {:16.8}", total_elec[0])
-        } else {
-            println!("electron number in alpha-channel: {:12.8}", total_elec[0]);
-            println!("electron number in beta-channel:  {:12.8}", total_elec[1]);
-        }
+        //if spin_channel==1 {
+        //    println!("total electron number: {:16.8}", total_elec[0])
+        //} else {
+        //    println!("electron number in alpha-channel: {:12.8}", total_elec[0]);
+        //    println!("electron number in beta-channel:  {:12.8}", total_elec[1]);
+        //}
         exc_total
     }
     pub fn xc_exc_code(&self, xc_code: &usize, rho: &MatrixFull<f64>, sigma:&MatrixFull<f64>, spin_channel: usize) -> MatrixFull<f64> {
@@ -1534,6 +1534,7 @@ fn prepare_tabulated_sigma_rayon(rhop: &RIFull<f64>, spin_channel: usize) -> Mat
 }
 
 
+#[derive(Clone)]
 pub struct Grids {
     pub ao: Option<MatrixFull<f64>>,
     pub aop: Option<RIFull<f64>>,
@@ -1975,17 +1976,18 @@ impl Grids {
         }
         cur_rho
     }
-    pub fn prepare_tabulated_density(&mut self, dm: &mut Vec<MatrixFull<f64>>, spin_channel: usize) -> MatrixFull<f64> {
+    pub fn prepare_tabulated_density(&self, dm: &Vec<MatrixFull<f64>>, spin_channel: usize) -> MatrixFull<f64> {
         let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
         utilities::omp_set_num_threads_wrapper(1);
         let num_grids = self.coordinates.len();
         let mut cur_rho = MatrixFull::new([num_grids,spin_channel],0.0);
         for i_spin in 0..spin_channel {
-            if let Some(ao) = &mut self.ao {
+            if let Some(ao) = &self.ao {
                 let dt0 = utilities::init_timing();
-                let dm_s = dm.get_mut(i_spin).unwrap();
+                let dm_s = dm.get(i_spin).unwrap();
                 let mut wao = MatrixFull::new(ao.size.clone(),0.0);
-                wao.lapack_dgemm(dm_s, ao, 'N', 'N', 1.0, 0.0);
+                _dgemm_full(dm_s,'N',ao,'N',&mut wao, 1.0, 0.0);
+                //wao.lapack_dgemm(dm_s, ao, 'N', 'N', 1.0, 0.0);
                 //let wao = _degemm_nn_(&dm_s.to_matrixfullslice(), &ao.to_matrixfullslice());
                 let dt1 = utilities::timing(&dt0, Some("Evalute weighted ao (wao)"));
                 ao.par_iter_columns_full().zip(wao.par_iter_columns_full()).map(|(ao_r,wao_r)| (ao_r,wao_r))
@@ -2113,6 +2115,12 @@ impl Grids {
             RIFull::empty()
         };
         (cur_rho, cur_rhop)
+    }
+
+    pub fn prepare_tabulated_density_slots_cudarc(&self, mo: &[MatrixFull<f64>;2], occ: &[Vec<f64>;2], spin_channel: usize,range_grids: Range<usize>) {
+        use cudarc::driver::{CudaDevice,LaunchAsync,LaunchConfig};
+        let num_grids = range_grids.len();
+        //let dev: Option<Arc<CudaDevice>>> = CudaDevice::new(0).unwrap_or(None);
     }
 
     pub fn prepare_tabulated_density_slots(&self, mo: &[MatrixFull<f64>;2], occ: &[Vec<f64>;2], spin_channel: usize, range_grids: Range<usize>) -> (MatrixFull<f64>,RIFull<f64>) {
