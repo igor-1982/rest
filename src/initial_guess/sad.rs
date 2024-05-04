@@ -33,7 +33,7 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
             atom_ctrl.num_threads = Some(mol.ctrl.num_threads.unwrap());
             atom_ctrl.mixer = "diis".to_string();
             atom_ctrl.initial_guess = "vsap".to_string();
-            atom_ctrl.print_level = 0;
+            atom_ctrl.print_level = if mol.ctrl.print_level<2 {0} else {mol.ctrl.print_level-1};
             atom_ctrl.atom_sad = true;
             atom_ctrl.occupation_type = OCCType::ATMSAD;
             atom_ctrl.charge = 0.0_f64;

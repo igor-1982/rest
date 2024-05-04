@@ -82,7 +82,7 @@ mod external_libs;
 #[global_allocator]
 static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 use crate::constants::EV;
-use crate::grad::numerical_force;
+use crate::grad::{formated_force, numerical_force};
 use crate::initial_guess::enxc::{effective_nxc_matrix, effective_nxc_tensors};
 //static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 //use crate::grad::rhf::Gradient;
@@ -197,6 +197,11 @@ fn main() -> anyhow::Result<()> {
                     let (energy, nforce) = numerical_force(&scf_data, displace);
                     gx.iter_mut().zip(nforce.iter()).for_each(|(to, from)| {*to = *from});
 
+                    if scf_data.mol.ctrl.print_level>0 {
+                        println!("Output force in this round [a.u.] is:");
+                        println!("{}", formated_force(&nforce, &scf_data.mol.geom.elem));
+                    }
+
                     Ok(energy)
                 },
                 |prgr| {
@@ -207,7 +212,7 @@ fn main() -> anyhow::Result<()> {
                     false
                 },
             );
-            println!("Geometry after relaxation:");
+            println!("Geometry after relaxation [Ang]:");
             println!("{}", scf_data.mol.geom.formated_geometry());
             geom_time_mark.count("geom_opt");
 

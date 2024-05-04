@@ -385,6 +385,11 @@ pub fn generate_occupation_sad_v01(elem: &String,num_basis: usize, num_ecp: usiz
             occ_a.extend(vec![0.0;frozen_orb+num_basis-27]);
             ([occ_a,vec![0.0;frozen_orb+num_basis]],[26-frozen_orb,0],[27-frozen_orb,0])
         },
+        "O" => {
+            let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 0.0, 1.333333, 1.333333, 1.333333],num_ecp);
+            occ_a.extend(vec![0.0;frozen_orb+num_basis-6]);
+            ([occ_a,vec![0.0;frozen_orb+num_basis]],[5-frozen_orb,0],[6-frozen_orb,0])
+        },
         "N" => {
             let mut occ_a = cut_ecp_occ(vec![2.0, 2.0, 1.0, 1.0, 1.0],num_ecp);
             occ_a.extend(vec![0.0;frozen_orb+num_basis-5]);

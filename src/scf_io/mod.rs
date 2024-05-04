@@ -299,6 +299,11 @@ impl SCF {
     }
 
     pub fn prepare_isdf(&mut self) {
+        let isdf = self.mol.ctrl.eri_type.eq("ri_v") && self.mol.ctrl.use_isdf;
+        let ri3fn_full = self.mol.ctrl.use_auxbas && !self.mol.ctrl.use_ri_symm;
+        let ri3fn_symm = self.mol.ctrl.use_auxbas && self.mol.ctrl.use_ri_symm;
+
+        if ! isdf {return}
         if let Some(grids) = &self.grids {
             if self.mol.ctrl.use_isdf {
                 let init_fock = self.h_core.clone();
@@ -316,9 +321,6 @@ impl SCF {
                 
             };
 
-            let isdf = self.mol.ctrl.eri_type.eq("ri_v") && self.mol.ctrl.use_isdf;
-            let ri3fn_full = self.mol.ctrl.use_auxbas && !self.mol.ctrl.use_ri_symm;
-            let ri3fn_symm = self.mol.ctrl.use_auxbas && self.mol.ctrl.use_ri_symm;
 
             self.ri3fn_isdf = if ri3fn_full && isdf && !self.mol.ctrl.isdf_new{
                 if let Some(grids) = &self.grids {
@@ -3944,7 +3946,7 @@ pub fn diagonalize_hamiltonian_outside(scf_data: &SCF) -> ([MatrixFull<f64>;2], 
         _ => {
             for i_spin in (0..spin_channel) {
                 let (eigenvector_spin, eigenvalue_spin)=
-                    _dspgvx(&scf_data.hamiltonian[0], &scf_data.ovlp, num_state).unwrap();
+                    _dspgvx(&scf_data.hamiltonian[i_spin], &scf_data.ovlp, num_state).unwrap();
                     //self.hamiltonian[i_spin].to_matrixupperslicemut()
                     //.lapack_dspgvx(self.ovlp.to_matrixupperslicemut(),num_state).unwrap();
                 eigenvectors[i_spin] = eigenvector_spin;

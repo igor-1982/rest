@@ -3,7 +3,7 @@ pub mod uhf;
 pub mod rks;
 pub mod uks;
 
-use crate::{collect_total_energy, performance_essential_calculations, scf_io::{initialize_scf, scf_without_build, SCF}, utilities};
+use crate::{collect_total_energy, constants::{ANG, EV}, performance_essential_calculations, scf_io::{initialize_scf, scf_without_build, SCF}, utilities};
 use tensors::MatrixFull;
 
 
@@ -30,7 +30,7 @@ pub fn numerical_force(scf_data: &SCF, displace: f64) -> (f64,MatrixFull<f64>) {
             // move the atom along - direction
             let mut vec_xyz = vec![0.0;3];
             vec_xyz[xyz] = -displace;
-            let mut new_scf = scf_data.clone();
+            new_scf = scf_data.clone();
             // update the geometry
             new_scf.mol.geom.geom_shift(atm_idx, vec_xyz);
             // update the control file
@@ -51,6 +51,16 @@ pub fn formated_force(force: &MatrixFull<f64>, elem: &Vec<String>) -> String {
     let mut output = String::new();
     force.iter_columns_full().zip(elem.iter()).for_each(|(force, elem)| {
         output  = format!("{}{:3}{:16.8}{:16.8}{:16.8}\n", output, elem, force[0],force[1],force[2]);
+    });
+
+    output
+
+}
+
+pub fn formated_force_ev(force: &MatrixFull<f64>, elem: &Vec<String>) -> String {
+    let mut output = String::new();
+    force.iter_columns_full().zip(elem.iter()).for_each(|(force, elem)| {
+        output  = format!("{}{:3}{:16.8}{:16.8}{:16.8}\n", output, elem, force[0]*EV/ANG,force[1]*EV/ANG,force[2]*EV/ANG);
     });
 
     output

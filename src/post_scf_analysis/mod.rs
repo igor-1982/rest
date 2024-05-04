@@ -10,7 +10,7 @@ use tensors::MathMatrix;
 use crate::constants::{ANG, AU2DEBYE, SPECIES_INFO};
 use crate::dft::DFAFamily;
 use crate::geom_io::get_mass_charge;
-use crate::grad::{formated_force, numerical_force};
+use crate::grad::{formated_force, formated_force_ev, numerical_force};
 use crate::ri_pt2::sbge2::{close_shell_sbge2_rayon, open_shell_sbge2_rayon, close_shell_sbge2_detailed_rayon, open_shell_sbge2_detailed_rayon};
 use crate::ri_rpa::scsrpa::{evaluate_osrpa_correlation_rayon, evaluate_spin_response_rayon, evaluate_special_radius_only};
 use crate::ri_rpa::{evaluate_rpa_correlation, evaluate_rpa_correlation_rayon};
@@ -69,6 +69,9 @@ pub fn post_scf_output(scf_data: &SCF) {
             println!("Total atomic forces [a.u.]: ");
             //num_force.formated_output(5, "full");
             println!("{}", formated_force(&num_force, &scf_data.mol.geom.elem));
+            println!("Total atomic forces [ev/ang]: ");
+            //num_force.formated_output(5, "full");
+            println!("{}", formated_force_ev(&num_force, &scf_data.mol.geom.elem));
         }
     });
 }
