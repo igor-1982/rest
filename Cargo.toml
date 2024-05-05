@@ -44,7 +44,7 @@ miette = "5.0"
 # seems to pull in libssl and libcrypto which is rejected by manylinux
 reqwest = { version = "0.10", default-features = false, features = ["blocking", "json"] }
 # for cuda
-cudarc = "0.10.0"
+#cudarc = "0.10.0"
 
 [build-dependencies]
 autocxx-build = "0.26.0"

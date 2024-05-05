@@ -1805,7 +1805,7 @@ impl SCF {
             _ => -1.0,
         }*self.mol.xc_data.dfa_hybrid_scf ;
         if ! scaling_factor.eq(&0.0) {
-            let use_dm_only = self.mol.ctrl.use_auxbas;
+            let use_dm_only = self.mol.ctrl.use_dm_only;
             let vk = if self.mol.ctrl.use_isdf{
                 self.generate_vk_with_isdf(scaling_factor, use_dm_only)
             }else{
@@ -2047,36 +2047,6 @@ impl SCF {
 
     pub fn diagonalize_hamiltonian(&mut self) {
         (self.eigenvectors, self.eigenvalues) = diagonalize_hamiltonian_outside(&self);
-
-        //let spin_channel = self.mol.spin_channel;
-        //let num_state = self.mol.num_state;
-        //let dt1 = time::Local::now();
-        //match self.scftype {
-        //    SCFType::ROHF => {
-        //        let (eigenvector_spin, eigenvalue_spin)=
-        //            self.hamiltonian[0].to_matrixupperslicemut()
-        //            .lapack_dspgvx(self.ovlp.to_matrixupperslicemut(),num_state).unwrap();
-        //        self.eigenvectors[0] = eigenvector_spin;
-        //        self.eigenvalues[0] = eigenvalue_spin;
-        //        self.eigenvectors[1] = self.eigenvectors[0].clone();
-        //        self.eigenvalues[1] = self.eigenvalues[0].clone();
-        //    },
-        //    _ => {
-        //        for i_spin in (0..spin_channel) {
-        //            let (eigenvector_spin, eigenvalue_spin)=
-        //                self.hamiltonian[i_spin].to_matrixupperslicemut()
-        //                .lapack_dspgvx(self.ovlp.to_matrixupperslicemut(),num_state).unwrap();
-        //            self.eigenvectors[i_spin] = eigenvector_spin;
-        //            self.eigenvalues[i_spin] = eigenvalue_spin;
-        //        }
-        //    }
-        //}
-        ////self.formated_eigenvalues(num_state);
-        //let dt2 = time::Local::now();
-        //let timecost1 = (dt2.timestamp_millis()-dt1.timestamp_millis()) as f64 /1000.0;
-        //if self.mol.ctrl.print_level>1 {
-        //    println!("Hamiltonian eigensolver:  {:10.2}s", timecost1);
-        //}
     }
 
     pub fn check_scf_convergence(&self, scftracerecode: &ScfTraceRecord) -> [bool;2] {
@@ -3150,7 +3120,10 @@ pub fn vk_upper_with_rimatr_sync_v01(
             let mut vk_s = &mut vk[i_spin];
             *vk_s = MatrixUpper::new(num_baspair,0.0_f64);
             let eigv_s = &eigv[i_spin];
-            let nw = num_elec[i_spin+1].ceil() as usize;
+            let homo_s = occupation[i_spin].iter().enumerate()
+                .fold(0_usize,|x, (ob, occ)| {if *occ>1.0e-4 {ob} else {x}});
+            let nw = homo_s + 1;
+            //let nw = num_elec[i_spin+1].ceil() as usize;
             if nw>0 {
                 let mut tmp_mat = MatrixFull::new([num_basis,nw],0.0_f64);
                 tmp_mat.data.iter_mut().zip(eigv_s.iter_submatrix(0..num_basis,0..nw))
@@ -3221,7 +3194,9 @@ pub fn vk_upper_with_rimatr_sync_v02(
             let mut vk_sm = MatrixFull::new([num_basis,num_basis],0.0_f64);
             //*vk_s = MatrixUpper::new(num_baspair,0.0_f64);
             let eigv_s = &eigv[i_spin];
-            let nw = num_elec[i_spin+1].ceil() as usize;
+            let homo_s = occupation[i_spin].iter().enumerate()
+                .fold(0_usize,|x, (ob, occ)| {if *occ>1.0e-4 {ob} else {x}});
+            let nw = homo_s + 1;
             if nw>0 {
                 let mut tmp_mat = MatrixFull::new([num_basis,nw],0.0_f64);
                 tmp_mat.data.iter_mut().zip(eigv_s.iter_submatrix(0..num_basis,0..nw))
@@ -3292,7 +3267,9 @@ pub fn vk_upper_with_rimatr_sync_v03(
             let mut vk_s = &mut vk[i_spin];
             *vk_s = MatrixUpper::new(num_baspair,0.0_f64);
             let eigv_s = &eigv[i_spin];
-            let nw = num_elec[i_spin+1].ceil() as usize;
+            let homo_s = occupation[i_spin].iter().enumerate()
+                .fold(0_usize,|x, (ob, occ)| {if *occ>1.0e-4 {ob} else {x}});
+            let nw = homo_s + 1;
             if nw>0 {
                 let mut tmp_mat = MatrixFull::new([num_basis,nw],0.0_f64);
                 tmp_mat.data.iter_mut().zip(eigv_s.iter_submatrix(0..num_basis,0..nw))
@@ -4001,6 +3978,7 @@ pub fn generate_density_matrix_outside(scf_data: &SCF) -> Vec<MatrixFull<f64>>{
     let num_state = scf_data.mol.num_state;
     let spin_channel = scf_data.mol.spin_channel;
     let homo = &scf_data.homo;
+    //println!("homo: {:?}", &homo);
     let mut dm = vec![
         MatrixFull::empty(),
         MatrixFull::empty()

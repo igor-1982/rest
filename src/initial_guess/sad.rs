@@ -4,7 +4,7 @@ use crate::constants::{F_SHELL, KR_SHELL, NELE_IN_SHELLS, SPECIES_INFO, S_SHELL,
 use crate::molecule_io::Molecule;
 use crate::ctrl_io::InputKeywords;
 use crate::geom_io::{GeomCell, formated_element_name};
-use crate::scf_io::scf;
+use crate::scf_io::{initialize_scf, scf};
 use crate::utilities;
 use std::collections::HashMap;
 
@@ -29,6 +29,8 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
             atom_ctrl.basis_type = mol.ctrl.basis_type.clone();
             atom_ctrl.auxbas_path = mol.ctrl.auxbas_path.clone();
             atom_ctrl.auxbas_type = mol.ctrl.auxbas_type.clone();
+            atom_ctrl.use_auxbas = true;
+            atom_ctrl.num_threads = Some(1);
             atom_ctrl.eri_type = String::from("ri_v");
             atom_ctrl.num_threads = Some(mol.ctrl.num_threads.unwrap());
             atom_ctrl.mixer = "diis".to_string();

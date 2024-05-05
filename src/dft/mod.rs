@@ -2117,11 +2117,11 @@ impl Grids {
         (cur_rho, cur_rhop)
     }
 
-    pub fn prepare_tabulated_density_slots_cudarc(&self, mo: &[MatrixFull<f64>;2], occ: &[Vec<f64>;2], spin_channel: usize,range_grids: Range<usize>) {
-        use cudarc::driver::{CudaDevice,LaunchAsync,LaunchConfig};
-        let num_grids = range_grids.len();
-        //let dev: Option<Arc<CudaDevice>>> = CudaDevice::new(0).unwrap_or(None);
-    }
+    //pub fn prepare_tabulated_density_slots_cudarc(&self, mo: &[MatrixFull<f64>;2], occ: &[Vec<f64>;2], spin_channel: usize,range_grids: Range<usize>) {
+    //    use cudarc::driver::{CudaDevice,LaunchAsync,LaunchConfig};
+    //    let num_grids = range_grids.len();
+    //    //let dev: Option<Arc<CudaDevice>>> = CudaDevice::new(0).unwrap_or(None);
+    //}
 
     pub fn prepare_tabulated_density_slots(&self, mo: &[MatrixFull<f64>;2], occ: &[Vec<f64>;2], spin_channel: usize, range_grids: Range<usize>) -> (MatrixFull<f64>,RIFull<f64>) {
         let num_grids = range_grids.len();
