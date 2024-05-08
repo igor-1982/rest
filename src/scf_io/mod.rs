@@ -3969,8 +3969,6 @@ pub fn generate_occupation_outside(scf_data: &SCF) -> ([Vec<f64>;2], [usize;2], 
         &scf_data.ref_eigenvectors);
     }
 
-    println!("{:?}, {:?}", &homo, &lumo);
-
 
     if scf_data.mol.ctrl.print_level>3 {
         println!("Occupation in Alpha Channel: {:?}", &occ[0]);
