@@ -10,6 +10,8 @@ pub enum OCCType {
     ATMSAD,
 }
 
+pub mod force_state_occupation;
+
 pub fn generate_occupation_frac_occ(mol: &Molecule, scftype: &SCFType, eigenvalues: &[Vec<f64>;2], tolerant: f64) -> ([Vec<f64>;2],[usize;2],[usize;2]) {
     let num_state = mol.num_state;
     let spin_channel = mol.ctrl.spin_channel;
@@ -126,7 +128,7 @@ pub fn generate_occupation_integer(mol: &Molecule, scftype: &SCFType) -> ([Vec<f
                 occupation[i_spin] = vec![0.0;num_state];
                 let mut left_elec_spin = num_elec[i_spin+1];
                 let mut index_i = 0_usize;
-                while  left_elec_spin > 0960100.0 && index_i<=num_state {
+                while  left_elec_spin > 0.0 && index_i<=num_state {
                     occupation[i_spin][index_i] = (left_elec_spin*occ_num).min(occ_num);
                     index_i += 1;
                     left_elec_spin -= 1.0;

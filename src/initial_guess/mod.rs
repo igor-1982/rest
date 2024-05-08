@@ -1,7 +1,7 @@
 use tensors::{MatrixFull, MatrixUpper, BasicMatrix};
 
 use crate::initial_guess::enxc::effective_nxc_matrix;
-use crate::scf_io::scf;
+use crate::scf_io::{scf, SCFType};
 use crate::{molecule_io::Molecule, scf_io::SCF, dft::Grids};
 
 use crate::initial_guess::sap::get_vsap;
@@ -38,6 +38,39 @@ pub fn initial_guess(scf_data: &mut SCF) {
     } else if scf_data.mol.ctrl.restart && std::path::Path::new(&scf_data.mol.ctrl.chkfile).exists()  {
         if scf_data.mol.ctrl.chkfile_type.eq(&"hdf5") {
             let (eigenvectors, eigenvalues) = initial_guess_from_hdf5chk(&scf_data.mol);
+
+            //=============================
+            // for MOM projection
+            if scf_data.mol.ctrl.force_state_occupation.len()>0 {
+                scf_data.ref_eigenvectors = eigenvectors.clone();
+                // validate the force occupation setting
+                match scf_data.scftype {
+                    SCFType::RHF => {
+                        scf_data.mol.ctrl.force_state_occupation.iter().enumerate().for_each(|(i,x)| {
+                            if x.get_force_occ() > 2.0 {
+                                println!("ERROR: the orbital occupation number for RHF cannot be larger than 2.0");
+                                panic!("{}", x.formated_output_check());
+                            }
+                            if x.get_occ_spin() > 0 {
+                                println!("ERROR: the spin is unpolarized for RHF, and thus cannot manipulate the orbitals in BETA spin-channel");
+                                panic!("{}", x.formated_output_check());
+                            }
+                        })
+                    },
+                    _ => {
+                        scf_data.mol.ctrl.force_state_occupation.iter().enumerate().for_each(|(i,x)| {
+                            if x.get_force_occ() > 1.0 {
+                                println!("ERROR: the orbital occupation number for UHF and ROHF cannot be larger than 1.0");
+                                panic!("{}", x.formated_output_check());
+                            }
+                        })
+
+                    }
+                    
+
+                }
+            }
+            //=============================
             scf_data.eigenvalues = eigenvalues;
             scf_data.eigenvectors = eigenvectors;
             scf_data.generate_occupation();

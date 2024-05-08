@@ -1,3 +1,4 @@
+use crate::check_norm::force_state_occupation::adapt_occupation_with_force_projection;
 use crate::check_norm::{self, generate_occupation_frac_occ, generate_occupation_integer, generate_occupation_sad, OCCType};
 //use clap::value_parser;
 //use pyo3::{pyclass, pymethods, pyfunction};
@@ -117,6 +118,7 @@ pub struct SCF {
     pub scf_energy: f64,
     pub grids: Option<Grids>,
     pub energies: HashMap<String,Vec<f64>>,
+    pub ref_eigenvectors: [MatrixFull<f64>;2],
 }
 
 #[derive(Clone,Copy)]
@@ -144,6 +146,8 @@ impl SCF {
             hamiltonian: [MatrixUpper::new(1,0.0),
                               MatrixUpper::new(1,0.0)],
             eigenvectors: [MatrixFull::new([1,1],0.0),
+                           MatrixFull::new([1,1],0.0)],
+            ref_eigenvectors: [MatrixFull::new([1,1],0.0),
                            MatrixFull::new([1,1],0.0)],
             //density_matrix: [MatrixFull::new([1,1],0.0),
             //                     MatrixFull::new([1,1],0.0)],
@@ -3194,6 +3198,7 @@ pub fn vk_upper_with_rimatr_sync_v02(
             let mut vk_sm = MatrixFull::new([num_basis,num_basis],0.0_f64);
             //*vk_s = MatrixUpper::new(num_baspair,0.0_f64);
             let eigv_s = &eigv[i_spin];
+            // now locate the highest obital that has electron with occupation largger than 1.0e-4
             let homo_s = occupation[i_spin].iter().enumerate()
                 .fold(0_usize,|x, (ob, occ)| {if *occ>1.0e-4 {ob} else {x}});
             let nw = homo_s + 1;
@@ -3267,6 +3272,7 @@ pub fn vk_upper_with_rimatr_sync_v03(
             let mut vk_s = &mut vk[i_spin];
             *vk_s = MatrixUpper::new(num_baspair,0.0_f64);
             let eigv_s = &eigv[i_spin];
+            // now locate the highest obital that has electron with occupation largger than 1.0e-4
             let homo_s = occupation[i_spin].iter().enumerate()
                 .fold(0_usize,|x, (ob, occ)| {if *occ>1.0e-4 {ob} else {x}});
             let nw = homo_s + 1;
@@ -3941,27 +3947,29 @@ pub fn generate_occupation_outside(scf_data: &SCF) -> ([Vec<f64>;2], [usize;2], 
     let mut lumo = [0,0];
     match scf_data.mol.ctrl.occupation_type {
         OCCType::INTEGER => {
-            //println!("debug generate_occupation_integer");
             (occ,homo,lumo) = generate_occupation_integer(&scf_data.mol,&scf_data.scftype);
-            //self.occupation = occ;
-            //self.homo = homo;
-            //self.lumo = lumo;
         },
         OCCType::ATMSAD => {
-            //println!("debug generate_occupation_sad");
             (occ,homo,lumo) = generate_occupation_sad(scf_data.mol.geom.elem.get(0).unwrap(),scf_data.mol.num_state, scf_data.mol.ecp_electrons);
-            //self.occupation = occ;
-            //self.homo = homo;
-            //self.lumo = lumo;
         },
         OCCType::FRAC => {
-            //println!("debug generate_occupation_frac");
             (occ,homo,lumo) = generate_occupation_frac_occ(&scf_data.mol,&scf_data.scftype, &scf_data.eigenvalues, scf_data.mol.ctrl.frac_tolerant);
-            //self.occupation = occ;
-            //self.homo = homo;
-            //self.lumo = lumo;
         }
     }
+
+    let mut force_occ = scf_data.mol.ctrl.force_state_occupation.clone();
+
+    if force_occ.len()>0 {
+        adapt_occupation_with_force_projection(
+        &mut occ, &mut homo, &mut lumo,
+        &mut force_occ, 
+        &scf_data.scftype, 
+        &scf_data.eigenvectors, 
+        &scf_data.ovlp, 
+        &scf_data.ref_eigenvectors);
+    }
+
+
     if scf_data.mol.ctrl.print_level>3 {
         println!("Occupation in Alpha Channel: {:?}", &occ[0]);
         if scf_data.mol.spin_channel == 2{

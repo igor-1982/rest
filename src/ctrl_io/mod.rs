@@ -3,7 +3,7 @@ use pyo3::pyclass;
 use serde::{Deserialize,Serialize};
 //use std::{fs, str::pattern::StrSearcher};
 use std::{fs, sync::Arc};
-use crate::{geom_io::{GeomCell,MOrC, GeomUnit}, dft::{DFAFamily, DFA4REST}, utilities};
+use crate::{check_norm::force_state_occupation::ForceStateOccupation, dft::{DFAFamily, DFA4REST}, geom_io::{GeomCell, GeomUnit, MOrC}, utilities};
 use rayon::ThreadPoolBuilder;
 use crate::check_norm::OCCType;
 
@@ -183,7 +183,9 @@ pub struct InputKeywords {
     // Keywords for parallism
     #[pyo3(get, set)]
     pub num_threads: Option<usize>,
-    pub nforce_displacement: f64
+    pub nforce_displacement: f64,
+    pub force_state_occupation: Vec<ForceStateOccupation>
+
 }
 
 impl InputKeywords {
@@ -280,6 +282,7 @@ impl InputKeywords {
             deep_pot: false,
             occupation_type: OCCType::INTEGER,
             frac_tolerant: 1.0e-3,
+            force_state_occupation: vec![],
         }
     }
 
@@ -547,27 +550,6 @@ impl InputKeywords {
                     serde_json::Value::String(tmp_xc) => {tmp_xc.to_lowercase()},
                     other => {String::from("none")},
                 };
-                //let post_corr  = if post_ai_corr.eq("scc23") && tmp_input.xc.eq("r-xdh7") {
-                //   vec!["sbge2"] 
-                //} else {
-                //    vec![]
-                //};
-
-                //tmp_input.post_ai_correction = vec![];
-                //post_corr.iter().for_each(|corr| {
-                //    if corr.to_lowercase().eq("pt2") {
-                //        tmp_input.post_ai_correction.push(DFAFamily::PT2)
-                //    } else if corr.to_lowercase().eq("sbge2") {
-                //        tmp_input.post_ai_correction.push(DFAFamily::SBGE2)
-                //    } else if corr.to_lowercase().eq("rpa") {
-                //        tmp_input.post_ai_correction.push(DFAFamily::RPA)
-                //    } else if corr.to_lowercase().eq("scsrpa") {
-                //        tmp_input.post_ai_correction.push(DFAFamily::SCSRPA)
-                //    } else {
-                //        println!("Unknown post-scf correlation method: {}", corr)
-                //    }
-                //    //if corr.to_lowercase().eq(&pt2) 
-                //});
                 // ===============================================
                 //  Keywords to determine the spin channel, which 
                 //   is important to turn on RHF(RKS) or UHF(UKS)
@@ -823,6 +805,30 @@ impl InputKeywords {
                     serde_json::Value::Number(tmp_num) => {tmp_num.as_f64().unwrap_or(1.0e-3)},
                     other => {1.0e-3}
                 };
+                tmp_input.force_state_occupation= match tmp_ctrl.get("force_state_occupation").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_op) => {vec![]},
+                    serde_json::Value::Array(tmp_op) => {
+                        let mut tmp_vec:Vec<ForceStateOccupation> = vec![];
+                        tmp_op.iter().for_each(|x| {
+                            let tmp_obj = match x {
+                                serde_json::Value::Array(tmp_value) => {
+                                    let prev_state: usize = tmp_value[0].as_u64().unwrap_or(0) as usize;
+                                    let prev_spin: usize = tmp_value[1].as_u64().unwrap_or(0) as usize;
+                                    let force_occ: f64 = tmp_value[2].as_f64().unwrap_or(0.0);
+                                    let force_check_min: usize = tmp_value[3].as_u64().unwrap_or(0) as usize;
+                                    let force_check_max: usize = tmp_value[4].as_u64().unwrap_or(0) as usize;
+                                    Some(ForceStateOccupation::init(prev_state, prev_spin, force_occ, force_check_min, force_check_max))
+                                },
+                                other => None
+                            };
+                            if let Some(tmp_obj) = tmp_obj {
+                                tmp_vec.push(tmp_obj)
+                            }
+                        });
+                        tmp_vec
+                    },
+                    other => {vec![]},
+                };
                 // ================================================
                 //  Keywords associated with the post-SCF analyais
                 // ================================================
@@ -888,33 +894,13 @@ impl InputKeywords {
 
                 // for atom_sad setting
                 tmp_input.atom_sad = match tmp_ctrl.get("atom_sad").unwrap_or(&serde_json::Value::Null) {
-                //tmp_input.use_ri_symm = match tmp_ctrl.get("use_ri_symm").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::Bool(tmp_str) => {*tmp_str},
                     other => {false},
                 };
-                //tmp_input.output_wfn_in_real_space = match tmp_ctrl.get("output_wfn_in_real_space").unwrap_or(&serde_json::Value::Null) {
-                //    serde_json::Value::String(tmp_wfn) => {tmp_wfn.to_lowercase().parse().unwrap_or(0)},
-                //    serde_json::Value::Number(tmp_wfn) => {tmp_wfn.as_i64().unwrap_or(0) as usize},
-                //    other => {0_usize},
-                //};
 
-                //tmp_input.output_cube = match tmp_ctrl.get("output_cube").unwrap_or(&serde_json::Value::Null) {
-                //    serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
-                //    serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
-                //    other => false,
-                //}; 
-
-                //tmp_input.output_molden = match tmp_ctrl.get("output_molden").unwrap_or(&serde_json::Value::Null) {
-                //    serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
-                //    serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
-                //    other => false,
-                //}; 
-                //tmp_input.output_fchk = match tmp_ctrl.get("output_fchk").unwrap_or(&serde_json::Value::Null) {
-                //    serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
-                //    serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
-                //    other => false,
-                //};
-
+                //============================================================
+                // Now print out some useful information
+                //============================================================
                 if tmp_input.print_level>0 {
                     println!("Charge: {:3}; Spin: {:3}",tmp_input.charge,tmp_input.spin);
                     println!("min_num_angular_points: {}", tmp_input.min_num_angular_points);
@@ -922,14 +908,6 @@ impl InputKeywords {
                     println!("hardness: {}", tmp_input.hardness);
                     println!("Grid generation level: {}", tmp_input.grid_gen_level);
                     println!("Even tempered basis generation: {}", tmp_input.even_tempered_basis);
-                    if tmp_input.even_tempered_basis == true {
-                        if tmp_input.etb_beta<=1.0f64 {
-                            println!("WARNING: etb_beta cannot be below 1.0. REST will use etb_beta=2.0 instead in this calculation");
-                            tmp_input.etb_beta=2.0f64;
-                        }
-                        println!("Even tempered basis generation starts at: {}", tmp_input.etb_start_atom_number);
-                        println!("Even tempered basis beta is: {}", tmp_input.etb_beta);
-                    }
                     println!("SCF convergency thresholds: {:e} for density matrix", tmp_input.scf_acc_rho);
                     println!("                            {:e} Ha. for sum of eigenvalues", tmp_input.scf_acc_eev);
                     println!("                            {:e} Ha. for total energy", tmp_input.scf_acc_etot);
@@ -951,11 +929,6 @@ impl InputKeywords {
                         println!("Unknown charge density mixer ({})! No charge density mixing will be invoked.", tmp_input.mixer);
                     };
                     // if guessfile is specified, reading the external initial guess file is prior to reading the restart file
-                    if tmp_input.external_init_guess  {
-                        println!("The initial guess will be imported from \n({}).\n ",&tmp_input.guessfile)
-                    } else if ! std::path::Path::new(&tmp_input.guessfile).exists() {
-                        println!("WARNING: The specified external initial guess file (guessfile) is missing \n({}). \n The external initial guess will not be imported.\n",&tmp_input.guessfile)
-                    }
                     if tmp_input.restart && ! std::path::Path::new(&tmp_input.chkfile).exists() {
                         println!("The specified checkfile is missing, which will be created after the SCF procedure \n({})",&tmp_input.chkfile)
                     } else if tmp_input.restart && ! tmp_input.external_init_guess {
@@ -966,6 +939,37 @@ impl InputKeywords {
                         //println!("No existing checkfile for restart\n")
                     };
                     println!("Initial guess is prepared by ({}).", &tmp_input.initial_guess);
+                }
+
+                //===========================================================
+                // Global check of ctrl keywords and futher modification
+                //============================================================
+                if tmp_input.even_tempered_basis == true {
+                    if tmp_input.etb_beta<=1.0f64 {
+                        println!("WARNING: etb_beta cannot be below 1.0. REST will use etb_beta=2.0 instead in this calculation");
+                        tmp_input.etb_beta=2.0f64;
+                    }
+                    if tmp_input.print_level>0 {
+                        println!("Even tempered basis generation starts at: {}", tmp_input.etb_start_atom_number);
+                        println!("Even tempered basis beta is: {}", tmp_input.etb_beta);
+                    }
+                }
+                if tmp_input.external_init_guess  {
+                    if ! std::path::Path::new(&tmp_input.guessfile).exists() {
+                        println!("WARNING: The specified external initial guess file (guessfile) is missing \n({}). \n The external initial guess will not be imported.\n",&tmp_input.guessfile);
+                        tmp_input.external_init_guess = false;
+                    } else {
+                        if tmp_input.print_level>0 {
+                            println!("The initial guess will be imported from \n({}).\n ",&tmp_input.guessfile);
+                        }
+                    }
+                }
+                if tmp_input.force_state_occupation.len()>0 {
+                    if ! tmp_input.restart {
+                        panic!("ERROR: force_state_occupation can not be involved without an existing chkfile \'restart\'");
+                    } else if ! std::path::Path::new(&tmp_input.chkfile).exists() {
+                        panic!("ERROR: force_state_occupation can not be involved without an existing chkfile \'restart\'");
+                    }
                 }
             },
             other => {

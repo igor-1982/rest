@@ -2133,9 +2133,14 @@ impl Grids {
             let mut cur_rhop = RIFull::new([num_grids,3,spin_channel],0.0);
             for i_spin in 0..spin_channel {
                 let mo_s = mo.get(i_spin).unwrap();
-                // assume that the molecular obitals have been orderd: occupation first, then virtual.
-                let mut occ_s = occ.get(i_spin).unwrap()
-                    .iter().filter(|occ| **occ>0.0).map(|occ| occ.sqrt()).collect_vec();
+                //==================================
+                // WRONG:: assume that the molecular obitals have been orderd: occupation first, then virtual.
+                //let mut occ_s = occ.get(i_spin).unwrap()
+                //    .iter().filter(|occ| **occ>0.0).map(|occ| occ.sqrt()).collect_vec();
+                //==================================
+                // now locate the highest obital that has electron with occupation largger than 1.0e-4
+                let homo_s = occ[i_spin].iter().enumerate().fold(0_usize,|x, (ob, occ)| {if *occ>1.0e-4 {ob} else {x}});
+                let mut occ_s = occ.get(i_spin).unwrap()[0..homo_s+1].to_vec();
                 let num_occ = occ_s.len();
                 // wmo = weigthed mo ('ij,j->ij'): mo_s(ij), occ_s(j) -> wmo(ij)
                 //println!("{:?}.{:?}", &occ, &occ_s);
