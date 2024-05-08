@@ -94,6 +94,8 @@ pub struct Molecule {
     // for effective core potential in SCF
     pub ecp_electrons : usize,
 
+    pub auxbas4elem: Vec<Basis4Elem>,
+
     pub basis4elem: Vec<Basis4Elem>,
     // fdqc_bas: store information of each basis functions
     pub fdqc_bas : Vec<BasInfo>,
@@ -132,6 +134,7 @@ impl Molecule {
             start_mo: 0,   // all-electron pt2, rpa and so forth
             ecp_electrons: 0,
             spin_channel: 1,
+            auxbas4elem: vec![],
             basis4elem: vec![],
             fdqc_bas: vec![],
             cint_bas: vec![],
@@ -193,7 +196,7 @@ impl Molecule {
 
         let (mut auxbas , mut cint_aux_atm,mut cint_aux_bas,cint_aux_env,
                 mut fdqc_aux_bas,mut cint_aux_fdqc,num_auxbas) 
-            =(bas.clone(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),0);
+            =(Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),0);
 
 
         //let mut cint_data = CINTR2CDATA::new();
@@ -244,6 +247,7 @@ impl Molecule {
             ecp_electrons,
             spin_channel,
             basis4elem,
+            auxbas4elem: auxbas,
             fdqc_bas,
             cint_fdqc,
             cint_atm,
@@ -259,6 +263,12 @@ impl Molecule {
         };
         // check and prepare the auxiliary basis sets
         if mol.ctrl.use_auxbas {mol.initialize_auxbas()};
+
+        println!("Debug for AuxBasis4Eelem");
+        mol.auxbas4elem.iter().enumerate().for_each(|(i,x)| {
+            println!("Basis functions for Atom {}: ({},{})", i,x.global_index.0,x.global_index.1);
+        });
+
         if mol.ctrl.print_level>0 {
             println!("numbasis: {:2}, num_auxbas: {:2}", mol.num_basis,mol.num_auxbas)
         };
@@ -305,6 +315,7 @@ impl Molecule {
         self.fdqc_aux_bas = fdqc_aux_bas;
         self.cint_aux_fdqc = cint_aux_fdqc;
         self.num_auxbas = num_auxbas;
+        self.auxbas4elem = auxbas;
 
         //let mut env = self.cint_env.clone();
 
