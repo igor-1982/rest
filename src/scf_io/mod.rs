@@ -245,9 +245,10 @@ impl SCF {
             }
         }
 
-        let isdf = self.mol.ctrl.eri_type.eq("ri_v") && self.mol.ctrl.use_isdf;
-        let ri3fn_full = self.mol.ctrl.use_auxbas && !self.mol.ctrl.use_ri_symm;
-        let ri3fn_symm = self.mol.ctrl.use_auxbas && self.mol.ctrl.use_ri_symm;
+        let use_eri = self.mol.xc_data.use_eri();
+        let isdf = if use_eri {self.mol.ctrl.eri_type.eq("ri_v") && self.mol.ctrl.use_isdf} else {false};
+        let ri3fn_full = if use_eri {self.mol.ctrl.use_auxbas && !self.mol.ctrl.use_ri_symm} else {false};
+        let ri3fn_symm = if use_eri {self.mol.ctrl.use_auxbas && self.mol.ctrl.use_ri_symm} else{false};
 
         // preparing the three-center integrals in the full format
         self.ri3fn = if ri3fn_full && !isdf {
@@ -303,9 +304,11 @@ impl SCF {
     }
 
     pub fn prepare_isdf(&mut self) {
-        let isdf = self.mol.ctrl.eri_type.eq("ri_v") && self.mol.ctrl.use_isdf;
-        let ri3fn_full = self.mol.ctrl.use_auxbas && !self.mol.ctrl.use_ri_symm;
-        let ri3fn_symm = self.mol.ctrl.use_auxbas && self.mol.ctrl.use_ri_symm;
+
+        let use_eri = self.mol.xc_data.use_eri();
+        let isdf = if use_eri {self.mol.ctrl.eri_type.eq("ri_v") && self.mol.ctrl.use_isdf} else {false};
+        let ri3fn_full = if use_eri {self.mol.ctrl.use_auxbas && !self.mol.ctrl.use_ri_symm} else {false};
+        let ri3fn_symm = if use_eri {self.mol.ctrl.use_auxbas && self.mol.ctrl.use_ri_symm} else{false};
 
         if ! isdf {return}
         if let Some(grids) = &self.grids {
@@ -519,7 +522,7 @@ impl SCF {
         vj
     }
 
-    pub fn generate_vj_on_the_fly(&mut self) -> Vec<MatrixUpper<f64>>{
+    pub fn generate_vj_on_the_fly(&self) -> Vec<MatrixUpper<f64>>{
         let num_shell = self.mol.cint_bas.len();
         //let num_shell = self.mol.cint_fdqc.len();
         let num_basis = self.mol.num_basis;
@@ -570,7 +573,7 @@ impl SCF {
         vj
     }
 
-    pub fn generate_vj_on_the_fly_par_old(&mut self) -> Vec<MatrixUpper<f64>>{
+    pub fn generate_vj_on_the_fly_par_old(&self) -> Vec<MatrixUpper<f64>>{
         //utilities::omp_set_num_threads_wrapper(1);
         let num_shell = self.mol.cint_bas.len();
         let num_basis = self.mol.num_basis;
@@ -632,7 +635,7 @@ impl SCF {
 
     }
 
-    pub fn generate_vj_on_the_fly_par_new(&mut self) -> Vec<MatrixUpper<f64>>{
+    pub fn generate_vj_on_the_fly_par_new(&self) -> Vec<MatrixUpper<f64>>{
         let num_shell = self.mol.cint_bas.len();
         let num_basis = self.mol.num_basis;
         let spin_channel = self.mol.spin_channel;
@@ -704,7 +707,7 @@ impl SCF {
         vj
     }
 
-    pub fn generate_vj_on_the_fly_par(&mut self) -> Vec<MatrixUpper<f64>> {
+    pub fn generate_vj_on_the_fly_par(&self) -> Vec<MatrixUpper<f64>> {
         self.generate_vj_on_the_fly_par_new()
     }
 
@@ -1703,7 +1706,11 @@ impl SCF {
             self.hamiltonian[i_spin] = self.h_core.clone();
         }
         let dt1 = time::Local::now();
-        let vj = self.generate_vj_with_ri_v_sync(1.0);
+        let vj = if self.mol.xc_data.use_eri() {
+            self.generate_vj_with_ri_v_sync(1.0)
+        } else {
+            self.generate_vj_on_the_fly_par()
+        };
         for i_spin in (0..spin_channel) {
             self.hamiltonian[i_spin].data
                 .par_iter_mut()
