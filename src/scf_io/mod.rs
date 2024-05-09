@@ -245,7 +245,8 @@ impl SCF {
             }
         }
 
-        let use_eri = self.mol.xc_data.use_eri();
+        //let use_eri = self.mol.xc_data.use_eri();
+        let use_eri = true;
         let isdf = if use_eri {self.mol.ctrl.eri_type.eq("ri_v") && self.mol.ctrl.use_isdf} else {false};
         let ri3fn_full = if use_eri {self.mol.ctrl.use_auxbas && !self.mol.ctrl.use_ri_symm} else {false};
         let ri3fn_symm = if use_eri {self.mol.ctrl.use_auxbas && self.mol.ctrl.use_ri_symm} else{false};
@@ -645,7 +646,7 @@ impl SCF {
         //utilities::omp_set_num_threads_wrapper(1);
         for i_spin in 0..spin_channel{
             let mut vj_i = MatrixFull::new([num_basis, num_basis], 0.0);
-            let mut dm_s = &self.density_matrix[i_spin];
+            let dm_s = &self.density_matrix[i_spin];
             let par_tasks = utilities::balancing(num_shell*num_shell, rayon::current_num_threads());
             let (sender, receiver) = channel();
             let mut index = Vec::new();
@@ -660,7 +661,7 @@ impl SCF {
                 let bas_start_l = mol.cint_fdqc[*l][0];
                 let bas_len_l = mol.cint_fdqc[*l][1];
 
-                let mut klij = mol.int_ijkl_given_kl_v02(*k, *l);
+                let klij = mol.int_ijkl_given_kl_v02(*k, *l);
                 let mut sum =0.0;
                 //let mut out = vec![(0.0, 0usize, 0usize); ];
                 //let mut out:Vec<(f64, usize, usize)> = Vec::new();
@@ -671,8 +672,10 @@ impl SCF {
                     x.iter_mut().enumerate().for_each(|(loc_k,elem)|{
                         let ao_k = loc_k + bas_start_k;
                         let ao_l = loc_l + bas_start_l;
-                        let mut eri_cd = klij.get(&[loc_k, loc_l]).unwrap();
-                        let mut sum = dm_s.iter_matrixupper().unwrap().zip(eri_cd.iter_matrixupper().unwrap()).fold(0.0,|sum, (p,eri)| {
+                        let eri_cd = klij.get(&[loc_k, loc_l]).unwrap();
+                        let mut sum = dm_s.iter_matrixupper().unwrap()
+                            .zip(eri_cd.iter_matrixupper().unwrap())
+                            .fold(0.0,|sum, (p,eri)| {
                             sum + *p * *eri
                         });
 
@@ -1706,7 +1709,9 @@ impl SCF {
             self.hamiltonian[i_spin] = self.h_core.clone();
         }
         let dt1 = time::Local::now();
-        let vj = if self.mol.xc_data.use_eri() {
+        //let use_eri = self.mol.xc_data.use_eri();
+        let use_eri = true;
+        let vj = if true {
             self.generate_vj_with_ri_v_sync(1.0)
         } else {
             self.generate_vj_on_the_fly_par()
