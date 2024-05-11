@@ -155,7 +155,8 @@ impl ENXC {
             } else if tmp_index >= num_coeffs && tmp_index < num_coeffs*2 {
                 let tmp_tmp_index = tmp_index - num_coeffs;
                 coeff_type = 1;
-                coeff_partner = -x.coefficients[0][tmp_tmp_index as usize];
+                //coeff_partner = -x.coefficients[0][tmp_tmp_index as usize];
+                coeff_partner = x.coefficients[0][tmp_tmp_index as usize];
                 coeff = x.gaussian_exponents[tmp_tmp_index as usize];
                 angular_momentum = x.angular_momentum[0];
                 r_exponent = x.r_exponents[tmp_tmp_index as usize];
@@ -185,6 +186,7 @@ pub fn evaluate_derive_enxc(mol: &mut Molecule, enxc: &Vec<ENXC>, atm_index: usi
         cur_potcell.coefficients[0][0] = 1.0;
     } else {
         cur_potcell.r_exponents[0] += 2;
+        cur_potcell.coefficients[0][0] *= -1.0;
     }
 
     effective_nxc_for_potcell(mol, &cur_potcell, atm_index)

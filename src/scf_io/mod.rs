@@ -44,7 +44,7 @@ mod pyrest_scf_io;
 //use clap::value_parser;
 use pyo3::{pyclass, pymethods, pyfunction};
 use tensors::matrix_blas_lapack::{_dgemm, _dgemm_full, _dgemv, _dinverse, _dspgvx, _dsymm, _dsyrk, _power, _power_rayon};
-use tensors::{ERIFull,MatrixFull, ERIFold4, MatrixUpper, TensorSliceMut, RIFull, MatrixFullSlice, MatrixFullSliceMut, BasicMatrix, MathMatrix, MatrixUpperSlice, ParMathMatrix, ri};
+use tensors::{map_full_to_upper, map_upper_to_full, ri, BasicMatrix, ERIFold4, ERIFull, MathMatrix, MatrixFull, MatrixFullSlice, MatrixFullSliceMut, MatrixUpper, MatrixUpperSlice, ParMathMatrix, RIFull, TensorSliceMut};
 use itertools::{Itertools, iproduct, izip};
 use rayon::prelude::*;
 use std::collections::HashMap;
@@ -245,8 +245,8 @@ impl SCF {
             }
         }
 
-        //let use_eri = self.mol.xc_data.use_eri();
-        let use_eri = true;
+        let use_eri = self.mol.use_eri;
+        //let use_eri = true;
         let isdf = if use_eri {self.mol.ctrl.eri_type.eq("ri_v") && self.mol.ctrl.use_isdf} else {false};
         let ri3fn_full = if use_eri {self.mol.ctrl.use_auxbas && !self.mol.ctrl.use_ri_symm} else {false};
         let ri3fn_symm = if use_eri {self.mol.ctrl.use_auxbas && self.mol.ctrl.use_ri_symm} else{false};
@@ -306,7 +306,7 @@ impl SCF {
 
     pub fn prepare_isdf(&mut self) {
 
-        let use_eri = self.mol.xc_data.use_eri();
+        let use_eri = self.mol.use_eri;
         let isdf = if use_eri {self.mol.ctrl.eri_type.eq("ri_v") && self.mol.ctrl.use_isdf} else {false};
         let ri3fn_full = if use_eri {self.mol.ctrl.use_auxbas && !self.mol.ctrl.use_ri_symm} else {false};
         let ri3fn_symm = if use_eri {self.mol.ctrl.use_auxbas && self.mol.ctrl.use_ri_symm} else{false};
@@ -711,7 +711,8 @@ impl SCF {
     }
 
     pub fn generate_vj_on_the_fly_par(&self) -> Vec<MatrixUpper<f64>> {
-        self.generate_vj_on_the_fly_par_new()
+        //self.generate_vj_on_the_fly_par_new()
+        vj_on_the_fly_par(&self.mol, &self.density_matrix)
     }
 
 
@@ -1709,9 +1710,9 @@ impl SCF {
             self.hamiltonian[i_spin] = self.h_core.clone();
         }
         let dt1 = time::Local::now();
-        //let use_eri = self.mol.xc_data.use_eri();
-        let use_eri = true;
-        let vj = if true {
+        //let use_eri = self.mol.xc_data.use_eri() || self.mol.xc_dat;
+        //let use_eri = true;
+        let vj = if self.mol.ctrl.use_ri_vj {
             self.generate_vj_with_ri_v_sync(1.0)
         } else {
             self.generate_vj_on_the_fly_par()
@@ -4168,6 +4169,88 @@ pub fn scf_without_build(scf_data: &mut SCF) {
         println!("SCF does not converge within {:03} iterations",scf_records.num_iter);
     }
 
+}
+
+pub fn vj_on_the_fly_par(mol: &Molecule, dm: &Vec<MatrixFull<f64>>) -> Vec<MatrixUpper<f64>>{
+
+
+    // establish the map between matrixupper and matrixfull
+    let matrixupper_index = map_upper_to_full((mol.num_basis+1)*mol.num_basis/2).unwrap();
+    //println!("{:?}", &matrixupper_index);
+    //let matrixfull_index = map_full_to_upper([mol.num_basis,mol.num_basis]).unwrap();
+
+    let num_shell = mol.cint_bas.len();
+    let num_basis = mol.num_basis;
+    let spin_channel = mol.spin_channel;
+    //let dm = &self.density_matrix;
+    let mut vj: Vec<MatrixUpper<f64>> = vec![];
+    //let mol = &self.mol;
+    //utilities::omp_set_num_threads_wrapper(1);
+    for i_spin in 0..spin_channel{
+        let mut vj_i = MatrixFull::new([num_basis, num_basis], 0.0);
+        let dm_s_upper = dm[i_spin].to_matrixupper();
+        let dm_s_diagnoal = dm[i_spin].iter_diagonal().unwrap().map(|x| *x).collect::<Vec<f64>>();
+        let par_tasks = utilities::balancing(num_shell*num_shell, rayon::current_num_threads());
+        let (sender, receiver) = channel();
+        let mut index = Vec::new();
+        for l in 0..num_shell {
+            for k in 0..l+1 {
+                index.push((k,l))
+            }
+        };
+        index.par_iter().for_each_with(sender,|s,(k,l)|{
+            let bas_start_k = mol.cint_fdqc[*k][0];
+            let bas_len_k = mol.cint_fdqc[*k][1];
+            let bas_start_l = mol.cint_fdqc[*l][0];
+            let bas_len_l = mol.cint_fdqc[*l][1];
+
+            //dd.formated_output_general(5, "full");
+            let klij = mol.int_ijkl_given_kl_v03(*k, *l, &matrixupper_index);
+            let mut sum =0.0;
+            //let mut out = vec![(0.0, 0usize, 0usize); ];
+            //let mut out:Vec<(f64, usize, usize)> = Vec::new();
+            let mut out = MatrixFull::new([bas_len_k, bas_len_l],0.0);
+            //for ao_k in bas_start_k..bas_start_k+bas_len_k{
+            //    for ao_l in bas_start_l..bas_start_l+bas_len_l{
+            out.iter_columns_full_mut().enumerate().for_each(|(loc_l,x)|{
+                x.iter_mut().enumerate().for_each(|(loc_k,elem)|{
+                    let ao_k = loc_k + bas_start_k;
+                    let ao_l = loc_l + bas_start_l;
+                    let eri_cd = klij.get(&[loc_k, loc_l]).unwrap();
+                    let mut sum = dm_s_upper.data.iter().zip(eri_cd.iter())
+                        .fold(0.0,|sum, (p,eri)| {
+                        sum + *p * *eri
+                    });
+
+                    let mut diagonal = dm_s_diagnoal.iter().zip(eri_cd.iter_diagonal()).fold(0.0,|diagonal, (p,eri)| {
+                        diagonal + *p * *eri
+                    });
+
+                    sum = sum*2.0 - diagonal;
+
+                    *elem = sum;
+                })
+            });
+            s.send((out,*k,*l)).unwrap();
+        });
+        receiver.into_iter().for_each(|(out,k,l)| {
+            let bas_start_k = mol.cint_fdqc[k][0];
+            let bas_len_k = mol.cint_fdqc[k][1];
+            let bas_start_l = mol.cint_fdqc[l][0];
+            let bas_len_l = mol.cint_fdqc[l][1];
+            vj_i.copy_from_matr(bas_start_k..bas_start_k+bas_len_k, bas_start_l..bas_start_l+bas_len_l, 
+                &out, 0..bas_len_k,0..bas_len_l);
+            //vj_i.iter_submatrix_mut(bas_start_k..bas_start_k+bas_len_k, bas_start_l..bas_start_l+bas_len_l).zip(out.iter())
+            //    .for_each(|(to, from)| {*to = *from});
+        });
+        
+
+        vj.push(vj_i.to_matrixupper());
+    }
+    if spin_channel == 1{
+        vj.push(MatrixUpper::new(1, 0.0));       
+    }
+    vj
 }
 
 

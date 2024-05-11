@@ -161,6 +161,7 @@ pub struct InputKeywords {
     pub check_stab: bool,
     #[pyo3(get, set)]
     pub use_dm_only: bool,
+    pub use_ri_vj: bool,
     // Keywords for fciqmc dump
     #[pyo3(get, set)]
     pub fciqmc_dump: bool,
@@ -264,6 +265,7 @@ impl InputKeywords {
             // True:  using only density matrix in the evaluation
             // False: use coefficients as well with higher efficiency
             use_dm_only: false,
+            use_ri_vj: false,
             // Keywords for the fciqmc dump
             fciqmc_dump: false,
             // Kyewords for post scf
@@ -777,6 +779,11 @@ impl InputKeywords {
                     other => false,
                 };
                 tmp_input.use_dm_only = match tmp_ctrl.get("use_dm_only").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
+                    serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
+                    other => false,
+                };
+                tmp_input.use_ri_vj = match tmp_ctrl.get("use_ri_vj").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
                     serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
                     other => false,

@@ -7,7 +7,7 @@ use rayon::prelude::{IntoParallelRefIterator, IndexedParallelIterator, ParallelI
 use rest_tensors::{ERIFull,RIFull,ERIFold4,TensorSlice,TensorSliceMut,TensorOptMut,TensorOpt, MatrixUpper, MatrixFull};
 use libc::regerror;
 use statrs::distribution::Continuous;
-use tensors::BasicMatrix;
+use tensors::{map_upper_to_full, BasicMatrix};
 use tensors::external_libs::{ri_copy_from_ri, matr_copy_from_ri};
 use tensors::matrix_blas_lapack::{_dgemm, _dgemm_full, _power, _power_rayon, _newton_schulz_inverse_square_root_v02};
 use std::collections::HashMap;
@@ -80,6 +80,7 @@ pub struct Molecule {
     pub spin_channel: usize,
     // exchange-correlation functionals
     pub xc_data: DFA4REST,
+    pub use_eri: bool,
     #[pyo3(get, set)]
     pub num_state: usize,
     #[pyo3(get, set)]
@@ -126,6 +127,7 @@ impl Molecule {
         Molecule {
             ctrl:InputKeywords::init_ctrl(),
             xc_data: DFA4REST::new("hf",1, 0),
+            use_eri: false,
             geom: GeomCell::init_geom(),
             num_elec: [0.0;3],
             num_state: 0,
@@ -211,6 +213,9 @@ impl Molecule {
 
         let xc_data = DFA4REST::new(&ctrl.xc,spin_channel, ctrl.print_level);
 
+        let use_eri = xc_data.use_eri() || ctrl.use_ri_vj;
+        
+
         // frozen-core pt2 and rpa are not yet implemented.
         let mut start_mo = count_frozen_core_states(ctrl.frozen_core_postscf, &geom.elem);
         let ecp_orbs = ecp_electrons/2;
@@ -239,6 +244,7 @@ impl Molecule {
             ctrl,
             geom,
             xc_data,
+            use_eri,
             num_elec,
             num_state,
             num_basis,
@@ -1119,6 +1125,57 @@ impl Molecule {
 
                         tmp_mat.iter_submatrix_mut(bas_start_i..bas_start_i+bas_len_i, bas_start_j..bas_start_j+bas_len_j)
                         .zip(tmp_loc.data.iter()).for_each(|(gij,lij)| {*gij = *lij});
+                    }
+                }
+            };
+        };
+        mat_full
+        //mat_vec
+    }
+    #[inline]
+    pub fn int_ijkl_given_kl_v03(&self, k: usize, l: usize, matrixupper_index: &MatrixUpper<[usize;2]>) -> MatrixFull<MatrixUpper<f64>> {
+
+        let bas_start_l = self.cint_fdqc[l][0];
+        let bas_len_l = self.cint_fdqc[l][1];
+        let bas_start_k = self.cint_fdqc[k][0];
+        let bas_len_k = self.cint_fdqc[k][1];
+        let nbas = self.num_basis;
+
+        //println!("{}-{},{}-{}, size:{}",bas_start_k, bas_len_k, bas_start_l,bas_len_l, matrixupper_index.size);
+        let mut mat_full = 
+            //MatrixFull::new([bas_len_k,bas_len_l],MatrixFull::new([nbas,nbas],0.0));
+            MatrixFull::new([bas_len_k,bas_len_l],MatrixUpper::new(matrixupper_index.size,0.0));
+        //let mut mat_vec = vec![MatrixFull::new([nbas,nbas],0.0);bas_len_k*bas_len_l];
+
+        let mut cint_data = self.initialize_cint(false);
+        let nbas_shell = self.cint_bas.len();
+        cint_data.cint2e_optimizer_rust();
+        for j in 0..nbas_shell {
+            let bas_start_j = self.cint_fdqc[j][0];
+            let bas_len_j = self.cint_fdqc[j][1];
+            //let (i_start, i_end) = (0,j+1);
+            for i in 0..j+1 {
+                let bas_start_i = self.cint_fdqc[i][0];
+                let bas_len_i = self.cint_fdqc[i][1];
+                let buf = cint_data.cint_ijkl_by_shell(i as i32, j as i32, k as i32, l as i32);
+                let tmp_eri = ERIFull::from_vec([bas_len_i,bas_len_j,bas_len_k,bas_len_l],buf).unwrap();
+
+                for loc_l in 0..bas_len_l {
+                    for loc_k in 0..bas_len_k {
+                        //let tmp_index = loc_l*bas_len_k + loc_k;
+                        //let mut tmp_mat = &mut mat_vec[tmp_index];
+                        let mut tmp_mat = &mut mat_full[[loc_k,loc_l]];
+                        let tmp_loc = tmp_eri.get_reducing_matrix(&[loc_k,loc_l]);
+
+                        if i!=j {
+                            tmp_mat.iter_submatrix_mut(bas_start_i..bas_start_i+bas_len_i, bas_start_j..bas_start_j+bas_len_j, matrixupper_index)
+                                .zip(tmp_loc.iter()).for_each(|(gij,lij)| {*gij = *lij});
+                        } else {
+                            //println!("i=j={}:({},{})",i, bas_start_i,bas_len_i);
+                            tmp_mat.iter_submatrix_mut(bas_start_i..bas_start_i+bas_len_i, bas_start_j..bas_start_j+bas_len_j, matrixupper_index)
+                                .zip(tmp_loc.iter_matrixupper().unwrap()).for_each(|(gij,lij)| {*gij = *lij});
+
+                        }
                     }
                 }
             };
@@ -2622,6 +2679,15 @@ fn test_regex() {
     let re = Regex::new(r"/?(?P<basis>[^/]*)/?$").unwrap();
     let cap = re.captures("./p1/p2/p3").unwrap();
     println!("{:?}",cap.name("basis").unwrap());
+}
+
+#[test]
+fn test_matrixupper() {
+    let dd = MatrixUpper::from_vec(10, (0..10).collect::<Vec<usize>>()).unwrap();
+    dd.iter_diagonal().for_each(|x| {println!("{}",x)});
+
+    let matrixupper_index = map_upper_to_full(10).unwrap();
+    dd.iter_submatrix(1..3, 0..2, &matrixupper_index).for_each(|x| {println!("{}",x)});
 }
 
 
