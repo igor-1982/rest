@@ -7,7 +7,7 @@ use rayon::prelude::{IntoParallelRefIterator, IndexedParallelIterator, ParallelI
 use rest_tensors::{ERIFull,RIFull,ERIFold4,TensorSlice,TensorSliceMut,TensorOptMut,TensorOpt, MatrixUpper, MatrixFull};
 use libc::regerror;
 use statrs::distribution::Continuous;
-use tensors::{map_upper_to_full, BasicMatrix};
+use tensors::{map_upper_to_full, BasicMatrix, SubMatrixUpper};
 use tensors::external_libs::{ri_copy_from_ri, matr_copy_from_ri};
 use tensors::matrix_blas_lapack::{_dgemm, _dgemm_full, _power, _power_rayon, _newton_schulz_inverse_square_root_v02};
 use std::collections::HashMap;
@@ -1179,6 +1179,78 @@ impl Molecule {
                     }
                 }
             };
+        };
+        mat_full
+        //mat_vec
+    }
+    #[inline]
+    /// to save the memory required for vj_on_the_fly, evaluate the ERI elements batch by batch (batch: Range<usize>)
+    pub fn int_ijkl_given_kl_batch(&self, k: usize, l: usize, batch: Range<usize>, matrixupper_index: &MatrixUpper<[usize;2]>) -> MatrixFull<SubMatrixUpper<f64>> {
+
+        let bas_start_l = self.cint_fdqc[l][0];
+        let bas_len_l = self.cint_fdqc[l][1];
+        let bas_start_k = self.cint_fdqc[k][0];
+        let bas_len_k = self.cint_fdqc[k][1];
+        let nbas = self.num_basis;
+
+        let global_start = batch.start;
+        let global_end = batch.end;
+        let [global_start_row, global_start_col] = matrixupper_index[global_start];
+        let [global_end_row, global_end_col] = matrixupper_index[global_end-1];
+
+        let mut mat_full = 
+            MatrixFull::new([bas_len_k,bas_len_l],SubMatrixUpper::new(batch.clone(),nbas*(nbas+1)/2, 0.0));
+
+        let mut cint_data = self.initialize_cint(false);
+        let nbas_shell = self.cint_bas.len();
+        cint_data.cint2e_optimizer_rust();
+        for j in 0..nbas_shell {
+            let bas_start_j = self.cint_fdqc[j][0];
+            let bas_len_j = self.cint_fdqc[j][1];
+            let rough_start = bas_start_j*(bas_start_j+1)/2;
+            let rough_end = (bas_start_j+bas_len_j)*(bas_start_j+bas_len_j+1)/2;
+            if rough_start < global_end {
+                for i in 0..j+1 {
+                    let bas_start_i = self.cint_fdqc[i][0];
+                    let bas_len_i = self.cint_fdqc[i][1];
+                    let curr_start = rough_start + bas_start_i;
+                    let curr_end = rough_end + bas_start_i+bas_len_i;
+                    if (curr_start >= global_start && curr_end < global_end) ||
+                       (curr_end >= global_start && curr_end < global_end) {
+
+                        let start_point = if curr_start >= global_start {
+                            0_usize
+                        } else {
+                            global_start_col*bas_len_i+global_start_row - (bas_start_j*bas_len_i+bas_start_i)
+                        };
+                        let end_point = if curr_end <global_end {
+                            bas_len_i*bas_len_j - 1
+                        } else {
+                            global_end_col*bas_len_i + global_end_row - (bas_start_j*bas_len_i  + bas_start_i)
+                        };
+
+                        let buf = cint_data.cint_ijkl_by_shell(i as i32, j as i32, k as i32, l as i32);
+                        let tmp_eri = ERIFull::from_vec([bas_len_i,bas_len_j,bas_len_k,bas_len_l],buf).unwrap();
+
+                        for loc_l in 0..bas_len_l {
+                            for loc_k in 0..bas_len_k {
+
+                                let mut tmp_mat = &mut mat_full[[loc_k,loc_l]];
+                                let tmp_loc = tmp_eri.get_reducing_matrix(&[loc_k,loc_l]);
+
+                                if i!=j {
+                                    tmp_mat.iter_submatrix_mut(bas_start_i..bas_start_i+bas_len_i, bas_start_j..bas_start_j+bas_len_j, matrixupper_index)
+                                        .zip(tmp_loc.data[start_point..end_point+1].iter()).for_each(|(gij,lij)| {*gij = *lij});
+                                } else {
+                                    //println!("i=j={}:({},{})",i, bas_start_i,bas_len_i);
+                                    tmp_mat.iter_submatrix_mut(bas_start_i..bas_start_i+bas_len_i, bas_start_j..bas_start_j+bas_len_j, matrixupper_index)
+                                        .zip(tmp_loc.iter_matrixupper_shift(start_point).unwrap()).for_each(|(gij,lij)| {*gij = *lij});
+                                }
+                            }
+                        }
+                    }
+                };
+            }
         };
         mat_full
         //mat_vec

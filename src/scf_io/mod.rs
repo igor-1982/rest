@@ -711,8 +711,9 @@ impl SCF {
     }
 
     pub fn generate_vj_on_the_fly_par(&self) -> Vec<MatrixUpper<f64>> {
-        //self.generate_vj_on_the_fly_par_new()
         vj_on_the_fly_par(&self.mol, &self.density_matrix)
+        // IGOR MARK: still has bugs in the batch_by_batch version
+        //vj_on_the_fly_par_batch_by_batch(&self.mol, &self.density_matrix)
     }
 
 
@@ -4173,7 +4174,6 @@ pub fn scf_without_build(scf_data: &mut SCF) {
 
 pub fn vj_on_the_fly_par(mol: &Molecule, dm: &Vec<MatrixFull<f64>>) -> Vec<MatrixUpper<f64>>{
 
-
     // establish the map between matrixupper and matrixfull
     let matrixupper_index = map_upper_to_full((mol.num_basis+1)*mol.num_basis/2).unwrap();
     //println!("{:?}", &matrixupper_index);
@@ -4231,6 +4231,116 @@ pub fn vj_on_the_fly_par(mol: &Molecule, dm: &Vec<MatrixFull<f64>>) -> Vec<Matri
                     *elem = sum;
                 })
             });
+            //if *k==0 && *l==0 {
+            //    out.formated_output(5, "full");
+            //}
+            s.send((out,*k,*l)).unwrap();
+        });
+        receiver.into_iter().for_each(|(out,k,l)| {
+            let bas_start_k = mol.cint_fdqc[k][0];
+            let bas_len_k = mol.cint_fdqc[k][1];
+            let bas_start_l = mol.cint_fdqc[l][0];
+            let bas_len_l = mol.cint_fdqc[l][1];
+            vj_i.copy_from_matr(bas_start_k..bas_start_k+bas_len_k, bas_start_l..bas_start_l+bas_len_l, 
+                &out, 0..bas_len_k,0..bas_len_l);
+            //vj_i.iter_submatrix_mut(bas_start_k..bas_start_k+bas_len_k, bas_start_l..bas_start_l+bas_len_l).zip(out.iter())
+            //    .for_each(|(to, from)| {*to = *from});
+        });
+        
+
+        vj.push(vj_i.to_matrixupper());
+    }
+    if spin_channel == 1{
+        vj.push(MatrixUpper::new(1, 0.0));       
+    }
+    vj
+}
+
+pub fn vj_on_the_fly_par_batch_by_batch(mol: &Molecule, dm: &Vec<MatrixFull<f64>>) -> Vec<MatrixUpper<f64>>{
+
+    let matrixupper_index = map_upper_to_full((mol.num_basis+1)*mol.num_basis/2).unwrap();
+    let batch_length = 1024_usize;
+    let mut batches = Vec::new();
+    let mut total_length = matrixupper_index.size as i32;
+    let mut start = 0;
+    while total_length >=0 {
+        batches.push([start, batch_length]);
+        start += batch_length;
+        total_length -= (batch_length as i32);
+    }
+    if total_length < 0 {
+        let ind = batches.len()-1;
+        let [start, batch_length] = batches.get_mut(ind).unwrap();
+        *batch_length -= (total_length.abs() as usize);
+    }
+
+    let num_shell = mol.cint_bas.len();
+    let num_basis = mol.num_basis;
+    let spin_channel = mol.spin_channel;
+    //let dm = &self.density_matrix;
+    let mut vj: Vec<MatrixUpper<f64>> = vec![];
+    //let mol = &self.mol;
+    //utilities::omp_set_num_threads_wrapper(1);
+    for i_spin in 0..spin_channel{
+        let mut vj_i = MatrixFull::new([num_basis, num_basis], 0.0);
+        let dm_s_upper = dm[i_spin].to_matrixupper();
+        let dm_s_diagnoal = dm[i_spin].iter_diagonal().unwrap().map(|x| *x).collect::<Vec<f64>>();
+        let par_tasks = utilities::balancing(num_shell*num_shell, rayon::current_num_threads());
+        let (sender, receiver) = channel();
+        let mut index = Vec::new();
+        for l in 0..num_shell {
+            for k in 0..l+1 {
+                index.push((k,l))
+            }
+        };
+        index.par_iter().for_each_with(sender,|s,(k,l)|{
+            let bas_start_k = mol.cint_fdqc[*k][0];
+            let bas_len_k = mol.cint_fdqc[*k][1];
+            let bas_start_l = mol.cint_fdqc[*l][0];
+            let bas_len_l = mol.cint_fdqc[*l][1];
+
+            let mut out = MatrixFull::new([bas_len_k, bas_len_l],0.0);
+            for [start, batch_length] in &batches {
+                let batch = (*start..*start+batch_length);
+                let [str_row,str_col] = matrixupper_index[batch.start];
+                let [end_row,end_col] = matrixupper_index[batch.end-1];
+                let diag_list = if end_row < end_col {str_col..end_col} else {str_col..(end_col+1)};
+                let klij = mol.int_ijkl_given_kl_batch(*k, *l, batch.clone(), &matrixupper_index);
+                let mut sum = 0.0;
+                out.iter_columns_full_mut().enumerate().for_each(|(loc_l,x)|{
+                    x.iter_mut().enumerate().for_each(|(loc_k,elem)|{
+                        let ao_k = loc_k + bas_start_k;
+                        let ao_l = loc_l + bas_start_l;
+                        let eri_cd = &klij[(loc_k, loc_l)];
+                        let mut sum = dm_s_upper.data[batch.clone()].iter().zip(eri_cd.iter())
+                            .fold(0.0,|sum, (p,eri)| {
+                            sum + *p * *eri
+                        });
+
+                        let mut diagonal = 0.0;
+                        diag_list.clone().for_each(|i| {
+
+                            let p = dm_s_diagnoal[i];
+
+                            let i_in_mu = (i+1)*i/2 + i;
+                            let i_in_smu = i_in_mu - eri_cd.global_range.start;
+
+                            let eri = eri_cd.data[i_in_smu];
+
+                            diagonal += p*eri;
+
+                        });
+
+                        *elem = sum*2.0 - diagonal;
+
+                    });
+                });
+            }
+
+            //if *k==0 && *l==0 {
+            //    out.formated_output(5, "full");
+            //}
+
             s.send((out,*k,*l)).unwrap();
         });
         receiver.into_iter().for_each(|(out,k,l)| {
