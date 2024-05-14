@@ -184,6 +184,8 @@ pub struct InputKeywords {
     // Keywords for parallism
     #[pyo3(get, set)]
     pub num_threads: Option<usize>,
+    // batch size for each thread
+    pub batch_size: usize,
     pub nforce_displacement: f64,
     pub force_state_occupation: Vec<ForceStateOccupation>
 
@@ -195,6 +197,7 @@ impl InputKeywords {
             // keywords for machine and debug info
             print_level: 0,
             num_threads: Some(1),
+            batch_size: 64,
             job_type: JobType::SinglePoint,
             nforce_displacement: 0.0013,
             // Keywords for (aux)-basis sets
@@ -317,6 +320,11 @@ impl InputKeywords {
                     serde_json::Value::String(tmp_str) => {Some(tmp_str.to_lowercase().parse().unwrap_or(1))},
                     serde_json::Value::Number(tmp_num) => {Some(tmp_num.as_i64().unwrap_or(1) as usize)},
                     other => {Some(1)},
+                };
+                tmp_input.batch_size = match tmp_ctrl.get("batch_size").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(64)},
+                    serde_json::Value::Number(tmp_num) => {tmp_num.as_i64().unwrap_or(64) as usize},
+                    other => {64},
                 };
                 if let Some(num_threads) = tmp_input.num_threads {
                     if tmp_input.print_level>0 {println!("The number of threads used for parallelism:      {}", num_threads)};

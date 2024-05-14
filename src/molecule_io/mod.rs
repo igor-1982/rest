@@ -270,10 +270,10 @@ impl Molecule {
         // check and prepare the auxiliary basis sets
         if mol.ctrl.use_auxbas {mol.initialize_auxbas()};
 
-        println!("Debug for AuxBasis4Eelem");
-        mol.auxbas4elem.iter().enumerate().for_each(|(i,x)| {
-            println!("Basis functions for Atom {}: ({},{})", i,x.global_index.0,x.global_index.1);
-        });
+        //println!("Debug for AuxBasis4Eelem");
+        //mol.auxbas4elem.iter().enumerate().for_each(|(i,x)| {
+        //    println!("Basis functions for Atom {}: ({},{})", i,x.global_index.0,x.global_index.1);
+        //});
 
         if mol.ctrl.print_level>0 {
             println!("numbasis: {:2}, num_auxbas: {:2}", mol.num_basis,mol.num_auxbas)
@@ -1194,12 +1194,12 @@ impl Molecule {
         let nbas = self.num_basis;
 
         let global_start = batch.start;
-        let global_end = batch.end;
+        let global_length = batch.end;
         let [global_start_row, global_start_col] = matrixupper_index[global_start];
-        let [global_end_row, global_end_col] = matrixupper_index[global_end-1];
+        let [global_end_row, global_end_col] = matrixupper_index[global_length-1];
 
         let mut mat_full = 
-            MatrixFull::new([bas_len_k,bas_len_l],SubMatrixUpper::new(batch.clone(),nbas*(nbas+1)/2, 0.0));
+            MatrixFull::new([bas_len_k,bas_len_l],SubMatrixUpper::new(batch.clone(),matrixupper_index.size, 0.0));
 
         let mut cint_data = self.initialize_cint(false);
         let nbas_shell = self.cint_bas.len();
@@ -1208,26 +1208,46 @@ impl Molecule {
             let bas_start_j = self.cint_fdqc[j][0];
             let bas_len_j = self.cint_fdqc[j][1];
             let rough_start = bas_start_j*(bas_start_j+1)/2;
-            let rough_end = (bas_start_j+bas_len_j)*(bas_start_j+bas_len_j+1)/2;
-            if rough_start < global_end {
+            let rough_end = (bas_start_j+bas_len_j)*(bas_start_j+bas_len_j-1)/2;
+            if rough_start < global_length {
                 for i in 0..j+1 {
                     let bas_start_i = self.cint_fdqc[i][0];
                     let bas_len_i = self.cint_fdqc[i][1];
                     let curr_start = rough_start + bas_start_i;
-                    let curr_end = rough_end + bas_start_i+bas_len_i;
-                    if (curr_start >= global_start && curr_end < global_end) ||
-                       (curr_end >= global_start && curr_end < global_end) {
+                    let curr_end = rough_end + bas_start_i+bas_len_i-1;
+                    ////debug 514
+                    //if k==0 && l==0 && (batch.start == 60|| batch.start==75){
+                    //    println!("batch_start: {}, batch_end: {}, bas_start_i: {}, bas_len_i: {}, bas_start_j: {}, bas_len_j: {}", batch.start, batch.end, bas_start_i, bas_len_i, bas_start_j, bas_len_j);
+                    //    println!("global_s and e: ({},{}), ({},{}), curr_start: {}, curr_end: {}", 
+                    //        global_start_row, global_start_col, 
+                    //        global_end_row, global_end_col, 
+                    //        curr_start, curr_end);
+                    //}
+                    if (curr_start >= global_start && curr_start < global_length) ||
+                       (curr_end >= global_start && curr_end < global_length) || 
+                       (curr_start < global_start && curr_end >= global_length) {
+
+                        //if k==0 && l==0 && (batch.start == 60|| batch.start==75){
+                        //    println!("debug: pass");
+                        //}
 
                         let start_point = if curr_start >= global_start {
                             0_usize
                         } else {
-                            global_start_col*bas_len_i+global_start_row - (bas_start_j*bas_len_i+bas_start_i)
+                            if global_start_row < bas_start_i {
+                                //(global_start_col-bas_start_j)*bas_len_i+bas_start_i
+                                (global_start_col-bas_start_j)*bas_len_i
+                            } else if global_start_row >= bas_start_i+bas_len_i {
+                                (global_start_col-bas_start_j+1)*bas_len_i
+                            } else {
+                                (global_start_col-bas_start_j)*bas_len_i+(global_start_row-bas_start_i)
+                            }
                         };
-                        let end_point = if curr_end <global_end {
-                            bas_len_i*bas_len_j - 1
-                        } else {
-                            global_end_col*bas_len_i + global_end_row - (bas_start_j*bas_len_i  + bas_start_i)
-                        };
+                        //let end_point = if curr_end <global_length {
+                        //    bas_len_i*bas_len_j - 1
+                        //} else {
+                        //    global_end_col*bas_len_i + global_end_row - bas_start_j*bas_len_i  - bas_start_i
+                        //};
 
                         let buf = cint_data.cint_ijkl_by_shell(i as i32, j as i32, k as i32, l as i32);
                         let tmp_eri = ERIFull::from_vec([bas_len_i,bas_len_j,bas_len_k,bas_len_l],buf).unwrap();
@@ -1239,9 +1259,26 @@ impl Molecule {
                                 let tmp_loc = tmp_eri.get_reducing_matrix(&[loc_k,loc_l]);
 
                                 if i!=j {
+                                    ////debug 514
+                                    //if k==0 && l==0 && (batch.start == 60|| batch.start==75){
+                                    //    println!("batch_start: {}, batch_end: {}, bas_start_i: {}, bas_len_i: {}, bas_start_j: {}, bas_len_j: {}", batch.start, batch.end, bas_start_i, bas_len_i, bas_start_j, bas_len_j);
+                                    //    println!("global_s and e: ({},{}), ({},{}), start_point: {}, curr_start: {}, curr_end: {}", 
+                                    //        global_start_row, global_start_col, 
+                                    //        global_end_row, global_end_col, 
+                                    //        start_point, curr_start, curr_end);
+                                    //}
                                     tmp_mat.iter_submatrix_mut(bas_start_i..bas_start_i+bas_len_i, bas_start_j..bas_start_j+bas_len_j, matrixupper_index)
-                                        .zip(tmp_loc.data[start_point..end_point+1].iter()).for_each(|(gij,lij)| {*gij = *lij});
+                                        .zip(tmp_loc.data[start_point..].iter()).for_each(|(gij,lij)| {*gij = *lij});
                                 } else {
+                                    ////debug 514
+                                    //if k==0 && l==0 && bas_start_i == 9 {
+                                    //    println!("batch_start: {}, batch_end: {}, bas_start_i: {}, bas_len_i: {}, bas_start_j: {}, bas_len_j: {}", batch.start, batch.end, bas_start_i, bas_len_i, bas_start_j, bas_len_j);
+                                    //    println!("global_s and e: ({},{}), ({},{}), start_point: {}, curr_start: {}, curr_end: {}", 
+                                    //        global_start_row, global_start_col, 
+                                    //        global_end_row, global_end_col, 
+                                    //        start_point, curr_start, curr_end);
+                                    //    //println!("{:?}", &tmp_loc.data);
+                                    //}
                                     //println!("i=j={}:({},{})",i, bas_start_i,bas_len_i);
                                     tmp_mat.iter_submatrix_mut(bas_start_i..bas_start_i+bas_len_i, bas_start_j..bas_start_j+bas_len_j, matrixupper_index)
                                         .zip(tmp_loc.iter_matrixupper_shift(start_point).unwrap()).for_each(|(gij,lij)| {*gij = *lij});

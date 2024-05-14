@@ -32,7 +32,7 @@ use crate::check_norm::{self, generate_occupation_frac_occ, generate_occupation_
 //use std::sync::mpsc::channel;
 use crate::dft::gen_grids::prune::prune_by_rho;
 use crate::geom_io::calc_nuc_energy_with_ecp;
-use crate::utilities::TimeRecords;
+use crate::utilities::{create_pool, TimeRecords};
 ////use blas_src::openblas::dgemm;
 mod addons;
 mod fchk;
@@ -711,9 +711,9 @@ impl SCF {
     }
 
     pub fn generate_vj_on_the_fly_par(&self) -> Vec<MatrixUpper<f64>> {
-        vj_on_the_fly_par(&self.mol, &self.density_matrix)
+        //vj_on_the_fly_par(&self.mol, &self.density_matrix)
         // IGOR MARK: still has bugs in the batch_by_batch version
-        //vj_on_the_fly_par_batch_by_batch(&self.mol, &self.density_matrix)
+        vj_on_the_fly_par_batch_by_batch(&self.mol, &self.density_matrix)
     }
 
 
@@ -4204,14 +4204,15 @@ pub fn vj_on_the_fly_par(mol: &Molecule, dm: &Vec<MatrixFull<f64>>) -> Vec<Matri
             let bas_start_l = mol.cint_fdqc[*l][0];
             let bas_len_l = mol.cint_fdqc[*l][1];
 
-            //dd.formated_output_general(5, "full");
             let klij = mol.int_ijkl_given_kl_v03(*k, *l, &matrixupper_index);
+            //// debug 514
+            //if *k==0 && *l == 0 {
+            //    println!("{:?}", &klij[(0,0)].data);
+            //}
             let mut sum =0.0;
-            //let mut out = vec![(0.0, 0usize, 0usize); ];
-            //let mut out:Vec<(f64, usize, usize)> = Vec::new();
             let mut out = MatrixFull::new([bas_len_k, bas_len_l],0.0);
-            //for ao_k in bas_start_k..bas_start_k+bas_len_k{
-            //    for ao_l in bas_start_l..bas_start_l+bas_len_l{
+            //// debug 514
+            //let mut output = String::new();
             out.iter_columns_full_mut().enumerate().for_each(|(loc_l,x)|{
                 x.iter_mut().enumerate().for_each(|(loc_k,elem)|{
                     let ao_k = loc_k + bas_start_k;
@@ -4219,21 +4220,36 @@ pub fn vj_on_the_fly_par(mol: &Molecule, dm: &Vec<MatrixFull<f64>>) -> Vec<Matri
                     let eri_cd = klij.get(&[loc_k, loc_l]).unwrap();
                     let mut sum = dm_s_upper.data.iter().zip(eri_cd.iter())
                         .fold(0.0,|sum, (p,eri)| {
+                    //// debug 514
+                    //let mut sum = dm_s_upper.data.iter().enumerate().zip(eri_cd.iter())
+                    //    .fold(0.0,|sum, ((i,p),eri)| {
+                        //if ao_k == 0 && ao_l ==0 {
+                        //    output = format!("{}, ({}, {:8.4},{:8.4})", output, i,*p, *eri);
+                        //}
                         sum + *p * *eri
                     });
 
                     let mut diagonal = dm_s_diagnoal.iter().zip(eri_cd.iter_diagonal()).fold(0.0,|diagonal, (p,eri)| {
+                    //// debug 514
+                    //let mut diagonal = dm_s_diagnoal.iter().enumerate().zip(eri_cd.iter_diagonal()).fold(0.0,|diagonal, ((i,p),eri)| {
+                        //if ao_k == 0 && ao_l ==0 {
+                        //    output = format!("{}, ({}, {:8.4},{:8.4})", output, i,*p, *eri);
+                        //}
                         diagonal + *p * *eri
                     });
 
                     sum = sum*2.0 - diagonal;
 
                     *elem = sum;
-                })
+                });
             });
-            //if *k==0 && *l==0 {
-            //    out.formated_output(5, "full");
+            //// debug 514
+            //if *k==0 && *l == 0 {
+            //    println!("{}",output);
             //}
+            if *k==0 && *l==0 {
+                out.formated_output(5, "full");
+            }
             s.send((out,*k,*l)).unwrap();
         });
         receiver.into_iter().for_each(|(out,k,l)| {
@@ -4247,6 +4263,7 @@ pub fn vj_on_the_fly_par(mol: &Molecule, dm: &Vec<MatrixFull<f64>>) -> Vec<Matri
             //    .for_each(|(to, from)| {*to = *from});
         });
         
+        
 
         vj.push(vj_i.to_matrixupper());
     }
@@ -4259,7 +4276,7 @@ pub fn vj_on_the_fly_par(mol: &Molecule, dm: &Vec<MatrixFull<f64>>) -> Vec<Matri
 pub fn vj_on_the_fly_par_batch_by_batch(mol: &Molecule, dm: &Vec<MatrixFull<f64>>) -> Vec<MatrixUpper<f64>>{
 
     let matrixupper_index = map_upper_to_full((mol.num_basis+1)*mol.num_basis/2).unwrap();
-    let batch_length = 1024_usize;
+    let batch_length = 64_usize;
     let mut batches = Vec::new();
     let mut total_length = matrixupper_index.size as i32;
     let mut start = 0;
@@ -4268,11 +4285,17 @@ pub fn vj_on_the_fly_par_batch_by_batch(mol: &Molecule, dm: &Vec<MatrixFull<f64>
         start += batch_length;
         total_length -= (batch_length as i32);
     }
+    let ind = batches.len()-1;
     if total_length < 0 {
-        let ind = batches.len()-1;
-        let [start, batch_length] = batches.get_mut(ind).unwrap();
-        *batch_length -= (total_length.abs() as usize);
+        let [start, mut batch_length] = batches.pop().unwrap();
+        batch_length -= (total_length.abs() as usize);
+        if batch_length > 0 {
+            batches.push([start,batch_length])
+        }
     }
+
+    //// debug 514
+    //println!("{:?}", &batches);
 
     let num_shell = mol.cint_bas.len();
     let num_basis = mol.num_basis;
@@ -4300,12 +4323,22 @@ pub fn vj_on_the_fly_par_batch_by_batch(mol: &Molecule, dm: &Vec<MatrixFull<f64>
             let bas_len_l = mol.cint_fdqc[*l][1];
 
             let mut out = MatrixFull::new([bas_len_k, bas_len_l],0.0);
+            // debug 514
+            let mut output = String::new();
             for [start, batch_length] in &batches {
+                //// debug 514
+                //if *k==0 && *l == 0 {
+                //    println!("batch: ({},{})",start, batch_length);
+                //}
                 let batch = (*start..*start+batch_length);
                 let [str_row,str_col] = matrixupper_index[batch.start];
                 let [end_row,end_col] = matrixupper_index[batch.end-1];
                 let diag_list = if end_row < end_col {str_col..end_col} else {str_col..(end_col+1)};
                 let klij = mol.int_ijkl_given_kl_batch(*k, *l, batch.clone(), &matrixupper_index);
+                //// debug 514
+                //if *k==0 && *l == 0 && (batch.start == 60|| batch.start==75) {
+                //    println!("{:?}", &klij[(0,0)].data);
+                //}
                 let mut sum = 0.0;
                 out.iter_columns_full_mut().enumerate().for_each(|(loc_l,x)|{
                     x.iter_mut().enumerate().for_each(|(loc_k,elem)|{
@@ -4314,6 +4347,12 @@ pub fn vj_on_the_fly_par_batch_by_batch(mol: &Molecule, dm: &Vec<MatrixFull<f64>
                         let eri_cd = &klij[(loc_k, loc_l)];
                         let mut sum = dm_s_upper.data[batch.clone()].iter().zip(eri_cd.iter())
                             .fold(0.0,|sum, (p,eri)| {
+                        //// debug 514
+                        //let mut sum = dm_s_upper.data[batch.clone()].iter().enumerate().zip(eri_cd.iter())
+                        //    .fold(0.0,|sum, ((i,p),eri)| {
+                            //if ao_k == 0 && ao_l ==0 {
+                            //    output = format!("{}, ({},{:8.4},{:8.4})", output, i+batch.start, p, eri);
+                            //}
                             sum + *p * *eri
                         });
 
@@ -4329,14 +4368,24 @@ pub fn vj_on_the_fly_par_batch_by_batch(mol: &Molecule, dm: &Vec<MatrixFull<f64>
 
                             diagonal += p*eri;
 
+                            //// debug 514
+                            //if ao_k == 0 && ao_l ==0 {
+                            //    output = format!("{}, ({},{:8.4},{:8.4})", output, i, p, eri);
+                            //}
+
+
                         });
 
-                        *elem = sum*2.0 - diagonal;
+                        *elem += sum*2.0 - diagonal;
 
                     });
                 });
-            }
 
+            }
+            //// debug 514
+            //if *k==0 && *l == 0 {
+            //    println!("{}",output);
+            //}
             //if *k==0 && *l==0 {
             //    out.formated_output(5, "full");
             //}

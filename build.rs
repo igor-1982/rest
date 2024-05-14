@@ -1,5 +1,5 @@
 extern crate dunce;
-use std::env;
+use std::env;//, process::Command};
 //use std::path::PathBuf;
 
 fn main() -> miette::Result<()> {
@@ -37,7 +37,7 @@ fn main() -> miette::Result<()> {
     });
     let library_path = [
         //dunce::canonicalize("/home/igor/Documents/Package-Pool/rest_workspace/rest/src/dft/libxc").unwrap(),
-        dunce::canonicalize(external_dir).unwrap(),
+        dunce::canonicalize(external_dir.clone()).unwrap(),
         dunce::canonicalize(blas_dir).unwrap(),
         dunce::canonicalize(cint_dir).unwrap(),
         dunce::canonicalize(hdf5_dir).unwrap(),
@@ -61,6 +61,34 @@ fn main() -> miette::Result<()> {
     //println!("cargo:rustc-link-lib=ecpint");
     //println!("cargo:rustc-link-lib=pugixml");
     //println!("cargo:rustc-link-lib=Faddeeva");
+
+    //let external_dir = if let Ok(external_dir) = env::var("REST_external_DIR") {
+    //    external_dir
+    //} else {"".to_string()};
+
+    //let fortran_compiler = if let Ok(fortran_compiler) = env::var("REST_FORTRAN_COMPILER") {
+    //    fortran_compiler
+    //} else {"gfortran".to_string()};
+
+
+    //let dftd3_rest_file = format!("src/externalernal_libs/dftd_rest.f90");
+    //let dftd3_rest_libr = format!("{}/libdftd_rest.so",&external_dir.to_string());
+    //let dftd3_rest_link = format!("-L{} -ls-dftd3 -ls-dftd4",&external_dir);
+
+    //Command::new(fortran_compiler)
+    //    .args(&["-shared", "-fpic", "-O2",&dftd3_rest_file,"-o",&dftd3_rest_libr,&dftd3_rest_link])
+    //    .status().unwrap();
+
+
+    //println!("cargo:rustc-link-lib=dftd_rest");
+    //println!("cargo:rustc-link-search=native={}",&external_dir.to_string());
+
+
+    ////println!("cargo:rustc-link-lib=openblas");
+    ////println!("cargo:rustc-link-search=native={}",&blas_dir);
+
+    //println!("cargo:rerun-if-changed=src/externalernal_libs/dftd_rest.f90");
+    //println!("cargo:rerun-if-changed={}/librestmatr.so", &external_dir.to_string());
 
 
     Ok(())
