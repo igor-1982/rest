@@ -4276,7 +4276,7 @@ pub fn vj_on_the_fly_par(mol: &Molecule, dm: &Vec<MatrixFull<f64>>) -> Vec<Matri
 pub fn vj_on_the_fly_par_batch_by_batch(mol: &Molecule, dm: &Vec<MatrixFull<f64>>) -> Vec<MatrixUpper<f64>>{
 
     let matrixupper_index = map_upper_to_full((mol.num_basis+1)*mol.num_basis/2).unwrap();
-    let batch_length = 64_usize;
+    let batch_length = mol.ctrl.batch_size;
     let mut batches = Vec::new();
     let mut total_length = matrixupper_index.size as i32;
     let mut start = 0;
