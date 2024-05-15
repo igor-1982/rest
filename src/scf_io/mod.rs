@@ -711,9 +711,9 @@ impl SCF {
     }
 
     pub fn generate_vj_on_the_fly_par(&self) -> Vec<MatrixUpper<f64>> {
-        //vj_on_the_fly_par(&self.mol, &self.density_matrix)
+        vj_on_the_fly_par(&self.mol, &self.density_matrix)
         // IGOR MARK: still has bugs in the batch_by_batch version
-        vj_on_the_fly_par_batch_by_batch(&self.mol, &self.density_matrix)
+        //vj_on_the_fly_par_batch_by_batch(&self.mol, &self.density_matrix)
     }
 
 
@@ -4174,102 +4174,132 @@ pub fn scf_without_build(scf_data: &mut SCF) {
 
 pub fn vj_on_the_fly_par(mol: &Molecule, dm: &Vec<MatrixFull<f64>>) -> Vec<MatrixUpper<f64>>{
 
-    // establish the map between matrixupper and matrixfull
-    let matrixupper_index = map_upper_to_full((mol.num_basis+1)*mol.num_basis/2).unwrap();
-    //println!("{:?}", &matrixupper_index);
-    //let matrixfull_index = map_full_to_upper([mol.num_basis,mol.num_basis]).unwrap();
-
     let num_shell = mol.cint_bas.len();
     let num_basis = mol.num_basis;
     let spin_channel = mol.spin_channel;
-    //let dm = &self.density_matrix;
-    let mut vj: Vec<MatrixUpper<f64>> = vec![];
-    //let mol = &self.mol;
-    //utilities::omp_set_num_threads_wrapper(1);
-    for i_spin in 0..spin_channel{
-        let mut vj_i = MatrixFull::new([num_basis, num_basis], 0.0);
-        let dm_s_upper = dm[i_spin].to_matrixupper();
-        let dm_s_diagnoal = dm[i_spin].iter_diagonal().unwrap().map(|x| *x).collect::<Vec<f64>>();
-        let par_tasks = utilities::balancing(num_shell*num_shell, rayon::current_num_threads());
-        let (sender, receiver) = channel();
-        let mut index = Vec::new();
-        for l in 0..num_shell {
-            for k in 0..l+1 {
-                index.push((k,l))
-            }
-        };
-        index.par_iter().for_each_with(sender,|s,(k,l)|{
+
+    // establish the map between matrixupper and matrixfull
+    let matupp_length = (mol.num_basis+1)*mol.num_basis/2;
+    let matrixupper_index = map_upper_to_full(matupp_length).unwrap();
+
+    let mut dm_upper = Vec::new();
+    let mut dm_diagonal = Vec::new();
+    for i_spin in 0..spin_channel {
+        dm_upper.push(dm[i_spin].to_matrixupper());
+        dm_diagonal.push(dm[i_spin].iter_diagonal().unwrap().map(|x| *x).collect::<Vec<f64>>())
+    }
+    //let dm_upper = dm.iter().map(|dm_s| dm_s.to_matrixupper()).collect::<Vec<MatrixUpper<f64>>>();
+    //let dm_diagonal  = dm.iter().map(|dm_s| 
+    //    dm_s.iter_diagonal().unwrap().map(|x| *x).collect::<Vec<f64>>()
+    //).collect::<Vec<Vec<f64>>>();
+
+    //let mut vj: Vec<MatrixUpper<f64>> = vec![MatrixUpper::new(1, 0.0), MatrixUpper::new(1, 0.0)];
+    let mut vj: Vec<MatrixUpper<f64>> = vec![MatrixUpper::empty(), MatrixUpper::empty()];
+
+    let mut vj_full: Vec<MatrixFull<f64>> = vec![
+        MatrixFull::new([num_basis, num_basis], 0.0),
+        if spin_channel==2 {
+            MatrixFull::new([num_basis, num_basis], 0.0)
+        } else {
+            MatrixFull::empty()
+        }
+    ];
+
+
+    // initialize the parallel tasks
+    let mut index = Vec::new();
+    for l in 0..num_shell {
+        for k in 0..l+1 {
+            index.push([mol.cint_fdqc[k][1]*mol.cint_fdqc[l][1],k,l])
+        }
+    };
+    index = index.iter().sorted_by(|a,b| Ord::cmp(&a[0], &b[0]))
+        .map(|x| *x).collect::<Vec<[usize;3]>>();
+
+    let half_length = index.len()/2;
+    let is_odd = index.len()%2;
+
+    // re-arrange the tasks that mixed universally according the work loading.
+    let mut index_new = Vec::new();
+    if is_odd==1 {index_new.push(index[half_length])};
+    index[0..half_length].iter().zip(index[half_length+is_odd..index.len()].iter().rev()).for_each(|(task1, task2)| {
+        index_new.push(*task1);
+        index_new.push(*task2);
+    });
+
+    let par_tasks = utilities::balancing(index_new.len(), rayon::current_num_threads());
+    let (sender, receiver) = channel();
+
+    par_tasks.par_iter().for_each_with(sender, |s,task_range| {
+
+        let mut out_submatrix = Vec::new();
+
+        index_new[task_range.clone()].iter().for_each(|[weight,k,l]| {
             let bas_start_k = mol.cint_fdqc[*k][0];
             let bas_len_k = mol.cint_fdqc[*k][1];
             let bas_start_l = mol.cint_fdqc[*l][0];
             let bas_len_l = mol.cint_fdqc[*l][1];
 
             let klij = mol.int_ijkl_given_kl_v03(*k, *l, &matrixupper_index);
-            //// debug 514
-            //if *k==0 && *l == 0 {
-            //    println!("{:?}", &klij[(0,0)].data);
-            //}
-            let mut sum =0.0;
-            let mut out = MatrixFull::new([bas_len_k, bas_len_l],0.0);
-            //// debug 514
-            //let mut output = String::new();
-            out.iter_columns_full_mut().enumerate().for_each(|(loc_l,x)|{
-                x.iter_mut().enumerate().for_each(|(loc_k,elem)|{
-                    let ao_k = loc_k + bas_start_k;
-                    let ao_l = loc_l + bas_start_l;
-                    let eri_cd = klij.get(&[loc_k, loc_l]).unwrap();
-                    let mut sum = dm_s_upper.data.iter().zip(eri_cd.iter())
-                        .fold(0.0,|sum, (p,eri)| {
-                    //// debug 514
-                    //let mut sum = dm_s_upper.data.iter().enumerate().zip(eri_cd.iter())
-                    //    .fold(0.0,|sum, ((i,p),eri)| {
-                        //if ao_k == 0 && ao_l ==0 {
-                        //    output = format!("{}, ({}, {:8.4},{:8.4})", output, i,*p, *eri);
-                        //}
-                        sum + *p * *eri
+            let mut out = vec![
+                MatrixFull::new([bas_len_k, bas_len_l],0.0),
+                if spin_channel==2 {
+                    MatrixFull::new([bas_len_k, bas_len_l],0.0)
+                } else {
+                    MatrixFull::empty()
+                }
+            ];
+            for i_spin in 0..spin_channel {
+                let dm_s_upper = &dm_upper[i_spin];
+                let dm_s_diagonal = &dm_diagonal[i_spin];
+                let mut out_s = &mut out[i_spin];
+
+                out_s.iter_columns_full_mut().enumerate().for_each(|(loc_l,x)|{
+                    x.iter_mut().enumerate().for_each(|(loc_k,elem)|{
+                        let ao_k = loc_k + bas_start_k;
+                        let ao_l = loc_l + bas_start_l;
+                        let eri_cd = klij.get(&[loc_k, loc_l]).unwrap();
+                        let mut sum = dm_s_upper.data.iter().zip(eri_cd.iter())
+                            .fold(0.0,|sum, (p,eri)| {
+                            sum + *p * *eri
+                        });
+                        let mut diagonal = dm_s_diagonal.iter().zip(eri_cd.iter_diagonal()).fold(0.0,|diagonal, (p,eri)| {
+                            diagonal + *p * *eri
+                        });
+                        sum = sum*2.0 - diagonal;
+
+                        *elem = sum;
                     });
-
-                    let mut diagonal = dm_s_diagnoal.iter().zip(eri_cd.iter_diagonal()).fold(0.0,|diagonal, (p,eri)| {
-                    //// debug 514
-                    //let mut diagonal = dm_s_diagnoal.iter().enumerate().zip(eri_cd.iter_diagonal()).fold(0.0,|diagonal, ((i,p),eri)| {
-                        //if ao_k == 0 && ao_l ==0 {
-                        //    output = format!("{}, ({}, {:8.4},{:8.4})", output, i,*p, *eri);
-                        //}
-                        diagonal + *p * *eri
-                    });
-
-                    sum = sum*2.0 - diagonal;
-
-                    *elem = sum;
                 });
-            });
-            //// debug 514
-            //if *k==0 && *l == 0 {
-            //    println!("{}",output);
-            //}
-            if *k==0 && *l==0 {
-                out.formated_output(5, "full");
             }
-            s.send((out,*k,*l)).unwrap();
+
+            out_submatrix.push((out,*k,*l));
+
         });
-        receiver.into_iter().for_each(|(out,k,l)| {
-            let bas_start_k = mol.cint_fdqc[k][0];
-            let bas_len_k = mol.cint_fdqc[k][1];
-            let bas_start_l = mol.cint_fdqc[l][0];
-            let bas_len_l = mol.cint_fdqc[l][1];
-            vj_i.copy_from_matr(bas_start_k..bas_start_k+bas_len_k, bas_start_l..bas_start_l+bas_len_l, 
-                &out, 0..bas_len_k,0..bas_len_l);
+        s.send(out_submatrix).unwrap();
+    });
+
+    receiver.into_iter().for_each(|out_submatrix| {
+        out_submatrix.into_iter().for_each(|(out,k,l)| {
+        let bas_start_k = mol.cint_fdqc[k][0];
+        let bas_len_k = mol.cint_fdqc[k][1];
+        let bas_start_l = mol.cint_fdqc[l][0];
+        let bas_len_l = mol.cint_fdqc[l][1];
+        for i_spin in 0..spin_channel {
+            let mut vj_s = &mut vj_full[i_spin];
+            let out_s = &out[i_spin];
+            vj_s.copy_from_matr(bas_start_k..bas_start_k+bas_len_k, bas_start_l..bas_start_l+bas_len_l, 
+                out_s, 0..bas_len_k,0..bas_len_l);
             //vj_i.iter_submatrix_mut(bas_start_k..bas_start_k+bas_len_k, bas_start_l..bas_start_l+bas_len_l).zip(out.iter())
             //    .for_each(|(to, from)| {*to = *from});
+        }
         });
-        
-        
+    });
 
-        vj.push(vj_i.to_matrixupper());
+    for i_spin in 0..spin_channel {
+        vj[i_spin] = vj_full[i_spin].to_matrixupper();
     }
-    if spin_channel == 1{
-        vj.push(MatrixUpper::new(1, 0.0));       
-    }
+
     vj
 }
 
@@ -4316,6 +4346,8 @@ pub fn vj_on_the_fly_par_batch_by_batch(mol: &Molecule, dm: &Vec<MatrixFull<f64>
                 index.push((k,l))
             }
         };
+
+        //utilities::balancing_type_02(num_tasks, num_threads, per_communication);
         index.par_iter().for_each_with(sender,|s,(k,l)|{
             let bas_start_k = mol.cint_fdqc[*k][0];
             let bas_len_k = mol.cint_fdqc[*k][1];
