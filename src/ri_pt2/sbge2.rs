@@ -152,8 +152,10 @@ pub fn close_shell_sbge2_detailed_rayon(scf_data: &crate::scf_io::SCF) -> anyhow
         //}
         //let num_occ = scf_data.homo[0]+1;
         let num_occ = scf_data.lumo[0];
-        println!("Print the correlation energies for each electron-pair:");
-        if scf_data.mol.ctrl.print_level>1 {println!("For (alpha, alpha)")};
+        if scf_data.mol.ctrl.print_level>0 {
+            println!("For (alpha, alpha)");
+            println!("Print the correlation energies for each electron-pair:");
+        };
         for i_state in start_mo..num_occ {
             for j_state in i_state+1..num_occ {
                 let (e_mp2_term_os,e_mp2_term_ss, e_eij_term_os, e_eij_term_ss,num_eij_iter) = e_ij[(i_state, j_state)];

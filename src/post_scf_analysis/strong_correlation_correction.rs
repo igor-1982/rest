@@ -7,7 +7,7 @@ use crate::ri_pt2::sbge2::{close_shell_sbge2_detailed_rayon, open_shell_sbge2_de
 
 use libm::{erf,erfc,pow};
 
-pub fn scc23_for_rxdh7(scf_data: &mut SCF) -> f64 {
+pub fn scc15_for_rxdh7(scf_data: &mut SCF) -> f64 {
     let spin_channel = scf_data.mol.spin_channel;
     let xc_method = &scf_data.mol.ctrl.xc;
     let num_elec = &scf_data.mol.num_elec;
@@ -118,7 +118,9 @@ pub fn scc23_for_rxdh7(scf_data: &mut SCF) -> f64 {
             println!("dxpbe: {:16.8}, fr1: {:16.8}, energy_gap: {:16.8}", dxpbe, fr1, energy_gap);
             println!("x_max: {:16.8}, x_min: {:16.8}", x_max, x_min);
         }
-        println!("c_pt2: {:16.8} Ha, c_sbge2: {:16.8} Ha, c_scsrpa: {:16.8} Ha", c_pt2,c_sbge2, c_scsrpa);
+        if scf_data.mol.ctrl.print_level>0 {
+            println!("c_pt2: {:16.8} Ha, c_sbge2: {:16.8} Ha, c_scsrpa: {:16.8} Ha", c_pt2,c_sbge2, c_scsrpa);
+        }
 
         //let screen0 = (2.3*dxpbe).exp()*fr1.ln().powf(4.0);
         let screen0 = fr1.ln().powf(2.0);
@@ -166,7 +168,9 @@ pub fn scc23_for_rxdh7(scf_data: &mut SCF) -> f64 {
 
     //println!("debug 2, {:?}", sbge2_tot);
 
-    println!("SCC_1: {:16.8} Ha, SCC_R: {:16.8} Ha, SCC_Limit: {:16.8} Ha", e_scc_1,e_scc_r,e_scc_limit);
+    if scf_data.mol.ctrl.print_level>0 {
+        println!("SCC_1: {:16.8} Ha, SCC_R: {:16.8} Ha, SCC_Limit: {:16.8} Ha", e_scc_1,e_scc_r,e_scc_limit);
+    }
 
     e_scc_1 + e_scc_r + e_scc_limit
 }

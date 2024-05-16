@@ -276,14 +276,16 @@ pub fn evaluate_osrpa_correlation_detailed_rayon(scf_data: &SCF) -> anyhow::Resu
     }
     timerecords.count("evaluate_special_radius");
 
-    timerecords.report_all();
+    if scf_data.mol.ctrl.print_level>0 {timerecords.report_all()};
 
     if spin_channel == 1 {
         sc_check = [false;2];
         let mut tmp_sr = special_radius[0];
         special_radius[1] = tmp_sr;
     }
-    println!("Special radius of non-interacting response matrix: ({:16.8}, {:16.8})", special_radius[0], special_radius[1]);
+    if scf_data.mol.ctrl.print_level>0 {
+        println!("Special radius of non-interacting response matrix: ({:16.8}, {:16.8})", special_radius[0], special_radius[1]);
+    }
 
     // In this subroutine, we call the lapack dgemm in a rayon parallel environment.
     // In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien

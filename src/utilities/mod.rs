@@ -1,4 +1,5 @@
 use clap::{Command, Arg, ArgMatches};
+use rayon::ThreadPoolBuildError;
 use time::{DateTime,Local};
 use std::{time::Instant, collections::HashMap, ops::Range};
 use regex::Regex;
@@ -233,6 +234,17 @@ pub fn balancing_type_02(num_tasks:usize, num_threads: usize, per_communication:
 //  //let num_left = n_baspair%num_threads;
 //
 //}
+
+
+pub fn create_pool(num_threads: usize) -> Result<rayon::ThreadPool,ThreadPoolBuildError > {
+    match rayon::ThreadPoolBuilder::new()
+       .num_threads(num_threads)
+       .build()
+    {
+       Err(e) => Err(e),
+       Ok(pool) => Ok(pool),
+    }
+ }
 
 pub fn convert_scientific_notation_to_fortran_format(n: &String) -> String {
     let re = Regex::new(r"(?P<num> *-?\d.\d*)[E|e](?P<exp>-?\d{1,2})").unwrap();

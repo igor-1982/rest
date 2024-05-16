@@ -167,7 +167,7 @@ pub fn nwchem_prune(nuc: usize, rads: &Vec<f64>, n_ang: usize, n_rad: usize) -> 
 
 }
 
-pub fn prune_by_rho(grids: &mut Grids, dm: &Vec<MatrixFull<f64>>, spin_channel: usize) -> Grids{
+pub fn prune_by_rho(grids: &Grids, dm: &Vec<MatrixFull<f64>>, spin_channel: usize) -> Grids{
     let mut dm = dm.clone();
     
     let rho = grids.prepare_tabulated_density(&mut dm, spin_channel);

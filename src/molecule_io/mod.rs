@@ -7,9 +7,10 @@ use rayon::prelude::{IntoParallelRefIterator, IndexedParallelIterator, ParallelI
 use rest_tensors::{ERIFull,RIFull,ERIFold4,TensorSlice,TensorSliceMut,TensorOptMut,TensorOpt, MatrixUpper, MatrixFull};
 use libc::regerror;
 use statrs::distribution::Continuous;
-use tensors::BasicMatrix;
+use tensors::{map_upper_to_full, BasicMatrix, SubMatrixUpper};
 use tensors::external_libs::{ri_copy_from_ri, matr_copy_from_ri};
 use tensors::matrix_blas_lapack::{_dgemm, _dgemm_full, _power, _power_rayon, _newton_schulz_inverse_square_root_v02};
+use std::collections::HashMap;
 use std::fmt::format;
 use std::fs;
 use std::ops::Range;
@@ -79,6 +80,7 @@ pub struct Molecule {
     pub spin_channel: usize,
     // exchange-correlation functionals
     pub xc_data: DFA4REST,
+    pub use_eri: bool,
     #[pyo3(get, set)]
     pub num_state: usize,
     #[pyo3(get, set)]
@@ -92,6 +94,8 @@ pub struct Molecule {
     pub start_mo : usize,
     // for effective core potential in SCF
     pub ecp_electrons : usize,
+
+    pub auxbas4elem: Vec<Basis4Elem>,
 
     pub basis4elem: Vec<Basis4Elem>,
     // fdqc_bas: store information of each basis functions
@@ -123,6 +127,7 @@ impl Molecule {
         Molecule {
             ctrl:InputKeywords::init_ctrl(),
             xc_data: DFA4REST::new("hf",1, 0),
+            use_eri: false,
             geom: GeomCell::init_geom(),
             num_elec: [0.0;3],
             num_state: 0,
@@ -131,6 +136,7 @@ impl Molecule {
             start_mo: 0,   // all-electron pt2, rpa and so forth
             ecp_electrons: 0,
             spin_channel: 1,
+            auxbas4elem: vec![],
             basis4elem: vec![],
             fdqc_bas: vec![],
             cint_bas: vec![],
@@ -192,7 +198,7 @@ impl Molecule {
 
         let (mut auxbas , mut cint_aux_atm,mut cint_aux_bas,cint_aux_env,
                 mut fdqc_aux_bas,mut cint_aux_fdqc,num_auxbas) 
-            =(bas.clone(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),0);
+            =(Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),0);
 
 
         //let mut cint_data = CINTR2CDATA::new();
@@ -207,18 +213,25 @@ impl Molecule {
 
         let xc_data = DFA4REST::new(&ctrl.xc,spin_channel, ctrl.print_level);
 
+        let use_eri = xc_data.use_eri() || ctrl.use_ri_vj;
+        
+
         // frozen-core pt2 and rpa are not yet implemented.
         let mut start_mo = count_frozen_core_states(ctrl.frozen_core_postscf, &geom.elem);
         let ecp_orbs = ecp_electrons/2;
 
         if start_mo < ecp_orbs {
-            println!("The counted start_mo for the frozen-core post-scf methods {} is smaller than the number of ecp orbitals {}. Take the start_mo = ecp_orbitals",
+            if ctrl.print_level >= 1 {
+                println!("The counted start_mo for the frozen-core post-scf methods {} is smaller than the number of ecp orbitals {}. Take the start_mo = ecp_orbitals",
                     start_mo, ecp_orbs);
+            }
             //start_mo = ecp_electrons;
             start_mo = 0;
         } else {
-            println!("The counted start_mo for the frozen-core post-scf methods {} is larger than the number of ecp orbitals {}. Take the start_mo -= ecp_orbitals",
-                    start_mo, ecp_orbs);
+            if ctrl.print_level >= 1 {
+                println!("The counted start_mo for the frozen-core post-scf methods {} is larger than the number of ecp orbitals {}. Take the start_mo -= ecp_orbitals",
+                        start_mo, ecp_orbs);
+            }
             start_mo = start_mo - ecp_orbs
         }
 
@@ -231,6 +244,7 @@ impl Molecule {
             ctrl,
             geom,
             xc_data,
+            use_eri,
             num_elec,
             num_state,
             num_basis,
@@ -239,6 +253,7 @@ impl Molecule {
             ecp_electrons,
             spin_channel,
             basis4elem,
+            auxbas4elem: auxbas,
             fdqc_bas,
             cint_fdqc,
             cint_atm,
@@ -254,6 +269,12 @@ impl Molecule {
         };
         // check and prepare the auxiliary basis sets
         if mol.ctrl.use_auxbas {mol.initialize_auxbas()};
+
+        //println!("Debug for AuxBasis4Eelem");
+        //mol.auxbas4elem.iter().enumerate().for_each(|(i,x)| {
+        //    println!("Basis functions for Atom {}: ({},{})", i,x.global_index.0,x.global_index.1);
+        //});
+
         if mol.ctrl.print_level>0 {
             println!("numbasis: {:2}, num_auxbas: {:2}", mol.num_basis,mol.num_auxbas)
         };
@@ -300,6 +321,7 @@ impl Molecule {
         self.fdqc_aux_bas = fdqc_aux_bas;
         self.cint_aux_fdqc = cint_aux_fdqc;
         self.num_auxbas = num_auxbas;
+        self.auxbas4elem = auxbas;
 
         //let mut env = self.cint_env.clone();
 
@@ -314,8 +336,12 @@ impl Molecule {
             if let Some(j) = i.get_mut(3) {*j += off};
         });
         self.cint_aux_bas.iter_mut().for_each(|i| {
+            // =========================================================
             // offset the atom index in the atm list
-            if let Some(j) = i.get_mut(0) {*j += natm_off};
+            // WARNNING:: do not offset the atom index in the atm list, such that the auxiliary basis sets
+            //            use the same cint_atm as the ordinary basis sets.
+            //if let Some(j) = i.get_mut(0) {*j += natm_off};
+            // =========================================================
             // offset the position that stores basis exponents in the env list
             if let Some(j) = i.get_mut(5) {*j += off};
             // offset the position that stores basis coefficients in the env list
@@ -356,6 +382,17 @@ impl Molecule {
         cint_data
     }
 
+    pub fn update_geom_poisition_in_cint_env(&self, position: &MatrixFull<f64>) -> Vec<f64> {
+        let mut cint_env = self.cint_env.clone();
+        self.cint_atm.iter().zip(position.iter_columns_full()).for_each(|(atm, position)| {
+            let pos_env_start = atm[1] as usize;
+            cint_env[pos_env_start] = position[0];
+            cint_env[pos_env_start+1] = position[1];
+            cint_env[pos_env_start+2] = position[2];
+        });
+        cint_env
+    }
+
     pub fn collect_auxbas(ctrl: &InputKeywords,geom: &mut GeomCell, etb: Option<InfoV2>) -> 
             (Vec<Basis4Elem>, Vec<Vec<i32>>, Vec<Vec<i32>>, Vec<f64>, Vec<BasInfo>, Vec<Vec<usize>>, usize) {
 
@@ -387,24 +424,7 @@ impl Molecule {
             aux_env.push(0.0);
             geom_start += 4;
         });
-        //for (atm_index, atm_elem) in geom.elem.iter().enumerate() {
-        //    let mut tmp_charge: i32 = 0;
-        //    let tmp_item = elem_name.iter()
-        //        .zip(elem_charge.iter()).find(|(x,y)| {x.eq(&atm_elem)});
-        //    if let Some((x,y)) = tmp_item {
-        //        tmp_charge = *y;
-        //    };
-        //    aux_atm.push(vec![tmp_charge,geom_start,1,geom_start+3,0,0]);
-        //    (0..3).into_iter().for_each(|i| {
-        //        if let Some(tmp_value) = geom.position.get(&[i,atm_index]) {
-        //            //for the coordinates
-        //            aux_env.push(*tmp_value);
-        //        }
-        //    });
-        //    //for the nuclear charge distribution parameter
-        //    aux_env.push(0.0);
-        //    geom_start += 4;
-        //}; 
+
         // Now for bas inf.
         let mut auxbas_total: Vec<Basis4Elem> = vec![];
         let mut aux_bas: Vec<Vec<i32>> = vec![];
@@ -575,7 +595,7 @@ impl Molecule {
         let ctrl_elem = ctrl_element_checker(geom);
         let local_elem = local_element_checker(&ctrl.basis_path);
         //println!("local elements are {:?}", local_elem);
-        println!("ctrl elements are {:?}", ctrl_elem);
+        //println!("ctrl elements are {:?}", ctrl_elem);
         let elem_intersection = ctrl_elem.intersect(local_elem.clone());
         let mut required_elem = vec![];
         for ctrl_item in ctrl_elem {
@@ -708,36 +728,83 @@ impl Molecule {
                 // import ecpbas and ecp for env
                 let ecp_ang_start = (ecp.len()-1) as i32;
                 for ecpcell in ecp.iter() {
+
                     let angl = ecpcell.angular_momentum[0];
                     let coeffs = &ecpcell.coefficients;
-                    let r_exponents = *ecpcell.r_exponents.get(0).unwrap();
                     let gaussian_exponents = &ecpcell.gaussian_exponents;
                     let num_exp = gaussian_exponents.len() as i32;
                     let num_coeffs = coeffs.len() as i32;
+
+                    let mut r_exponents_group: HashMap<i32, Vec<usize>> = HashMap::new();
+                    //let r_exponents_list: Vec<i32> = vec![];
+
+                    ecpcell.r_exponents.iter().enumerate().for_each(|(index, r_exponents)| {
+                        if r_exponents_group.contains_key(r_exponents) {
+                            r_exponents_group.get_mut(r_exponents).unwrap().push(index);
+                        } else {
+                            r_exponents_group.insert(*r_exponents, vec![index]);
+                        }
+                    });
+                    //let r_exponents = *ecpcell.r_exponents.get(0).unwrap();
                     //if num_coeffs != num_exp {
                     //    panic!("bad ecp basis for the elem of {}", &geom.elem[atm_index]);
                     //}
 
-                    let mut ecp_exp_start = env.len() as i32;
-                    env.extend(gaussian_exponents.iter());
+                    //STOP HERE Igor
 
-                    coeffs.iter().for_each(|each_coeffs| {
-                        let len_coeffs = each_coeffs.len() as i32;
-                        if len_coeffs != num_exp {
+                    r_exponents_group.iter().for_each(|(r_exponent, index_vec)| {
+                        let mut ecp_exp_start = env.len() as i32;
+                        let num_index_vec = index_vec.len() as i32;
+                        env.extend(gaussian_exponents.iter().enumerate()
+                            .filter(|(index, x)| index_vec.contains(index) )
+                            .map(|(_, x)| x)
+                        );
+                        if num_index_vec > num_exp {
                             panic!("bad ecp basis for the elem of {}", &geom.elem[atm_index]);
                         }
-                        let mut ecp_coeff_start = env.len() as i32;
-                        let mut tmp_ecpbas_vec: Vec<i32> = vec![atm_index as i32, 
-                                    if angl==ecp_ang_start {-1} else {angl},
-                                    num_exp,
-                                    r_exponents,
-                                    0,
-                                    ecp_exp_start,
-                                    ecp_coeff_start,
-                                    0];
-                        env.extend(each_coeffs.iter());
-                        ecpbas.push(tmp_ecpbas_vec);
+                        coeffs.iter().for_each(|each_coeffs| {
+                            let len_coeffs = each_coeffs.len() as i32;
+                            if len_coeffs != num_exp {
+                                panic!("bad ecp basis for the elem of {}", &geom.elem[atm_index]);
+                            }
+                            let mut ecp_coeff_start = env.len() as i32;
+                            let mut tmp_ecpbas_vec: Vec<i32> = vec![atm_index as i32, 
+                                        if angl==ecp_ang_start {-1} else {angl},
+                                        num_index_vec,
+                                        *r_exponent,
+                                        0,
+                                        ecp_exp_start,
+                                        ecp_coeff_start,
+                                        0];
+                            ecpbas.push(tmp_ecpbas_vec);
+
+                            env.extend(each_coeffs.iter().enumerate()
+                                .filter(|(index, x)| index_vec.contains(index))
+                                .map(|(_, x)| x)
+                            );
+                        });
                     });
+
+                    //let mut ecp_exp_start = env.len() as i32;
+                    //env.extend(gaussian_exponents.iter());
+
+                    //coeffs.iter().for_each(|each_coeffs| {
+                    //    let len_coeffs = each_coeffs.len() as i32;
+                    //    if len_coeffs != num_exp {
+                    //        panic!("bad ecp basis for the elem of {}", &geom.elem[atm_index]);
+                    //    }
+                    //    let mut ecp_coeff_start = env.len() as i32;
+                    //    let mut tmp_ecpbas_vec: Vec<i32> = vec![atm_index as i32, 
+                    //                if angl==ecp_ang_start {-1} else {angl},
+                    //                num_exp,
+                    //                r_exponents,
+                    //                0,
+                    //                ecp_exp_start,
+                    //                ecp_coeff_start,
+                    //                0];
+                    //    env.extend(each_coeffs.iter());
+                    //    ecpbas.push(tmp_ecpbas_vec);
+                    //});
                 }
             };
         });
@@ -754,29 +821,89 @@ impl Molecule {
         (basis_total, atm, bas, env,bas_info,cint_fdqc,num_elec,num_basis, num_state, final_ecpbas)
     }
 
+    pub fn int_ij_matrixuppers(&self,op_name: String, comp: usize) -> Vec<MatrixUpper<f64>> {
+        let mut cur_op = op_name.clone();
+        let mut cint_data = self.initialize_cint(false);
+
+        //if op_name == String::from("dipole") {
+        //    let comp = 3;
+        //}
+
+        let nbas = self.fdqc_bas.len();
+        let tmp_size:usize = nbas*(nbas+1)/2;
+        let mut mat_global = vec![MatrixUpper::new(tmp_size,0.0);comp];
+        let nbas_shell = self.cint_bas.len();
+        for j in 0..nbas_shell {
+            let bas_start_j = self.cint_fdqc[j][0];
+            let bas_len_j = self.cint_fdqc[j][1];
+            // for i < j
+            for i in 0..j {
+                let bas_start_i = self.cint_fdqc[i][0];
+                let bas_len_i = self.cint_fdqc[i][1];
+                let tmp_size = [bas_len_i,bas_len_j,comp];
+                let mat_local = RIFull::from_vec(tmp_size,
+                    cint_data.cint_ij(i as i32, j as i32, &cur_op)).unwrap();
+                (0..comp).into_iter().for_each(|tmp_comp| {
+                    let mat_local_full = mat_local.get_reducing_matrix(tmp_comp).unwrap();
+                    let mut mat_global_full = mat_global.get_mut(tmp_comp).unwrap();
+                    (0..bas_len_j).into_iter().for_each(|tmp_j| {
+                        let gj = tmp_j + bas_start_j;
+                        let global_ij_start = gj*(gj+1)/2+bas_start_i;
+                        let local_ij_start = tmp_j*bas_len_i;
+                        //let length = if bas_start_i+bas_len_i <= gj+1 {bas_len_i} else {gj+1-bas_start_i};
+                        let length = bas_len_i;
+                        let mat_global_j = mat_global_full.get1d_slice_mut(global_ij_start,length).unwrap();
+                        let mat_local_j = mat_local_full.get1d_slice(local_ij_start,length).unwrap();
+                        mat_global_j.iter_mut().zip(mat_local_j.iter()).for_each(|(gij,lij)| {
+                            *gij = *lij
+                        });
+                    });
+                });
+            };
+            // for i = j 
+            let tmp_size = [bas_len_j,bas_len_j,comp];
+            let vec_local = cint_data.cint_ij(j as i32, j as i32, &cur_op);
+            //println!("for {}, i=j={}: {:?}", &cur_op, j, &vec_local);
+            let mat_local = RIFull::from_vec(tmp_size,vec_local).unwrap();
+            //if j==0 {
+            //}
+            (0..comp).into_iter().for_each(|tmp_comp| {
+                let mat_local_full = mat_local.get_reducing_matrix(tmp_comp).unwrap();
+                let mut mat_global_full = mat_global.get_mut(tmp_comp).unwrap();
+                (0..bas_len_j).into_iter().for_each(|tmp_j| {
+                    let gj = bas_start_j + tmp_j;
+                    let global_ij_start = gj*(gj+1)/2+bas_start_j;
+                    let local_ij_start = tmp_j*bas_len_j;
+                    let length = tmp_j + 1;
+                    let mat_global_j = mat_global_full.get1d_slice_mut(global_ij_start,length).unwrap();
+                    let mat_local_j = mat_local_full.get1d_slice(local_ij_start,length).unwrap();
+                    mat_global_j.iter_mut().zip(mat_local_j.iter()).for_each(|(gij,lij)| {
+                        *gij = *lij
+                    });
+                })
+            });
+        }
+
+        cint_data.final_c2r();
+        //vec_2d
+        mat_global
+
+
+    }
+
     #[inline]
     pub fn int_ij_matrixupper(&self,op_name: String) -> MatrixUpper<f64> {
+        let mut cint_data = self.initialize_cint(false);
+
+        if op_name == String::from("dipole") {
+            panic!("Error:: for dipole moment calculation: {}, please use int_ij_matrxuppers",&op_name);
+        }
+
         let mut cur_op = op_name.clone();
-        let mut cint_data = if let Some(ecpbas) = &self.cint_ecpbas {
-            self.initialize_cint(false)
-        } else {
-            self.initialize_cint(false)
-        };
-        if op_name == String::from("ovlp") {
-            cint_data.cint1e_ovlp_optimizer_rust();
-        } else if op_name == String::from("kinetic") {
-            cint_data.cint1e_kin_optimizer_rust();
-        } else if op_name == String::from("hcore") {
-            cint_data.cint1e_kin_optimizer_rust();
+        if op_name == String::from("hcore") {
             cur_op = String::from("kinetic");
-        } else if op_name == String::from("ecp") {
-            cint_data.cint1e_ecp_optimizer_rust();
-            cur_op = String::from("ecp");
-        } else if op_name == String::from("nuclear") {
-            cint_data.cint1e_nuc_optimizer_rust();
-        } else {
-            panic!("Error:: unknown operator for GTO-ij integrals: {}",&op_name);
         };
+
         let nbas = self.fdqc_bas.len();
         let tmp_size:usize = nbas*(nbas+1)/2;
         let mut mat_global = MatrixUpper::new(tmp_size,0.0);
@@ -1001,6 +1128,166 @@ impl Molecule {
                     }
                 }
             };
+        };
+        mat_full
+        //mat_vec
+    }
+    #[inline]
+    pub fn int_ijkl_given_kl_v03(&self, k: usize, l: usize, matrixupper_index: &MatrixUpper<[usize;2]>) -> MatrixFull<MatrixUpper<f64>> {
+
+        let bas_start_l = self.cint_fdqc[l][0];
+        let bas_len_l = self.cint_fdqc[l][1];
+        let bas_start_k = self.cint_fdqc[k][0];
+        let bas_len_k = self.cint_fdqc[k][1];
+        let nbas = self.num_basis;
+
+        //println!("{}-{},{}-{}, size:{}",bas_start_k, bas_len_k, bas_start_l,bas_len_l, matrixupper_index.size);
+        let mut mat_full = 
+            //MatrixFull::new([bas_len_k,bas_len_l],MatrixFull::new([nbas,nbas],0.0));
+            MatrixFull::new([bas_len_k,bas_len_l],MatrixUpper::new(matrixupper_index.size,0.0));
+        //let mut mat_vec = vec![MatrixFull::new([nbas,nbas],0.0);bas_len_k*bas_len_l];
+
+        let mut cint_data = self.initialize_cint(false);
+        let nbas_shell = self.cint_bas.len();
+        cint_data.cint2e_optimizer_rust();
+        for j in 0..nbas_shell {
+            let bas_start_j = self.cint_fdqc[j][0];
+            let bas_len_j = self.cint_fdqc[j][1];
+            //let (i_start, i_end) = (0,j+1);
+            for i in 0..j+1 {
+                let bas_start_i = self.cint_fdqc[i][0];
+                let bas_len_i = self.cint_fdqc[i][1];
+                let buf = cint_data.cint_ijkl_by_shell(i as i32, j as i32, k as i32, l as i32);
+                let tmp_eri = ERIFull::from_vec([bas_len_i,bas_len_j,bas_len_k,bas_len_l],buf).unwrap();
+
+                for loc_l in 0..bas_len_l {
+                    for loc_k in 0..bas_len_k {
+                        //let tmp_index = loc_l*bas_len_k + loc_k;
+                        //let mut tmp_mat = &mut mat_vec[tmp_index];
+                        let mut tmp_mat = &mut mat_full[[loc_k,loc_l]];
+                        let tmp_loc = tmp_eri.get_reducing_matrix(&[loc_k,loc_l]);
+
+                        if i!=j {
+                            tmp_mat.iter_submatrix_mut(bas_start_i..bas_start_i+bas_len_i, bas_start_j..bas_start_j+bas_len_j, matrixupper_index)
+                                .zip(tmp_loc.iter()).for_each(|(gij,lij)| {*gij = *lij});
+                        } else {
+                            //println!("i=j={}:({},{})",i, bas_start_i,bas_len_i);
+                            tmp_mat.iter_submatrix_mut(bas_start_i..bas_start_i+bas_len_i, bas_start_j..bas_start_j+bas_len_j, matrixupper_index)
+                                .zip(tmp_loc.iter_matrixupper().unwrap()).for_each(|(gij,lij)| {*gij = *lij});
+
+                        }
+                    }
+                }
+            };
+        };
+        mat_full
+        //mat_vec
+    }
+    #[inline]
+    /// to save the memory required for vj_on_the_fly, evaluate the ERI elements batch by batch (batch: Range<usize>)
+    pub fn int_ijkl_given_kl_batch(&self, k: usize, l: usize, batch: Range<usize>, matrixupper_index: &MatrixUpper<[usize;2]>) -> MatrixFull<SubMatrixUpper<f64>> {
+
+        let bas_start_l = self.cint_fdqc[l][0];
+        let bas_len_l = self.cint_fdqc[l][1];
+        let bas_start_k = self.cint_fdqc[k][0];
+        let bas_len_k = self.cint_fdqc[k][1];
+        let nbas = self.num_basis;
+
+        let global_start = batch.start;
+        let global_length = batch.end;
+        let [global_start_row, global_start_col] = matrixupper_index[global_start];
+        let [global_end_row, global_end_col] = matrixupper_index[global_length-1];
+
+        let mut mat_full = 
+            MatrixFull::new([bas_len_k,bas_len_l],SubMatrixUpper::new(batch.clone(),matrixupper_index.size, 0.0));
+
+        let mut cint_data = self.initialize_cint(false);
+        let nbas_shell = self.cint_bas.len();
+        cint_data.cint2e_optimizer_rust();
+        for j in 0..nbas_shell {
+            let bas_start_j = self.cint_fdqc[j][0];
+            let bas_len_j = self.cint_fdqc[j][1];
+            let rough_start = bas_start_j*(bas_start_j+1)/2;
+            let rough_end = (bas_start_j+bas_len_j)*(bas_start_j+bas_len_j-1)/2;
+            if rough_start < global_length {
+                for i in 0..j+1 {
+                    let bas_start_i = self.cint_fdqc[i][0];
+                    let bas_len_i = self.cint_fdqc[i][1];
+                    let curr_start = rough_start + bas_start_i;
+                    let curr_end = rough_end + bas_start_i+bas_len_i-1;
+                    ////debug 514
+                    //if k==0 && l==0 && (batch.start == 60|| batch.start==75){
+                    //    println!("batch_start: {}, batch_end: {}, bas_start_i: {}, bas_len_i: {}, bas_start_j: {}, bas_len_j: {}", batch.start, batch.end, bas_start_i, bas_len_i, bas_start_j, bas_len_j);
+                    //    println!("global_s and e: ({},{}), ({},{}), curr_start: {}, curr_end: {}", 
+                    //        global_start_row, global_start_col, 
+                    //        global_end_row, global_end_col, 
+                    //        curr_start, curr_end);
+                    //}
+                    if (curr_start >= global_start && curr_start < global_length) ||
+                       (curr_end >= global_start && curr_end < global_length) || 
+                       (curr_start < global_start && curr_end >= global_length) {
+
+                        //if k==0 && l==0 && (batch.start == 60|| batch.start==75){
+                        //    println!("debug: pass");
+                        //}
+
+                        let start_point = if curr_start >= global_start {
+                            0_usize
+                        } else {
+                            if global_start_row < bas_start_i {
+                                //(global_start_col-bas_start_j)*bas_len_i+bas_start_i
+                                (global_start_col-bas_start_j)*bas_len_i
+                            } else if global_start_row >= bas_start_i+bas_len_i {
+                                (global_start_col-bas_start_j+1)*bas_len_i
+                            } else {
+                                (global_start_col-bas_start_j)*bas_len_i+(global_start_row-bas_start_i)
+                            }
+                        };
+                        //let end_point = if curr_end <global_length {
+                        //    bas_len_i*bas_len_j - 1
+                        //} else {
+                        //    global_end_col*bas_len_i + global_end_row - bas_start_j*bas_len_i  - bas_start_i
+                        //};
+
+                        let buf = cint_data.cint_ijkl_by_shell(i as i32, j as i32, k as i32, l as i32);
+                        let tmp_eri = ERIFull::from_vec([bas_len_i,bas_len_j,bas_len_k,bas_len_l],buf).unwrap();
+
+                        for loc_l in 0..bas_len_l {
+                            for loc_k in 0..bas_len_k {
+
+                                let mut tmp_mat = &mut mat_full[[loc_k,loc_l]];
+                                let tmp_loc = tmp_eri.get_reducing_matrix(&[loc_k,loc_l]);
+
+                                if i!=j {
+                                    ////debug 514
+                                    //if k==0 && l==0 && (batch.start == 60|| batch.start==75){
+                                    //    println!("batch_start: {}, batch_end: {}, bas_start_i: {}, bas_len_i: {}, bas_start_j: {}, bas_len_j: {}", batch.start, batch.end, bas_start_i, bas_len_i, bas_start_j, bas_len_j);
+                                    //    println!("global_s and e: ({},{}), ({},{}), start_point: {}, curr_start: {}, curr_end: {}", 
+                                    //        global_start_row, global_start_col, 
+                                    //        global_end_row, global_end_col, 
+                                    //        start_point, curr_start, curr_end);
+                                    //}
+                                    tmp_mat.iter_submatrix_mut(bas_start_i..bas_start_i+bas_len_i, bas_start_j..bas_start_j+bas_len_j, matrixupper_index)
+                                        .zip(tmp_loc.data[start_point..].iter()).for_each(|(gij,lij)| {*gij = *lij});
+                                } else {
+                                    ////debug 514
+                                    //if k==0 && l==0 && bas_start_i == 9 {
+                                    //    println!("batch_start: {}, batch_end: {}, bas_start_i: {}, bas_len_i: {}, bas_start_j: {}, bas_len_j: {}", batch.start, batch.end, bas_start_i, bas_len_i, bas_start_j, bas_len_j);
+                                    //    println!("global_s and e: ({},{}), ({},{}), start_point: {}, curr_start: {}, curr_end: {}", 
+                                    //        global_start_row, global_start_col, 
+                                    //        global_end_row, global_end_col, 
+                                    //        start_point, curr_start, curr_end);
+                                    //    //println!("{:?}", &tmp_loc.data);
+                                    //}
+                                    //println!("i=j={}:({},{})",i, bas_start_i,bas_len_i);
+                                    tmp_mat.iter_submatrix_mut(bas_start_i..bas_start_i+bas_len_i, bas_start_j..bas_start_j+bas_len_j, matrixupper_index)
+                                        .zip(tmp_loc.iter_matrixupper_shift(start_point).unwrap()).for_each(|(gij,lij)| {*gij = *lij});
+                                }
+                            }
+                        }
+                    }
+                };
+            }
         };
         mat_full
         //mat_vec
@@ -2501,6 +2788,15 @@ fn test_regex() {
     let re = Regex::new(r"/?(?P<basis>[^/]*)/?$").unwrap();
     let cap = re.captures("./p1/p2/p3").unwrap();
     println!("{:?}",cap.name("basis").unwrap());
+}
+
+#[test]
+fn test_matrixupper() {
+    let dd = MatrixUpper::from_vec(10, (0..10).collect::<Vec<usize>>()).unwrap();
+    dd.iter_diagonal().for_each(|x| {println!("{}",x)});
+
+    let matrixupper_index = map_upper_to_full(10).unwrap();
+    dd.iter_submatrix(1..3, 0..2, &matrixupper_index).for_each(|x| {println!("{}",x)});
 }
 
 

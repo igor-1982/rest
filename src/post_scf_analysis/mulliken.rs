@@ -52,6 +52,11 @@ pub fn mulliken_pop(scf_data: &SCF) -> Vec<f64>{
         }
         *mull = *cha - sum;
     });
+
+    // check if ecp is used
+    mulliken.iter_mut().zip(scf_data.mol.basis4elem.iter()).for_each(|(mcharge,b4e)| {
+        if let Some(i_ecp) = b4e.ecp_electrons {*mcharge -= i_ecp as f64;}
+    });
     
     mulliken
 }

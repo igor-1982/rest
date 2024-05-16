@@ -24,9 +24,11 @@ pub fn rpa_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
     let xc_energy_scf = scf_data.evaluate_xc_energy(0);
     let xc_energy_xdh = scf_data.evaluate_xc_energy(1);
 
-    println!("=======================================");
-    println!("Now evaluate the RPA correlation energy");
-    println!("=======================================");
+    if scf_data.mol.ctrl.print_level>0 {
+        println!("=======================================");
+        println!("Now evaluate the RPA correlation energy");
+        println!("=======================================");
+    }
     let mut rpa_c_energy = 0.0_f64;
     let spin_channel = scf_data.mol.spin_channel;
     let num_freq = scf_data.mol.ctrl.frequency_points;
@@ -98,7 +100,9 @@ pub fn rpa_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
                             x_energy * (hy_coeffi_pot-hy_coeffi_scf) +
                             xc_energy_xdh-xc_energy_scf +
                             xdh_rpa_energy;
-    println!("E[{:?}]=: {:?}, Ex[HF]: {:?}, Ec[RPA]: {:?}", scf_data.mol.ctrl.xc, total_energy, x_energy, rpa_c_energy);
+    if scf_data.mol.ctrl.print_level>0 {
+        println!("E[{:?}]=: {:?}, Ex[HF]: {:?}, Ec[RPA]: {:?}", scf_data.mol.ctrl.xc, total_energy, x_energy, rpa_c_energy);
+    }
 
     scf_data.energies.insert(String::from("rpa_energy"), vec![total_energy]);
 

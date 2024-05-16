@@ -1,6 +1,7 @@
 use tensors::{MatrixFull, MatrixUpper, BasicMatrix};
 
-use crate::scf_io::scf;
+use crate::initial_guess::enxc::effective_nxc_matrix;
+use crate::scf_io::{scf, SCFType};
 use crate::{molecule_io::Molecule, scf_io::SCF, dft::Grids};
 
 use crate::initial_guess::sap::get_vsap;
@@ -10,31 +11,93 @@ use self::sad::initial_guess_from_sad;
 //use crate::initial_guess::*;
 pub mod sap;
 pub mod sad;
+pub mod enxc;
+mod pyrest_enxc;
 
-
+enum RESTART {
+    HDF5,
+    Inherit
+}
 
 pub fn initial_guess(scf_data: &mut SCF) {
+    // inherit the initial guess from the previous SCF procedure
+    if scf_data.mol.ctrl.initial_guess.eq(&"inherit") {
+        scf_data.generate_occupation();
+        scf_data.generate_density_matrix();
     // import the initial guess density from a hdf5 file
-    if scf_data.mol.ctrl.external_init_guess && scf_data.mol.ctrl.guessfile_type.eq(&"hdf5") {
+    } else if scf_data.mol.ctrl.external_init_guess && scf_data.mol.ctrl.guessfile_type.eq(&"hdf5") {
         scf_data.density_matrix = initial_guess_from_hdf5guess(&scf_data.mol);
         // for DFT methods, it needs the eigenvectors to generate the hamiltoniam. In consequence, we use the hf method to prepare the eigenvectors from the guess dm
         scf_data.generate_hf_hamiltonian_for_guess();
         //scf_data.generate_hf_hamiltonian();
         if scf_data.mol.ctrl.print_level>0 {println!("Initial guess energy: {:16.8}", scf_data.evaluate_hf_total_energy())};
         scf_data.diagonalize_hamiltonian();
+        scf_data.generate_occupation();
         scf_data.generate_density_matrix();
-
     // import the eigenvalues and eigen vectors from a hdf5 file directly
-    } else if scf_data.mol.ctrl.restart 
-        && std::path::Path::new(&scf_data.mol.ctrl.chkfile).exists() {
-            if scf_data.mol.ctrl.chkfile_type.eq(&"hdf5") {
-                let (eigenvectors, eigenvalues) = initial_guess_from_hdf5chk(&scf_data.mol);
-                scf_data.eigenvalues = eigenvalues;
-                scf_data.eigenvectors = eigenvectors;
-                scf_data.generate_density_matrix();
-            } else {
-                panic!("WARNNING: at present only hdf5 type check file is supported");
+    } else if scf_data.mol.ctrl.restart && std::path::Path::new(&scf_data.mol.ctrl.chkfile).exists()  {
+        if scf_data.mol.ctrl.chkfile_type.eq(&"hdf5") {
+            let (eigenvectors, eigenvalues) = initial_guess_from_hdf5chk(&scf_data.mol);
+
+            //=============================
+            // for MOM projection
+            if scf_data.mol.ctrl.force_state_occupation.len()>0 {
+                scf_data.ref_eigenvectors = eigenvectors.clone();
+                // validate the force occupation setting
+                match scf_data.scftype {
+                    SCFType::RHF => {
+                        scf_data.mol.ctrl.force_state_occupation.iter().enumerate().for_each(|(i,x)| {
+                            if x.get_force_occ() > 2.0 {
+                                println!("ERROR: the orbital occupation number for RHF cannot be larger than 2.0");
+                                panic!("{}", x.formated_output_check());
+                            }
+                            if x.get_occ_spin() > 0 {
+                                println!("ERROR: the spin is unpolarized for RHF, and thus cannot manipulate the orbitals in BETA spin-channel");
+                                panic!("{}", x.formated_output_check());
+                            }
+                        })
+                    },
+                    _ => {
+                        scf_data.mol.ctrl.force_state_occupation.iter().enumerate().for_each(|(i,x)| {
+                            if x.get_force_occ() > 1.0 {
+                                println!("ERROR: the orbital occupation number for UHF and ROHF cannot be larger than 1.0");
+                                panic!("{}", x.formated_output_check());
+                            }
+                        })
+
+                    }
+                    
+
+                }
             }
+            //=============================
+            scf_data.eigenvalues = eigenvalues;
+            scf_data.eigenvectors = eigenvectors;
+            scf_data.generate_occupation();
+            scf_data.generate_density_matrix();
+        } else {
+            panic!("WARNNING: at present only hdf5 type check file is supported");
+        }
+    // generate the machine-learning enxc potential initial guess
+    } else if scf_data.mol.ctrl.initial_guess.eq(&"deep_enxc") {
+        let mut init_fock = scf_data.h_core.clone();
+        if scf_data.mol.spin_channel==1 {
+            let mut cur_mol = scf_data.mol.clone();
+            let mut effective_hamiltonian = effective_nxc_matrix(&mut cur_mol);
+            init_fock.data.iter_mut().zip(effective_hamiltonian.data.iter()).for_each(|(to, from)| {*to += *from});
+            scf_data.hamiltonian = [init_fock,MatrixUpper::new(1,0.0)];
+        } else {
+            panic!("Error: at present the 'deep_enxc' initial guess can only be used for the close-shell problem");
+        };
+        scf_data.diagonalize_hamiltonian();
+        scf_data.generate_occupation();
+        scf_data.generate_density_matrix();
+        scf_data.generate_hf_hamiltonian();
+        let homo_id = scf_data.homo[0];
+        let lumo_id = scf_data.lumo[0];
+        println!("homo: {}, lumo: {}", &scf_data.eigenvalues[0][homo_id], &scf_data.eigenvalues[0][lumo_id]);
+        println!("initial_energy by deep_enxc: {}", scf_data.scf_energy);
+
     // generate the VSAP initial guess
     } else if scf_data.mol.ctrl.initial_guess.eq(&"vsap") {
         let init_fock = initial_guess_from_vsap(&scf_data.mol,&scf_data.grids);
@@ -45,6 +108,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
             scf_data.hamiltonian = [init_fock,init_fock_beta];
         };
         scf_data.diagonalize_hamiltonian();
+        scf_data.generate_occupation();
         scf_data.generate_density_matrix();
         //scf_data.generate_hf_hamiltonian();
     } else if scf_data.mol.ctrl.initial_guess.eq(&"sad") {
@@ -60,6 +124,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
         if scf_data.mol.ctrl.print_level>0 {println!("Initial guess HF energy: {:16.8}", scf_data.scf_energy)};
 
         scf_data.diagonalize_hamiltonian();
+        scf_data.generate_occupation();
         scf_data.generate_density_matrix();
         //scf_data.generate_hf_hamiltonian();
         //if scf_data.mol.ctrl.print_level>0 {println!("Initial guess HF energy: {:16.8}", scf_data.scf_energy)};
@@ -74,12 +139,31 @@ pub fn initial_guess(scf_data: &mut SCF) {
             scf_data.hamiltonian = [init_fock,init_fock_beta];
         };
         scf_data.diagonalize_hamiltonian();
+        scf_data.generate_occupation();
         scf_data.generate_density_matrix();
         scf_data.generate_hf_hamiltonian();
         let homo_id = scf_data.homo[0];
         let lumo_id = scf_data.lumo[0];
         println!("homo: {}, lumo: {}", &scf_data.eigenvalues[0][homo_id], &scf_data.eigenvalues[0][lumo_id]);
         println!("initial_energy: {}", scf_data.scf_energy);
+    } else {
+        println!("WARNNING: unknown initial_guess method ({}), invoke the \"hcore\" method", &scf_data.mol.ctrl.initial_guess);
+        let init_fock = scf_data.h_core.clone();
+        if scf_data.mol.spin_channel==1 {
+            scf_data.hamiltonian = [init_fock,MatrixUpper::new(1,0.0)];
+        } else {
+            let init_fock_beta = init_fock.clone();
+            scf_data.hamiltonian = [init_fock,init_fock_beta];
+        };
+        scf_data.diagonalize_hamiltonian();
+        scf_data.generate_occupation();
+        scf_data.generate_density_matrix();
+        scf_data.generate_hf_hamiltonian();
+        let homo_id = scf_data.homo[0];
+        let lumo_id = scf_data.lumo[0];
+        println!("homo: {}, lumo: {}", &scf_data.eigenvalues[0][homo_id], &scf_data.eigenvalues[0][lumo_id]);
+        println!("initial_energy: {}", scf_data.scf_energy);
+
     };
 }
 

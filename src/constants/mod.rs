@@ -239,6 +239,13 @@ pub const ATM_SLOTS: usize = 6;
 pub const ECP_LMAX: i32 = 5;
 pub const NUC_ECP:  i32 = 4;
 
+
+// for dipole - libcint
+pub const PTR_COMMON_ORG: i32 = 1;
+// for Gauge origin
+pub const PTR_RINV_ORIG: i32 = 4;
+
+
 //// for the atm index - libcint
 //pub const ATM_CHARGE_OF: usize = 0;
 //pub const ATM_PRT_COORD: usize = 1;
@@ -262,3 +269,17 @@ pub const KR_SHELL: [f64; 18] =
 
 //                                    1s   2s   2p   3s   3p   4s   3d    4p   5s   4d    5p   4f    5d    6s   6p 
 pub const NELE_IN_SHELLS: [f64; 15] = [2.0, 2.0, 6.0, 2.0, 6.0, 2.0, 10.0, 6.0, 2.0, 10.0, 6.0, 14.0, 10.0, 2.0, 6.0];
+
+//
+pub const LIGHT_SPEED: f64 = 137.03599967994;   // http://physics.nist.gov/cgi-bin/cuu/Value?alph
+// BOHR = .529 177 210 92(17) e-10m  // http://physics.nist.gov/cgi-bin/cuu/Value?bohrrada0
+pub const BOHR: f64 = 0.52917721092;  // Angstroms
+pub const BOHR_SI: f64 = BOHR * 1e-10;
+
+pub const G_ELECTRON: f64 = 2.00231930436182;  // http://physics.nist.gov/cgi-bin/cuu/Value?gem
+pub const E_MASS: f64 = 9.10938356e-31;         // kg https://physics.nist.gov/cgi-bin/cuu/Value?me
+pub const AVOGADRO: f64 = 6.022140857e23;       // https://physics.nist.gov/cgi-bin/cuu/Value?na
+pub const PLANCK: f64 = 6.626070040e-34;        // J*s http://physics.nist.gov/cgi-bin/cuu/Value?h
+pub const E_CHARGE: f64 = 1.6021766208e-19;
+pub const DEBYE:f64 = 3.335641e-30;            // C*m = 1e-18/LIGHT_SPEED_SI https://cccbdb.nist.gov/debye.asp
+pub const AU2DEBYE:f64 = E_CHARGE * BOHR*1e-10 / DEBYE; // 2.541746
