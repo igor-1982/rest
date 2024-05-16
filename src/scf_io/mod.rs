@@ -73,6 +73,7 @@ use crate::dft::Grids;
 use crate::{utilities, initial_guess};
 use crate::initial_guess::initial_guess;
 use crate::constants::{SPECIES_INFO, INVERSE_THRESHOLD};
+use crate::external_libs::dftd;
 
 
 
@@ -113,6 +114,7 @@ pub struct SCF {
     #[pyo3(get,set)]
     pub scf_energy: f64,
     pub grids: Option<Grids>,
+    pub empirical_dispersion_energy: f64,
     pub energies: HashMap<String,Vec<f64>>,
 }
 
@@ -153,6 +155,7 @@ impl SCF {
             lumo: [0,0],
             nuc_energy: 0.0,
             scf_energy: 0.0,
+            empirical_dispersion_energy: 0.0,
             grids: None,
             energies: HashMap::new(),
         };
@@ -213,6 +216,27 @@ impl SCF {
         //let dt1 = time::Local::now();
         new_scf.ovlp = new_scf.mol.int_ij_matrixupper(String::from("ovlp"));
         new_scf.h_core = new_scf.mol.int_ij_matrixupper(String::from("hcore"));
+
+        //========================================
+        // Now for emperial dispersion correction
+        //========================================
+        if let Some(empirical_dispersion_name) = &new_scf.mol.ctrl.empirical_dispersion {
+            //time_mark.new_item("Empirical Dispersion", "the empirical dispersion correction");
+            //time_mark.count_start("Empirical Dispersion");
+        
+            let (engy_disp, grad_disp, sigma_disp) = dftd(&new_scf);
+
+            println!("The empirical dispersion energy of {} is {}.", new_scf.mol.ctrl.empirical_dispersion.clone().unwrap().to_uppercase(), engy_disp);
+
+            if new_scf.mol.ctrl.print_level>3 { 
+                println!("{:?}, {:?}", &grad_disp, &sigma_disp);
+            };
+
+            new_scf.empirical_dispersion_energy = engy_disp;
+            //time_mark.count("Empirical Dispersion");
+        } else {
+            println!("no empirical dispersion correction");
+        }
 
         //new_scf.h_core.formated_output(5, "full");
 
@@ -4091,6 +4115,10 @@ pub fn scf(mol:Molecule) -> anyhow::Result<SCF> {
     if scf_data.mol.ctrl.print_level>0 {
         println!("the job spends {:16.2} seconds",(dt2.timestamp_millis()-dt0.timestamp_millis()) as f64 /1000.0)
     };
+
+    if scf_data.empirical_dispersion_energy != 0.0 {
+        scf_data.scf_energy += scf_data.empirical_dispersion_energy
+    }
 
     Ok(scf_data)
 }

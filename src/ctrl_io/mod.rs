@@ -167,6 +167,7 @@ pub struct InputKeywords {
     // Keywords for sad initial guess
     #[pyo3(get, set)]
     pub atom_sad: bool,
+    pub empirical_dispersion: Option<String>,
     // Keywords for parallism
     #[pyo3(get, set)]
     pub num_threads: Option<usize>
@@ -192,6 +193,7 @@ impl InputKeywords {
             isdf_new: false,
             // Keywords associated with the method employed
             xc: String::from("x3lyp"),
+            empirical_dispersion: None,
             post_xc: vec![],
             post_correlation: vec![],
             post_ai_correction: String::from("none"),
@@ -448,6 +450,10 @@ impl InputKeywords {
                     other => {String::from("hf")},
                 };
                 if tmp_input.print_level>0 {println!("The exchange-correlation method: {}", tmp_input.xc)};
+                tmp_input.empirical_dispersion = match tmp_ctrl.get("empirical_dispersion").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_emp) => {Some(tmp_emp.to_lowercase())},
+                    other => {None},
+                };
                 //let re0 = Regex::new(r"
                 //                    (?P<elem>\w{1,2})\s*,?    # the element
                 //                    \s+
