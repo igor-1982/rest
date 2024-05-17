@@ -4229,8 +4229,12 @@ pub fn vj_on_the_fly_par(mol: &Molecule, dm: &Vec<MatrixFull<f64>>) -> Vec<Matri
 
     let par_tasks = utilities::balancing(index_new.len(), rayon::current_num_threads());
     let (sender, receiver) = channel();
+    //println!("debug {:?}", &par_tasks);
 
     par_tasks.par_iter().for_each_with(sender, |s,task_range| {
+        //rayon::current_thread_index();
+        let mut cint_data = mol.initialize_cint(false);
+        cint_data.cint2e_optimizer_rust();
 
         let mut out_submatrix = Vec::new();
 
@@ -4240,7 +4244,8 @@ pub fn vj_on_the_fly_par(mol: &Molecule, dm: &Vec<MatrixFull<f64>>) -> Vec<Matri
             let bas_start_l = mol.cint_fdqc[*l][0];
             let bas_len_l = mol.cint_fdqc[*l][1];
 
-            let klij = mol.int_ijkl_given_kl_v03(*k, *l, &matrixupper_index);
+
+            let klij = mol.int_ijkl_given_kl_v03(*k, *l, &matrixupper_index, &mut cint_data);
             let mut out = vec![
                 MatrixFull::new([bas_len_k, bas_len_l],0.0),
                 if spin_channel==2 {
@@ -4276,6 +4281,8 @@ pub fn vj_on_the_fly_par(mol: &Molecule, dm: &Vec<MatrixFull<f64>>) -> Vec<Matri
             out_submatrix.push((out,*k,*l));
 
         });
+
+        cint_data.final_c2r();
         s.send(out_submatrix).unwrap();
     });
 

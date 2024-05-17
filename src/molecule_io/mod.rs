@@ -358,28 +358,41 @@ impl Molecule {
     }
 
     pub fn initialize_cint(&self, for_ri: bool) -> CINTR2CDATA {
-        let mut final_cint_atm = self.cint_atm.clone();
-        let mut final_cint_bas = self.cint_bas.clone();
-        let mut final_cint_env = self.cint_env.clone();
 
         if for_ri {
+            let mut final_cint_atm = self.cint_atm.clone();
+            let mut final_cint_bas = self.cint_bas.clone();
+            let mut final_cint_env = self.cint_env.clone();
             final_cint_atm.extend(self.cint_aux_atm.clone());
             final_cint_bas.extend(self.cint_aux_bas.clone());
             final_cint_env.extend(self.cint_aux_env.clone());
-        }
-
-        let natm = final_cint_atm.len() as i32;
-        let nbas = final_cint_bas.len() as i32;
-        let mut cint_data = CINTR2CDATA::new();
-        cint_data.set_cint_type(&self.cint_type);
-        if let Some(final_cint_ecp) = &self.cint_ecpbas {
-            let necp = final_cint_ecp.len() as i32;
-            cint_data.initial_r2c_with_ecp(&final_cint_atm, natm, &final_cint_bas, nbas, &final_cint_ecp, necp, &final_cint_env);
+            let natm = final_cint_atm.len() as i32;
+            let nbas = final_cint_bas.len() as i32;
+            let mut cint_data = CINTR2CDATA::new();
+            cint_data.set_cint_type(&self.cint_type);
+            if let Some(final_cint_ecp) = &self.cint_ecpbas {
+                let necp = final_cint_ecp.len() as i32;
+                cint_data.initial_r2c_with_ecp(&final_cint_atm, natm, &final_cint_bas, nbas, &final_cint_ecp, necp, &final_cint_env);
+            } else {
+                cint_data.initial_r2c(&final_cint_atm, natm, &final_cint_bas, nbas, &final_cint_env);
+            }
+            cint_data
         } else {
-            cint_data.initial_r2c(&final_cint_atm, natm, &final_cint_bas, nbas, &final_cint_env);
+            let final_cint_atm = &self.cint_atm.clone();
+            let final_cint_bas = &self.cint_bas.clone();
+            let final_cint_env = &self.cint_env.clone();
+            let natm = final_cint_atm.len() as i32;
+            let nbas = final_cint_bas.len() as i32;
+            let mut cint_data = CINTR2CDATA::new();
+            cint_data.set_cint_type(&self.cint_type);
+            if let Some(final_cint_ecp) = &self.cint_ecpbas {
+                let necp = final_cint_ecp.len() as i32;
+                cint_data.initial_r2c_with_ecp(final_cint_atm, natm, final_cint_bas, nbas, final_cint_ecp, necp, final_cint_env);
+            } else {
+                cint_data.initial_r2c(final_cint_atm, natm, final_cint_bas, nbas, final_cint_env);
+            }
+            cint_data
         }
-
-        cint_data
     }
 
     pub fn update_geom_poisition_in_cint_env(&self, position: &MatrixFull<f64>) -> Vec<f64> {
@@ -1133,7 +1146,7 @@ impl Molecule {
         //mat_vec
     }
     #[inline]
-    pub fn int_ijkl_given_kl_v03(&self, k: usize, l: usize, matrixupper_index: &MatrixUpper<[usize;2]>) -> MatrixFull<MatrixUpper<f64>> {
+    pub fn int_ijkl_given_kl_v03(&self, k: usize, l: usize, matrixupper_index: &MatrixUpper<[usize;2]>, cint_data: &mut CINTR2CDATA) -> MatrixFull<MatrixUpper<f64>> {
 
         let bas_start_l = self.cint_fdqc[l][0];
         let bas_len_l = self.cint_fdqc[l][1];
@@ -1147,7 +1160,7 @@ impl Molecule {
             MatrixFull::new([bas_len_k,bas_len_l],MatrixUpper::new(matrixupper_index.size,0.0));
         //let mut mat_vec = vec![MatrixFull::new([nbas,nbas],0.0);bas_len_k*bas_len_l];
 
-        let mut cint_data = self.initialize_cint(false);
+        //let mut cint_data = self.initialize_cint(false);
         let nbas_shell = self.cint_bas.len();
         cint_data.cint2e_optimizer_rust();
         for j in 0..nbas_shell {
@@ -1180,6 +1193,7 @@ impl Molecule {
                 }
             };
         };
+        //cint_data.final_c2r();
         mat_full
         //mat_vec
     }
