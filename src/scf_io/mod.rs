@@ -4000,7 +4000,7 @@ pub fn generate_occupation_outside(scf_data: &SCF) -> ([Vec<f64>;2], [usize;2], 
             if scf_data.mol.spin_channel == 2{
                 println!("Occupation in Beta Channel: ({}-{}):", window[0], window[1]);
                 let mut output = String::new();
-                &occ[0][window[0]..window[1]].iter().enumerate().for_each(|(li,x)| {
+                &occ[1][window[0]..window[1]].iter().enumerate().for_each(|(li,x)| {
                     output = format!("{} ({:4}, {:6.3})", output, li+window[0], x);
                     if (li+1)%5 == 0 {
                         output = format!("{}\n", output);
