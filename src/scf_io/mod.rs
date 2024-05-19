@@ -3981,15 +3981,37 @@ pub fn generate_occupation_outside(scf_data: &SCF) -> ([Vec<f64>;2], [usize;2], 
         &scf_data.eigenvectors, 
         &scf_data.ovlp, 
         &scf_data.ref_eigenvectors);
-    }
-
-
-    if scf_data.mol.ctrl.print_level>3 {
-        println!("Occupation in Alpha Channel: {:?}", &occ[0]);
-        if scf_data.mol.spin_channel == 2{
-            println!("Occupation in Beta Channel:  {:?}", &occ[1]);
+        if scf_data.mol.ctrl.print_level>=2 {
+            let mut window = [0_usize;2];
+            force_occ.iter().map(|x| x.get_check_window())
+                .for_each(|[x,y]| {
+                    if x< window[0] {window[0] = x};
+                    if y>window[1] {window[1]=y}
+                });
+            println!("Occupation in Alpha Channel ({}-{}):", window[0], window[1]);
+            let mut output = String::new();
+            &occ[0][window[0]..window[1]].iter().enumerate().for_each(|(li,x)| {
+                output = format!("{} ({:4}, {:6.3})", output, li+window[0], x);
+                if (li+1)%5 == 0 {
+                    output = format!("{}\n", output);
+                }
+            });
+            println!("{}",output);
+            if scf_data.mol.spin_channel == 2{
+                println!("Occupation in Beta Channel: ({}-{}):", window[0], window[1]);
+                let mut output = String::new();
+                &occ[0][window[0]..window[1]].iter().enumerate().for_each(|(li,x)| {
+                    output = format!("{} ({:4}, {:6.3}", output, li+window[0], x);
+                    if (li+1)%5 == 0 {
+                        output = format!("{}\n", output);
+                    }
+                });
+                println!("{}",output);
+            }
         }
     }
+
+
 
     (occ, homo, lumo)
 }

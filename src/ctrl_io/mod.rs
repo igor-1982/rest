@@ -168,7 +168,7 @@ pub struct InputKeywords {
     // Kyewords for post scf analysis
     pub outputs: Vec<String>,
     pub cube_orb_setting: [f64;2],
-    pub cube_orb_indices: Vec<[usize;2]>,
+    pub cube_orb_indices: Vec<[usize;3]>,
     //pub output_wfn_in_real_space: usize,
     //pub output_cube: bool,
     //pub output_molden: bool,
@@ -877,11 +877,11 @@ impl InputKeywords {
                 tmp_input.cube_orb_indices = match tmp_ctrl.get("cube_orb_indices").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::Array(tmp_op) => {
                         //let mut tmp_array = [0.0;2];
-                        let mut tmp_indices = vec![[0;2];tmp_op.len()];
+                        let mut tmp_indices = vec![[0;3];tmp_op.len()];
                         tmp_indices.iter_mut().zip(tmp_op.iter()).for_each(|(to, from)| {
                             let tmp_to = match from {
                                 serde_json::Value::Array(tmp_opp) => {
-                                    let mut tmp_array = [0_usize;2];
+                                    let mut tmp_array = [0_usize;3];
                                     tmp_array.iter_mut().zip(tmp_opp[0..2].iter()).for_each(|(to, from)| {
                                         match from {
                                             serde_json::Value::String(tmp_str) => {*to = tmp_str.parse().unwrap_or(0)},

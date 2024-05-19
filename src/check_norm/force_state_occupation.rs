@@ -39,11 +39,15 @@ impl ForceStateOccupation {
         self.prev_spin
     }
 
+    pub fn get_check_window(&self) -> [usize;2] {
+        [self.force_check_min,self.force_check_max]
+    }
+
     pub fn formated_output(&self) -> String {
         let mut output = String::new();
         output = format!(" Prev. State: {}; Prev. Spin: {}; Force Occ. {:16.8}\n", self.prev_state, self.prev_spin, self.force_occ);
         output = format!("{} State Window: ({}, {})\n", output, self.force_check_min, self.force_check_max);
-        output = format!("{} Curr. State: {} with OVLP of {:16.8}\n", output, self.curr_state, self.ovlp);
+        output = format!("{} Curr. State: {} with OVLP of {:16.8}", output, self.curr_state, self.ovlp);
 
         output
     }
@@ -109,11 +113,11 @@ pub fn adapt_occupation_with_force_projection(
                         if ! force_curr.iter().fold(false, |check, j| check || i==*j) {
                             let tmp_xa = *x + net_force_elec;
                             let tmp_xb = *x;
-                            *x = if tmp_xa > 0.0 {
+                            *x = if tmp_xa >= 0.0 {
                                 net_force_elec = 0.0;
                                 tmp_xa
                             } else {
-                                net_force_elec -= tmp_xb;
+                                net_force_elec += tmp_xb;
                                 0.0
                             }
                         }
@@ -166,11 +170,11 @@ pub fn adapt_occupation_with_force_projection(
                             if ! force_curr.iter().fold(false, |check, j| check || i==*j) {
                                 let tmp_xa = *x + net_force_elec;
                                 let tmp_xb = *x;
-                                *x = if tmp_xa > 0.0 {
+                                *x = if tmp_xa >= 0.0 {
                                     net_force_elec = 0.0;
                                     tmp_xa
                                 } else {
-                                    net_force_elec -= tmp_xb;
+                                    net_force_elec += tmp_xb;
                                     0.0
                                 }
                             }
