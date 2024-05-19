@@ -3982,7 +3982,7 @@ pub fn generate_occupation_outside(scf_data: &SCF) -> ([Vec<f64>;2], [usize;2], 
         &scf_data.ovlp, 
         &scf_data.ref_eigenvectors);
         if scf_data.mol.ctrl.print_level>=2 {
-            let mut window = [0_usize;2];
+            let mut window = [occ[0].len()-1,0];
             force_occ.iter().map(|x| x.get_check_window())
                 .for_each(|[x,y]| {
                     if x< window[0] {window[0] = x};
@@ -4001,7 +4001,7 @@ pub fn generate_occupation_outside(scf_data: &SCF) -> ([Vec<f64>;2], [usize;2], 
                 println!("Occupation in Beta Channel: ({}-{}):", window[0], window[1]);
                 let mut output = String::new();
                 &occ[0][window[0]..window[1]].iter().enumerate().for_each(|(li,x)| {
-                    output = format!("{} ({:4}, {:6.3}", output, li+window[0], x);
+                    output = format!("{} ({:4}, {:6.3})", output, li+window[0], x);
                     if (li+1)%5 == 0 {
                         output = format!("{}\n", output);
                     }
