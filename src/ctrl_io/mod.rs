@@ -882,7 +882,7 @@ impl InputKeywords {
                             let tmp_to = match from {
                                 serde_json::Value::Array(tmp_opp) => {
                                     let mut tmp_array = [0_usize;3];
-                                    tmp_array.iter_mut().zip(tmp_opp[0..2].iter()).for_each(|(to, from)| {
+                                    tmp_array.iter_mut().zip(tmp_opp[0..3].iter()).for_each(|(to, from)| {
                                         match from {
                                             serde_json::Value::String(tmp_str) => {*to = tmp_str.parse().unwrap_or(0)},
                                             serde_json::Value::Number(tmp_num) => {*to = tmp_num.as_u64().unwrap_or(0) as usize},
