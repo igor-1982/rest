@@ -20,7 +20,7 @@ use toml;
 
 mod pyrest_ctrl_io;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone,Copy,Debug, Deserialize, Serialize)]
 pub enum JobType {
     SinglePoint,
     GeomOpt,
@@ -38,7 +38,7 @@ pub enum JobType {
 ///  - `even_tempered-basis`: `Bool`. True: turn on ETB to generate the auxiliary basis set
 ///  - `etb_start_atom_number`: `Usize`. Use ETB, for the element with atomic index larger than this value  
 ///  - `etb_beta`: `f64`. Relevant to the ETB basis set size. Smaller value indicates larger ETB basis set. NOTE: etb_beta should be larger than 1.0
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,Serialize, Deserialize)]
 #[pyclass]
 pub struct InputKeywords {
     pub job_type: JobType,
@@ -187,7 +187,8 @@ pub struct InputKeywords {
     // batch size for each thread
     pub batch_size: usize,
     pub nforce_displacement: f64,
-    pub force_state_occupation: Vec<ForceStateOccupation>
+    pub force_state_occupation: Vec<ForceStateOccupation>,
+    pub auxiliary_reference_states: Vec<(String,usize)>,
 
 }
 
@@ -268,13 +269,13 @@ impl InputKeywords {
             // True:  using only density matrix in the evaluation
             // False: use coefficients as well with higher efficiency
             use_dm_only: false,
-            use_ri_vj: false,
+            use_ri_vj: true,
             // Keywords for the fciqmc dump
             fciqmc_dump: false,
             // Kyewords for post scf
             outputs: vec![],
             cube_orb_setting: [3.0,80.0],
-            cube_orb_indices: vec![],
+            cube_orb_indices: Vec::new(),
             //output_wfn_in_real_space: 0,
             //output_cube: false,
             //output_molden: false,
@@ -287,8 +288,13 @@ impl InputKeywords {
             deep_pot: false,
             occupation_type: OCCType::INTEGER,
             frac_tolerant: 1.0e-3,
-            force_state_occupation: vec![],
+            auxiliary_reference_states: Vec::new(),
+            force_state_occupation: Vec::new(),
         }
+    }
+
+    pub fn formated_output_in_toml(&self) -> String {
+        toml::to_string(self).unwrap()
     }
 
 
@@ -792,9 +798,9 @@ impl InputKeywords {
                     other => false,
                 };
                 tmp_input.use_ri_vj = match tmp_ctrl.get("use_ri_vj").unwrap_or(&serde_json::Value::Null) {
-                    serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
+                    serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(true),
                     serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
-                    other => false,
+                    other => true,
                 };
                 // ================================================
                 //  Keywords associated with the elec occupation 
@@ -827,12 +833,26 @@ impl InputKeywords {
                         tmp_op.iter().for_each(|x| {
                             let tmp_obj = match x {
                                 serde_json::Value::Array(tmp_value) => {
-                                    let prev_state: usize = tmp_value[0].as_u64().unwrap_or(0) as usize;
-                                    let prev_spin: usize = tmp_value[1].as_u64().unwrap_or(0) as usize;
-                                    let force_occ: f64 = tmp_value[2].as_f64().unwrap_or(0.0);
-                                    let force_check_min: usize = tmp_value[3].as_u64().unwrap_or(0) as usize;
-                                    let force_check_max: usize = tmp_value[4].as_u64().unwrap_or(0) as usize;
-                                    Some(ForceStateOccupation::init(prev_state, prev_spin, force_occ, force_check_min, force_check_max))
+                                        // by default, the reference state is the previous SCF converged one
+                                        if tmp_value.len() == 5 {
+                                        let prev_state: usize = tmp_value[0].as_u64().unwrap_or(0) as usize;
+                                        let prev_spin: usize = tmp_value[1].as_u64().unwrap_or(0) as usize;
+                                        let force_occ: f64 = tmp_value[2].as_f64().unwrap_or(0.0);
+                                        let force_check_min: usize = tmp_value[3].as_u64().unwrap_or(0) as usize;
+                                        let force_check_max: usize = tmp_value[4].as_u64().unwrap_or(0) as usize;
+                                        Some(ForceStateOccupation::init(tmp_input.chkfile.clone(), prev_state, prev_spin, force_occ, force_check_min, force_check_max))
+                                    } else if tmp_value.len() == 6 {
+                                        let ref_index: String = tmp_value[0].as_str().unwrap_or("none").to_string();
+                                        let prev_state: usize = tmp_value[1].as_u64().unwrap_or(0) as usize;
+                                        let prev_spin: usize = tmp_value[2].as_u64().unwrap_or(0) as usize;
+                                        let force_occ: f64 = tmp_value[3].as_f64().unwrap_or(0.0);
+                                        let force_check_min: usize = tmp_value[4].as_u64().unwrap_or(0) as usize;
+                                        let force_check_max: usize = tmp_value[5].as_u64().unwrap_or(0) as usize;
+                                        Some(ForceStateOccupation::init(ref_index, prev_state, prev_spin, force_occ, force_check_min, force_check_max))
+                                    } else {
+                                        panic!("ERROR:: incorrect force_state_occupation setting: {:?}", &tmp_op);
+                                        None
+                                    }
                                 },
                                 other => None
                             };
@@ -843,6 +863,26 @@ impl InputKeywords {
                         tmp_vec
                     },
                     other => {vec![]},
+                };
+                //
+                tmp_input.auxiliary_reference_states = match tmp_ctrl.get("auxiliary_reference_states").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_chk) => vec![(String::from("none"),0)],
+                    serde_json::Value::Array(tmp_op) => {
+                        let mut tmp_files = vec![];
+                        tmp_op.iter().for_each(|x| {
+                            match x {
+                                serde_json::Value::String(tmp_str) => {tmp_files.push((tmp_str.clone(),0))},
+                                serde_json::Value::Array(tmp_value) => {
+                                    let aux_file_name = tmp_value[0].as_str().unwrap().to_string();
+                                    let global_start = tmp_value[1].as_u64().unwrap() as usize;
+                                    tmp_files.push((aux_file_name,global_start));
+                                },
+                                _ => {}
+                            }
+                        });
+                        tmp_files
+                    },
+                    other => Vec::new(),
                 };
                 // ================================================
                 //  Keywords associated with the post-SCF analyais
@@ -1076,4 +1116,13 @@ impl InputKeywords {
 
         InputKeywords::parse_ctl_from_json(&tmp_keys)
     }
+}
+
+
+#[test]
+fn iter_inputkeywords()  {
+    let dd = InputKeywords::init_ctrl();
+    let ff = toml::to_string(&dd).unwrap();
+    println!("{}", ff);
+
 }

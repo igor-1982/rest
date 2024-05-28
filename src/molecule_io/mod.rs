@@ -1162,7 +1162,7 @@ impl Molecule {
 
         //let mut cint_data = self.initialize_cint(false);
         let nbas_shell = self.cint_bas.len();
-        cint_data.cint2e_optimizer_rust();
+        //cint_data.cint2e_optimizer_rust();
         for j in 0..nbas_shell {
             let bas_start_j = self.cint_fdqc[j][0];
             let bas_len_j = self.cint_fdqc[j][1];

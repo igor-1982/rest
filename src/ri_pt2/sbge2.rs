@@ -26,7 +26,8 @@ pub fn close_shell_sbge2_detailed_rayon(scf_data: &crate::scf_io::SCF) -> anyhow
     let lumo = scf_data.lumo.get(0).unwrap().clone();
     let start_mo: usize = scf_data.mol.start_mo;
     //let num_occu = homo + 1;
-    let num_occu = lumo;
+    //let num_occu = lumo;
+    let num_occu = if scf_data.mol.num_elec[0] <= 1.0e-6 {0} else {homo + 1};
 
     let mut e_mp2_ss = 0.0_f64;
     let mut e_mp2_os = 0.0_f64;
@@ -151,7 +152,8 @@ pub fn close_shell_sbge2_detailed_rayon(scf_data: &crate::scf_io::SCF) -> anyhow
         //    };
         //}
         //let num_occ = scf_data.homo[0]+1;
-        let num_occ = scf_data.lumo[0];
+        //let num_occ = scf_data.lumo[0];
+        let num_occ = if scf_data.mol.num_elec[0] <= 1.0e-6 {0} else {scf_data.homo[0] + 1};
         if scf_data.mol.ctrl.print_level>0 {
             println!("For (alpha, alpha)");
             println!("Print the correlation energies for each electron-pair:");
@@ -346,9 +348,11 @@ pub fn open_shell_sbge2_detailed_rayon(scf_data: &crate::scf_io::SCF) -> anyhow:
     let mut e_mp2_os = 0.0_f64;
     let mut e_bge2_ss = 0.0_f64;
     let mut e_bge2_os = 0.0_f64;
+    let num_occu_alpha = if scf_data.mol.num_elec[1] <= 1.0e-6 {0} else {scf_data.homo[0] + 1};
+    let num_occu_beta = if scf_data.mol.num_elec[2] <= 1.0e-6 {0} else {scf_data.homo[1] + 1};
 
     //let num_occu_max = scf_data.homo[0].max(scf_data.homo[1])+1;
-    let num_occu_max = scf_data.lumo[0].max(scf_data.lumo[1]);
+    let num_occu_max = num_occu_alpha.max(num_occu_beta);
     let mut eij_00 = MatrixFull::new([num_occu_max,num_occu_max], (0.0_f64,0.0_f64));
     let mut eij_01 = MatrixFull::new([num_occu_max,num_occu_max], (0.0_f64,0.0_f64));
     let mut eij_11 = MatrixFull::new([num_occu_max,num_occu_max], (0.0_f64,0.0_f64));

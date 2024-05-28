@@ -32,8 +32,9 @@ pub fn evaluate_spin_response_rayon(scf_data: &SCF, freq: f64) -> anyhow::Result
             let homo = scf_data.homo.get(i_spin).unwrap().clone();
             let lumo = scf_data.lumo.get(i_spin).unwrap().clone();
             //let num_occu = homo + 1;
-            let num_occu = lumo;
+            //let num_occu = lumo;
             //let num_occu = scf_data.mol.num_elec.get(i_spin + 1).unwrap().clone() as usize;
+            let num_occu = if scf_data.mol.num_elec[i_spin+1] <= 1.0e-6 {0} else {homo + 1};
 
             let (ri3mo, vir_range, occ_range) = ri3mo_vec.get(i_spin).unwrap();
             
@@ -56,17 +57,27 @@ pub fn evaluate_spin_response_rayon(scf_data: &SCF, freq: f64) -> anyhow::Result
                         let k_state = k_state_loc + lumo;
                         let k_state_eigen = eigenvalues.get(k_state).unwrap();
                         let k_state_occ = occ_numbers.get(k_state).unwrap();
-                         let zeta = 2.0f64*(j_state_eigen-k_state_eigen) /
-                             ((j_state_eigen-k_state_eigen).powf(2.0) + freq*freq)*
-                             (j_state_occ*frac_spin_occ)*(1.0f64-k_state_occ*frac_spin_occ);
 
-                         let k_loc_state = k_state - vir_range.start;
-                         //timerecords.count_start("submatrix");
-                         let from_iter = ri3mo.get_slices(0..num_auxbas, k_loc_state..k_loc_state+1, j_loc_state..j_loc_state+1);
-                         let to_iter = tmp_matrix_loc.iter_submatrix_mut(0..num_auxbas,k_loc_state..k_loc_state+1);
-                         to_iter.zip(from_iter).for_each(|(to, from)| {
-                             *to = from * zeta
-                         });
+                        let mut energy_gap = j_state_eigen - k_state_eigen;
+                        if energy_gap < 1.0e-6 && energy_gap > 0.0 {
+                            energy_gap += 1.0e-6
+                        } else if energy_gap >-1.0e-6 && energy_gap < 0.0 {
+                            energy_gap += -1.0e-6
+                        };
+                        //=======================================================================
+                        // fractional occupation scheme suggested by Weitao Yang, which was 
+                        // derived from the ensemble of Green function
+                        //=======================================================================
+                        let zeta = 2.0f64*energy_gap / (energy_gap.powf(2.0) + freq*freq)*
+                            (j_state_occ*frac_spin_occ)*(1.0f64-k_state_occ*frac_spin_occ);
+
+                        let k_loc_state = k_state - vir_range.start;
+                        //timerecords.count_start("submatrix");
+                        let from_iter = ri3mo.get_slices(0..num_auxbas, k_loc_state..k_loc_state+1, j_loc_state..j_loc_state+1);
+                        let to_iter = tmp_matrix_loc.iter_submatrix_mut(0..num_auxbas,k_loc_state..k_loc_state+1);
+                        to_iter.zip(from_iter).for_each(|(to, from)| {
+                            *to = from * zeta
+                        });
 
                     });
                     s.send(tmp_matrix_loc).unwrap();
@@ -114,54 +125,51 @@ pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Resul
             let homo = scf_data.homo.get(i_spin).unwrap().clone();
             let lumo = scf_data.lumo.get(i_spin).unwrap().clone();
             //let num_occu = homo + 1;
-            let num_occu = lumo;
+            //let num_occu = lumo;
             //let num_occu = scf_data.mol.num_elec.get(i_spin + 1).unwrap().clone() as usize;
+            let num_occu = if scf_data.mol.num_elec[i_spin+1] <= 1.0e-6 {0} else {homo + 1};
 
             let (ri3mo, vir_range, occ_range) = ri3mo_vec.get(i_spin).unwrap();
 
-            //if i_spin == 1 {println!("debug polar_freq_beta_0: {:?}", &polar_freq)};
-
-            
-            //let mut rimo = riao.ao2mo(eigenvector).unwrap();
-            //timerecords.count_start("all");
-            //println!("start_mo: {}, num_occu: {}, num_state: {}, num_auxbas: {}", start_mo, num_occu, num_state, num_auxbas);
-            //println!("occupation: {:?}", &scf_data.occupation);
-            //println!("homo: {:?}", &scf_data.homo);
             for j_state in start_mo..num_occu {
                 let j_state_eigen = eigenvalues[j_state];
                 let j_state_occ = occ_numbers[j_state];
                 let j_loc_state = j_state - occ_range.start;
-                let rimo_j = ri3mo.get_reducing_matrix(j_loc_state).unwrap();
-                let mut tmp_matrix = MatrixFull::new([num_auxbas,vir_range.len()],0.0);
-                for k_state in lumo..num_state {
+                if j_state_occ >= 1.0e-6 {
+                    let rimo_j = ri3mo.get_reducing_matrix(j_loc_state).unwrap();
+                    let mut tmp_matrix = MatrixFull::new([num_auxbas,vir_range.len()],0.0);
+                    for k_state in lumo..num_state {
+                        let k_state_eigen = eigenvalues.get(k_state).unwrap();
+                        let k_state_occ = occ_numbers.get(k_state).unwrap();
+                        if (1.0-k_state_occ*frac_spin_occ).abs() >=1.0e-6 {
+                            //let zeta = num_spin*(j_state_eigen-k_state_eigen) /
+                            //    ((j_state_eigen-k_state_eigen).powf(2.0) + freq*freq)*
+                            //    (j_state_occ-k_state_occ);
+                            let mut energy_gap = j_state_eigen - k_state_eigen;
+                            if energy_gap < 1.0e-6 && energy_gap > 0.0 {
+                                energy_gap += 1.0e-6
+                            } else if energy_gap >-1.0e-6 && energy_gap < 0.0 {
+                                energy_gap += -1.0e-6
+                            };
+                            //=======================================================================
+                            // fractional occupation scheme suggested by Weitao Yang, which was 
+                            // derived from the ensemble of Green function
+                            //=======================================================================
+                            let zeta = 2.0f64*energy_gap/ (energy_gap.powf(2.0) + freq*freq)*
+                                (j_state_occ*frac_spin_occ)*(1.0f64-k_state_occ*frac_spin_occ);
 
-
-                    let k_state_eigen = eigenvalues.get(k_state).unwrap();
-                    let k_state_occ = occ_numbers.get(k_state).unwrap();
-                    //let zeta = num_spin*(j_state_eigen-k_state_eigen) /
-                    //    ((j_state_eigen-k_state_eigen).powf(2.0) + freq*freq)*
-                    //    (j_state_occ-k_state_occ);
-                    let zeta = 2.0f64*(j_state_eigen-k_state_eigen) /
-                        ((j_state_eigen-k_state_eigen).powf(2.0) + freq*freq)*
-                        (j_state_occ*frac_spin_occ)*(1.0f64-k_state_occ*frac_spin_occ);
-
-                    let k_loc_state = k_state - vir_range.start;
-                    //timerecords.count_start("submatrix");
-                    let from_iter = ri3mo.get_slices(0..num_auxbas, k_loc_state..k_loc_state+1, j_loc_state..j_loc_state+1);
-                    let to_iter = tmp_matrix.iter_submatrix_mut(0..num_auxbas,k_loc_state..k_loc_state+1);
-                    to_iter.zip(from_iter).for_each(|(to, from)| {
-                        *to = from * zeta
-                    });
-                    //timerecords.count("submatrix");
+                            let k_loc_state = k_state - vir_range.start;
+                            //timerecords.count_start("submatrix");
+                            let from_iter = ri3mo.get_slices(0..num_auxbas, k_loc_state..k_loc_state+1, j_loc_state..j_loc_state+1);
+                            let to_iter = tmp_matrix.iter_submatrix_mut(0..num_auxbas,k_loc_state..k_loc_state+1);
+                            to_iter.zip(from_iter).for_each(|(to, from)| {
+                                *to = from * zeta
+                            });
+                        }
+                        //timerecords.count("submatrix");
+                    }
+                    _dgemm_full(&tmp_matrix, 'N', &rimo_j, 'T', polar_freq, 1.0, 1.0);
                 }
-                //timerecords.count_start("dgemm");
-                //_dgemm(
-                //    &tmp_matrix, (0..num_auxbas, 0..vir_range.len()), 'N',
-                //    &rimo_j, (0..num_auxbas, 0..vir_range.len()), 'T',
-                //    polar_freq, (0..num_auxbas, 0..num_auxbas),
-                //    1.0, 1.0
-                //);
-                _dgemm_full(&tmp_matrix, 'N', &rimo_j, 'T', polar_freq, 1.0, 1.0);
                 //timerecords.count("dgemm");
                 //timerecords.count("all");
             };

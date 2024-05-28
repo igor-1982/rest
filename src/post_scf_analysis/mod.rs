@@ -100,9 +100,37 @@ pub fn save_chkfile(scf_data: &SCF) {
         dataset.write(&ndarray::arr0(scf_data.scf_energy));
     } else {
         let builder = scf.new_dataset_builder();
-        //builder.with_data_as(&scf_data.scf_energy,f64).create("e_tot");
         builder.with_data(&ndarray::arr0(scf_data.scf_energy)
         ).create("e_tot").unwrap();
+    }
+
+    let is_exist = scf.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("num_basis")});
+    if is_exist {
+        let dataset = scf.dataset("num_basis").unwrap();
+        dataset.write(&ndarray::arr0(scf_data.mol.num_basis));
+    } else {
+        let builder = scf.new_dataset_builder();
+        builder.with_data(&ndarray::arr0(scf_data.mol.num_basis)
+        ).create("num_basis").unwrap();
+    }
+    let is_exist = scf.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("spin_channel")});
+    if is_exist {
+        let dataset = scf.dataset("spin_channel").unwrap();
+        dataset.write(&ndarray::arr0(scf_data.mol.spin_channel));
+    } else {
+        let builder = scf.new_dataset_builder();
+        builder.with_data(&ndarray::arr0(scf_data.mol.spin_channel)
+        ).create("spin_channel").unwrap();
+    }
+
+    let is_exist = scf.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("num_state")});
+    if is_exist {
+        let dataset = scf.dataset("num_state").unwrap();
+        dataset.write(&ndarray::arr0(scf_data.mol.num_state));
+    } else {
+        let builder = scf.new_dataset_builder();
+        builder.with_data(&ndarray::arr0(scf_data.mol.num_state)
+        ).create("num_state").unwrap();
     }
 
     let is_exist = scf.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("mo_coeff")});
@@ -129,6 +157,19 @@ pub fn save_chkfile(scf_data: &SCF) {
     } else {
         let builder = scf.new_dataset_builder();
         builder.with_data(&ndarray::arr1(&eigenvalues)).create("mo_energy");
+    }
+
+    let is_exist = scf.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("mo_occupation")});
+    let mut occ: Vec<f64> = vec![];
+    for i_spin in 0..scf_data.mol.spin_channel {
+        occ.extend(scf_data.occupation[i_spin].iter());
+    }
+    if is_exist {
+        let dataset = scf.dataset("mo_occupation").unwrap();
+        dataset.write(&ndarray::arr1(&occ));
+    } else {
+        let builder = scf.new_dataset_builder();
+        builder.with_data(&ndarray::arr1(&occ)).create("mo_occupation");
     }
 
     file.close();

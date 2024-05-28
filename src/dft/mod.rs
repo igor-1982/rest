@@ -26,12 +26,13 @@ use std::option::IntoIter;
 use std::os::raw::c_int;
 use std::path::Iter;
 use std::sync::mpsc::channel;
+use serde::{Deserialize, Serialize};
 
 //extern crate rest_libxc  as libxc;
 use libxc::{XcFuncType, LibXCFamily};
 //use std::intrinsics::expf64;
 
-#[derive(Clone,Debug, PartialEq, Eq)]
+#[derive(Clone,Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DFAFamily {
     LDA,
     GGA,
@@ -2155,7 +2156,10 @@ impl Grids {
                 //    .iter().filter(|occ| **occ>0.0).map(|occ| occ.sqrt()).collect_vec();
                 //==================================
                 // now locate the highest obital that has electron with occupation largger than 1.0e-4
-                let homo_s = occ[i_spin].iter().enumerate().fold(0_usize,|x, (ob, occ)| {if *occ>1.0e-4 {ob} else {x}});
+                //let homo_s = occ[i_spin].iter().enumerate().fold(0_usize,|x, (ob, occ)| {if *occ>1.0e-4 {ob} else {x}});
+                let homo_s  = occ[i_spin].iter().enumerate()
+                    .filter(|(i,occ)| **occ >=1.0e-6)
+                    .map(|(i,occ)| i).max().unwrap();
                 let mut occ_s = occ.get(i_spin).unwrap()[0..homo_s+1].iter().map(|occ| occ.sqrt()).collect::<Vec<f64>>();
                 //==================================
                 let num_occ = occ_s.len();

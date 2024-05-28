@@ -118,7 +118,7 @@ pub struct SCF {
     pub scf_energy: f64,
     pub grids: Option<Grids>,
     pub energies: HashMap<String,Vec<f64>>,
-    pub ref_eigenvectors: [MatrixFull<f64>;2],
+    pub ref_eigenvectors: HashMap<String, ([MatrixFull<f64>;2], [usize;4])>,
 }
 
 #[derive(Clone,Copy)]
@@ -147,8 +147,7 @@ impl SCF {
                               MatrixUpper::new(1,0.0)],
             eigenvectors: [MatrixFull::new([1,1],0.0),
                            MatrixFull::new([1,1],0.0)],
-            ref_eigenvectors: [MatrixFull::new([1,1],0.0),
-                           MatrixFull::new([1,1],0.0)],
+            ref_eigenvectors: HashMap::new(),
             //density_matrix: [MatrixFull::new([1,1],0.0),
             //                     MatrixFull::new([1,1],0.0)],
             density_matrix: vec![MatrixFull::empty(),

@@ -185,8 +185,9 @@ fn close_shell_pt2(scf_data: &SCF) -> anyhow::Result<[f64;3]> {
         let num_state = eigenvector.size.get(1).unwrap().clone();
         let start_mo: usize = scf_data.mol.start_mo;
         //let num_occu = homo + 1;
-        let num_occu = lumo;
+        //let num_occu = lumo;
         //let num_occu = scf_data.mol.num_elec.get(i_spin + 1).unwrap().clone() as usize;
+        let num_occu = if scf_data.mol.num_elec[0] <= 1.0e-6 {0} else {homo + 1};
         //let num_virt = num_state - num_occu;
         //println!("{:?},{:?},{:?},{:?}",homo,lumo,num_state, num_basis);
         //for i in 0..homo {
@@ -275,8 +276,9 @@ fn open_shell_pt2(scf_data: &SCF) -> anyhow::Result<[f64;3]> {
                 let homo = scf_data.homo.get(i_spin).unwrap().clone();
                 let lumo = scf_data.lumo.get(i_spin).unwrap().clone();
                 //let num_occu = homo + 1;
-                let num_occu = lumo;
+                //let num_occu = lumo;
                 //let num_occu = scf_data.mol.num_elec.get(i_spin + 1).unwrap().clone() as usize;
+                let num_occu = if scf_data.mol.num_elec[i_spin+1] <= 1.0e-6 {0} else {homo + 1};
 
                 let mut rimo = riao.ao2mo(eigenvector).unwrap();
 
@@ -319,7 +321,8 @@ fn open_shell_pt2(scf_data: &SCF) -> anyhow::Result<[f64;3]> {
                 let homo_1 = scf_data.homo.get(i_spin_1).unwrap().clone();
                 let lumo_1 = scf_data.lumo.get(i_spin_1).unwrap().clone();
                 //let num_occu_1 = homo_1 + 1;
-                let num_occu_1 = lumo_1;
+                //let num_occu_1 = lumo_1;
+                let num_occu_1 = if scf_data.mol.num_elec[i_spin_1+1] <= 1.0e-6 {0} else {homo_1 + 1};
                 let mut rimo_1 = riao.ao2mo_v01(eigenvector_1).unwrap();
 
                 let eigenvector_2 = scf_data.eigenvectors.get(i_spin_2).unwrap();
@@ -327,7 +330,8 @@ fn open_shell_pt2(scf_data: &SCF) -> anyhow::Result<[f64;3]> {
                 let homo_2 = scf_data.homo.get(i_spin_2).unwrap().clone();
                 let lumo_2 = scf_data.lumo.get(i_spin_2).unwrap().clone();
                 //let num_occu_2 = homo_2 + 1;
-                let num_occu_2 = lumo_2 + 1;
+                //let num_occu_2 = lumo_2 + 1;
+                let num_occu_2 = if scf_data.mol.num_elec[i_spin_2+1] <= 1.0e-6 {0} else {homo_2 + 1};
                 let mut rimo_2 = riao.ao2mo_v01(eigenvector_2).unwrap();
                 for i_state in start_mo..num_occu_1 {
                     let i_state_eigen = eigenvalues_1.get(i_state).unwrap();
@@ -394,7 +398,8 @@ pub fn close_shell_pt2_rayon(scf_data: &SCF) -> anyhow::Result<[f64;3]> {
         let num_state = eigenvector.size.get(1).unwrap().clone();
         let start_mo: usize = scf_data.mol.start_mo;
         //let num_occu = homo + 1;
-        let num_occu = lumo;
+        //let num_occu = lumo;
+        let num_occu = if scf_data.mol.num_elec[0] <= 1.0e-6 {0} else {homo + 1};
         //tmp_record.new_item("dgemm", "prepare four-center integrals from RI-MO");
         //tmp_record.new_item("get2d", "get the ERI values");
         let mut elec_pair: Vec<[usize;2]> = vec![];
@@ -502,7 +507,8 @@ pub fn open_shell_pt2_rayon(scf_data: &SCF) -> anyhow::Result<[f64;3]> {
                 let homo = scf_data.homo.get(i_spin).unwrap().clone();
                 let lumo = scf_data.lumo.get(i_spin).unwrap().clone();
                 //let num_occu = homo + 1;
-                let num_occu = lumo;
+                //let num_occu = lumo;
+                let num_occu = if scf_data.mol.num_elec[i_spin + 1] <= 1.0e-6 {0} else {homo + 1};
 
                 let (rimo, vir_range, occ_range) = &ri3mo_vec[i_spin];
 
@@ -567,7 +573,8 @@ pub fn open_shell_pt2_rayon(scf_data: &SCF) -> anyhow::Result<[f64;3]> {
                 let homo_1 = scf_data.homo.get(i_spin_1).unwrap().clone();
                 let lumo_1 = scf_data.lumo.get(i_spin_1).unwrap().clone();
                 //let num_occu_1 = homo_1 + 1;
-                let num_occu_1 = lumo_1;
+                //let num_occu_1 = lumo_1;
+                let num_occu_1 = if scf_data.mol.num_elec[i_spin_1 + 1] <= 1.0e-6 {0} else {homo_1 + 1};
                 let (rimo_1, vir_range, occ_range) = &ri3mo_vec[i_spin_1];
 
                 let eigenvector_2 = scf_data.eigenvectors.get(i_spin_2).unwrap();
@@ -575,7 +582,8 @@ pub fn open_shell_pt2_rayon(scf_data: &SCF) -> anyhow::Result<[f64;3]> {
                 let homo_2 = scf_data.homo.get(i_spin_2).unwrap().clone();
                 let lumo_2 = scf_data.lumo.get(i_spin_2).unwrap().clone();
                 //let num_occu_2 = homo_2 + 1;
-                let num_occu_2 = lumo_2;
+                //let num_occu_2 = lumo_2;
+                let num_occu_2 = if scf_data.mol.num_elec[i_spin_2 + 1] <= 1.0e-6 {0} else {homo_2 + 1};
                 let (rimo_2, _, _) = &ri3mo_vec[i_spin_2];
 
 
