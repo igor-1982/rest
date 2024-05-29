@@ -580,7 +580,7 @@ pub fn open_shell_sbge2_detailed_rayon(scf_data: &crate::scf_io::SCF) -> anyhow:
                                         let j_loc_virt = j_virt-vir_range.start;
                                         let e_mp2_a = eri_virt.get2d([i_loc_virt,j_loc_virt]).unwrap();
                                         e_mp2_term_os += e_mp2_a * e_mp2_a / double_gap * occ_state;
-                                        denominator[[i_loc_virt,j_loc_virt]] = [double_gap;2];
+                                        denominator[[i_loc_virt,j_loc_virt]] = [double_gap, occ_state];
                                     }
     
                                 }
