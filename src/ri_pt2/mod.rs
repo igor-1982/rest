@@ -128,7 +128,9 @@ pub fn xdh_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
     let hy_coeffi_xdh = if let Some(coeff) = scf_data.mol.xc_data.dfa_hybrid_pos {coeff} else {0.0};
     let hy_coeffi_pt2 = if let Some(coeff) = &scf_data.mol.xc_data.dfa_paramr_adv {coeff.clone()} else {vec![0.0,0.0]};
     let xdh_pt2_energy: f64 = pt2_c[1..3].iter().zip(hy_coeffi_pt2.iter()).map(|(e,c)| e*c).sum();
-    //println!("Exc_scf: ({:?},{:?}),Exc_pos: ({:?},{:?})",xc_energy_scf,hy_coeffi_scf,xc_energy_xdh,hy_coeffi_xdh);
+    if scf_data.mol.ctrl.print_level>2 {
+        println!("Exc_scf: ({:?},{:?}),Exc_pos: ({:?},{:?})",xc_energy_scf,hy_coeffi_scf,xc_energy_xdh,hy_coeffi_xdh);
+    }
     let total_energy = scf_data.scf_energy +
                             x_energy * (hy_coeffi_xdh-hy_coeffi_scf) +
                             xc_energy_xdh-xc_energy_scf +
@@ -227,14 +229,15 @@ fn close_shell_pt2(scf_data: &SCF) -> anyhow::Result<[f64;3]> {
                         let ij_virt_eigen = i_virt_eigen + j_virt_eigen;
 
                         let mut double_gap = ij_virt_eigen - ij_state_eigen;
-                        if double_gap.abs()<=10E-6 {
-                            println!("Warning: too close to degeneracy")
+                        if double_gap.abs()<=1.0E-6 {
+                            println!("Warning: too close to degeneracy");
+                            double_gap = 1.0e-6;
                         };
 
-                        tmp_record.count_start("get2d");
+                        //tmp_record.count_start("get2d");
                         let e_mp2_a = eri_virt.get2d([i_virt,j_virt]).unwrap();
                         let e_mp2_b = eri_virt.get2d([j_virt,i_virt]).unwrap();
-                        tmp_record.count("get2d");
+                        //tmp_record.count("get2d");
                         e_mp2_term_ss += (e_mp2_a - e_mp2_b) * e_mp2_a / double_gap;
                         e_mp2_term_os += e_mp2_a * e_mp2_a / double_gap;
 
@@ -249,7 +252,7 @@ fn close_shell_pt2(scf_data: &SCF) -> anyhow::Result<[f64;3]> {
                 e_mp2_os -= e_mp2_term_os;
             }
         }
-        tmp_record.report_all();
+        //tmp_record.report_all();
         return(Ok([e_mp2_ss+e_mp2_os,e_mp2_os,e_mp2_ss]));
     } else {
         panic!("ri3fn should be initialized for RI-PT2 calculations")
@@ -353,8 +356,9 @@ fn open_shell_pt2(scf_data: &SCF) -> anyhow::Result<[f64;3]> {
                                 let ij_virt_eigen = i_virt_eigen + j_virt_eigen;
 
                                 let mut double_gap = ij_virt_eigen - ij_state_eigen;
-                                if double_gap.abs()<=10E-6 {
-                                    println!("Warning: too close to degeneracy")
+                                if double_gap.abs()<=1.0E-6 {
+                                    println!("Warning: too close to degeneracy");
+                                    double_gap = 1.0e-6;
                                 };
 
                                 let e_mp2_a = eri_virt.get2d([i_virt,j_virt]).unwrap();
@@ -390,6 +394,7 @@ pub fn close_shell_pt2_rayon(scf_data: &SCF) -> anyhow::Result<[f64;3]> {
 
         let eigenvector = scf_data.eigenvectors.get(0).unwrap();
         let eigenvalues = scf_data.eigenvalues.get(0).unwrap();
+        let occupation = scf_data.occupation.get(0).unwrap();
 
         let homo = scf_data.homo.get(0).unwrap().clone();
         let lumo = scf_data.lumo.get(0).unwrap().clone();
@@ -418,42 +423,51 @@ pub fn close_shell_pt2_rayon(scf_data: &SCF) -> anyhow::Result<[f64;3]> {
             let i_state_eigen = eigenvalues.get(i_state).unwrap();
             let j_state_eigen = eigenvalues.get(j_state).unwrap();
             let ij_state_eigen = i_state_eigen + j_state_eigen;
+            let i_state_occ = occupation.get(i_state).unwrap()/2.0;
+            let j_state_occ = occupation.get(j_state).unwrap()/2.0;
 
             // because we generate ri3mo for [lumo..num_state, start_mo..num_occ], 
             // the indices in rimo are shifted
-            let i_loc_state = i_state-occ_range.start;
-            let j_loc_state = j_state-occ_range.start;
-            let ri_i = rimo.get_reducing_matrix(i_loc_state).unwrap();
-            let ri_j = rimo.get_reducing_matrix(j_loc_state).unwrap();
-            let mut eri_virt = MatrixFull::new([vir_range.len(),vir_range.len()],0.0_f64);
-            _dgemm(
-                &ri_i, (0..num_auxbas,0..vir_range.len()), 'T', 
-                &ri_j,(0..num_auxbas,0..vir_range.len()) , 'N', 
-                &mut eri_virt, (0..vir_range.len(),0..vir_range.len()), 
-                1.0,0.0);
 
-            for i_virt in lumo..num_state {
-                let i_virt_eigen = eigenvalues.get(i_virt).unwrap();
-                for j_virt in lumo..num_state {
+            if i_state_occ.abs() > 1.0e-6 && j_state_occ.abs() > 1.0e-6 {
+                let i_loc_state = i_state-occ_range.start;
+                let j_loc_state = j_state-occ_range.start;
+                let ri_i = rimo.get_reducing_matrix(i_loc_state).unwrap();
+                let ri_j = rimo.get_reducing_matrix(j_loc_state).unwrap();
+                let mut eri_virt = MatrixFull::new([vir_range.len(),vir_range.len()],0.0_f64);
+                _dgemm(
+                    &ri_i, (0..num_auxbas,0..vir_range.len()), 'T', 
+                    &ri_j,(0..num_auxbas,0..vir_range.len()) , 'N', 
+                    &mut eri_virt, (0..vir_range.len(),0..vir_range.len()), 
+                    1.0,0.0);
 
-                    let j_virt_eigen = eigenvalues.get(j_virt).unwrap();
-                    let ij_virt_eigen = i_virt_eigen + j_virt_eigen;
+                for i_virt in lumo..num_state {
+                    let i_virt_eigen = eigenvalues.get(i_virt).unwrap();
+                    for j_virt in lumo..num_state {
+                        let i_virt_occ = occupation.get(i_virt).unwrap()/2.0;
+                        let j_virt_occ = occupation.get(j_virt).unwrap()/2.0;
+                        if (1.0-i_virt_occ).abs() > 1.0e-6 && (1.0-j_virt_occ).abs() > 1.0e-6 {
+                            let j_virt_eigen = eigenvalues.get(j_virt).unwrap();
+                            let ij_virt_eigen = i_virt_eigen + j_virt_eigen;
 
-                    let mut double_gap = ij_virt_eigen - ij_state_eigen;
-                    if double_gap.abs()<=10E-6 {
-                        println!("Warning: too close to degeneracy")
-                    };
+                            let mut double_gap = (ij_virt_eigen - ij_state_eigen);
+                            if double_gap.abs()<=1.0E-6 {
+                                println!("Warning: too close to degeneracy");
+                                double_gap = 1.0e-6;
+                            };
+                            double_gap /= (i_state_occ*j_state_occ*(1.0-i_virt_occ)*(1.0-j_virt_occ));
 
-                    // because we generate ri3mo for [lumo..num_state, start_mo..num_occ], 
-                    // the indices in rimo are shifted
-                    let i_loc_virt = i_virt-vir_range.start;
-                    let j_loc_virt = j_virt-vir_range.start;
+                            // because we generate ri3mo for [lumo..num_state, start_mo..num_occ], 
+                            // the indices in rimo are shifted
+                            let i_loc_virt = i_virt-vir_range.start;
+                            let j_loc_virt = j_virt-vir_range.start;
 
-                    let e_mp2_a = eri_virt.get2d([i_loc_virt,j_loc_virt]).unwrap();
-                    let e_mp2_b = eri_virt.get2d([j_loc_virt,i_loc_virt]).unwrap();
-                    e_mp2_term_ss += (e_mp2_a - e_mp2_b) * e_mp2_a / double_gap;
-                    e_mp2_term_os += e_mp2_a * e_mp2_a / double_gap;
-
+                            let e_mp2_a = eri_virt.get2d([i_loc_virt,j_loc_virt]).unwrap();
+                            let e_mp2_b = eri_virt.get2d([j_loc_virt,i_loc_virt]).unwrap();
+                            e_mp2_term_ss += (e_mp2_a - e_mp2_b) * e_mp2_a / double_gap;
+                            e_mp2_term_os += e_mp2_a * e_mp2_a / double_gap;
+                        }
+                    }
                 }
             }
             if i_state != j_state {
@@ -503,6 +517,7 @@ pub fn open_shell_pt2_rayon(scf_data: &SCF) -> anyhow::Result<[f64;3]> {
                 let i_spin = i_spin_1;
                 let eigenvector = scf_data.eigenvectors.get(i_spin).unwrap();
                 let eigenvalues = scf_data.eigenvalues.get(i_spin).unwrap();
+                let occupation = scf_data.occupation.get(i_spin).unwrap();
 
                 let homo = scf_data.homo.get(i_spin).unwrap().clone();
                 let lumo = scf_data.lumo.get(i_spin).unwrap().clone();
@@ -529,37 +544,47 @@ pub fn open_shell_pt2_rayon(scf_data: &SCF) -> anyhow::Result<[f64;3]> {
                     let i_state_eigen = eigenvalues.get(i_state).unwrap();
                     let j_state_eigen = eigenvalues.get(j_state).unwrap();
                     let ij_state_eigen = i_state_eigen + j_state_eigen;
+                    let i_state_occ = occupation.get(i_state).unwrap();
+                    let j_state_occ = occupation.get(j_state).unwrap();
 
-                    // because we generate ri3mo for [lumo..num_state, start_mo..num_occ], 
-                    // the indices in rimo are shifted
-                    let i_loc_state = i_state-occ_range.start;
-                    let j_loc_state = j_state-occ_range.start;
-                    let ri_i = rimo.get_reducing_matrix(i_loc_state).unwrap();
-                    let ri_j = rimo.get_reducing_matrix(j_loc_state).unwrap();
-                    let mut eri_virt = MatrixFull::new([vir_range.len(),vir_range.len()],0.0_f64);
-                    _dgemm(
-                        &ri_i, (0..num_auxbas,0..vir_range.len()), 'T', 
-                        &ri_j,(0..num_auxbas,0..vir_range.len()) , 'N', 
-                        &mut eri_virt, (0..vir_range.len(),0..vir_range.len()), 
-                        1.0,0.0);
-                    for i_virt in lumo..num_state {
-                        let i_virt_eigen = eigenvalues[i_virt];
-                        for j_virt in i_virt+1..num_state {
-                            let j_virt_eigen = eigenvalues[j_virt];
-                            let ij_virt_eigen = i_virt_eigen + j_virt_eigen;
+                    if i_state_occ.abs() > 1.0e-6 && j_state_occ.abs() > 1.0e-6 {
+                        // because we generate ri3mo for [lumo..num_state, start_mo..num_occ], 
+                        // the indices in rimo are shifted
+                        let i_loc_state = i_state-occ_range.start;
+                        let j_loc_state = j_state-occ_range.start;
+                        let ri_i = rimo.get_reducing_matrix(i_loc_state).unwrap();
+                        let ri_j = rimo.get_reducing_matrix(j_loc_state).unwrap();
+                        let mut eri_virt = MatrixFull::new([vir_range.len(),vir_range.len()],0.0_f64);
+                        _dgemm(
+                            &ri_i, (0..num_auxbas,0..vir_range.len()), 'T', 
+                            &ri_j,(0..num_auxbas,0..vir_range.len()) , 'N', 
+                            &mut eri_virt, (0..vir_range.len(),0..vir_range.len()), 
+                            1.0,0.0);
+                        for i_virt in lumo..num_state {
+                            let i_virt_eigen = eigenvalues[i_virt];
+                            for j_virt in i_virt+1..num_state {
+                                let j_virt_eigen = eigenvalues[j_virt];
+                                let ij_virt_eigen = i_virt_eigen + j_virt_eigen;
+                                let i_virt_occ = occupation.get(i_virt).unwrap();
+                                let j_virt_occ = occupation.get(j_virt).unwrap();
 
-                            let mut double_gap = ij_virt_eigen - ij_state_eigen;
-                            if double_gap.abs()<=10E-6 {
-                                println!("Warning: too close to degeneracy")
-                            };
+                                if (1.0-i_virt_occ).abs() > 1.0e-6 && (1.0-j_virt_occ).abs() > 1.0e-6 {
+                                    let mut double_gap = ij_virt_eigen - ij_state_eigen;
+                                    if double_gap.abs()<=1.0E-6 {
+                                        println!("Warning: too close to degeneracy");
+                                        double_gap = 1.0e-6;
+                                    };
+                                    double_gap /= (i_state_occ*j_state_occ*(1.0-i_virt_occ)*(1.0-j_virt_occ));
 
-                            // because we generate ri3mo for [lumo..num_state, start_mo..num_occ], 
-                            // the indices in rimo are shifted
-                            let i_loc_virt = i_virt-vir_range.start;
-                            let j_loc_virt = j_virt-vir_range.start;
-                            let e_mp2_a = eri_virt.get2d([i_loc_virt,j_loc_virt]).unwrap();
-                            let e_mp2_b = eri_virt.get2d([j_loc_virt,i_loc_virt]).unwrap();
-                            e_mp2_term_ss += (e_mp2_a - e_mp2_b).powf(2.0) / double_gap;
+                                    // because we generate ri3mo for [lumo..num_state, start_mo..num_occ], 
+                                    // the indices in rimo are shifted
+                                    let i_loc_virt = i_virt-vir_range.start;
+                                    let j_loc_virt = j_virt-vir_range.start;
+                                    let e_mp2_a = eri_virt.get2d([i_loc_virt,j_loc_virt]).unwrap();
+                                    let e_mp2_b = eri_virt.get2d([j_loc_virt,i_loc_virt]).unwrap();
+                                    e_mp2_term_ss += (e_mp2_a - e_mp2_b).powf(2.0) / double_gap;
+                                }
+                            }
                         }
                     }
                     s.send(e_mp2_term_ss).unwrap()
@@ -570,6 +595,7 @@ pub fn open_shell_pt2_rayon(scf_data: &SCF) -> anyhow::Result<[f64;3]> {
             } else {
                 let eigenvector_1 = scf_data.eigenvectors.get(i_spin_1).unwrap();
                 let eigenvalues_1 = scf_data.eigenvalues.get(i_spin_1).unwrap();
+                let occupation_1 = scf_data.occupation.get(i_spin_1).unwrap();
                 let homo_1 = scf_data.homo.get(i_spin_1).unwrap().clone();
                 let lumo_1 = scf_data.lumo.get(i_spin_1).unwrap().clone();
                 //let num_occu_1 = homo_1 + 1;
@@ -579,6 +605,7 @@ pub fn open_shell_pt2_rayon(scf_data: &SCF) -> anyhow::Result<[f64;3]> {
 
                 let eigenvector_2 = scf_data.eigenvectors.get(i_spin_2).unwrap();
                 let eigenvalues_2 = scf_data.eigenvalues.get(i_spin_2).unwrap();
+                let occupation_2 = scf_data.occupation.get(i_spin_2).unwrap();
                 let homo_2 = scf_data.homo.get(i_spin_2).unwrap().clone();
                 let lumo_2 = scf_data.lumo.get(i_spin_2).unwrap().clone();
                 //let num_occu_2 = homo_2 + 1;
@@ -602,36 +629,45 @@ pub fn open_shell_pt2_rayon(scf_data: &SCF) -> anyhow::Result<[f64;3]> {
                     let i_state_eigen = eigenvalues_1.get(i_state).unwrap();
                     let j_state_eigen = eigenvalues_2.get(j_state).unwrap();
                     let ij_state_eigen = i_state_eigen + j_state_eigen;
-                    // because we generate ri3mo for [lumo..num_state, start_mo..num_occ], 
-                    // the indices in rimo are shifted
-                    let i_loc_state = i_state-occ_range.start;
-                    let j_loc_state = j_state-occ_range.start;
-                    let ri_i = rimo_1.get_reducing_matrix(i_loc_state).unwrap();
-                    let ri_j = rimo_2.get_reducing_matrix(j_loc_state).unwrap();
-                    let mut eri_virt = MatrixFull::new([vir_range.len(),vir_range.len()],0.0_f64);
-                    _dgemm(
-                        &ri_i, (0..num_auxbas,0..vir_range.len()), 'T', 
-                        &ri_j,(0..num_auxbas,0..vir_range.len()) , 'N', 
-                        &mut eri_virt, (0..vir_range.len(),0..vir_range.len()), 
-                        1.0,0.0);
-                    for i_virt in lumo_1..num_state {
-                        let i_virt_eigen = eigenvalues_1.get(i_virt).unwrap();
-                        for j_virt in lumo_2..num_state {
-                            let j_virt_eigen = eigenvalues_2.get(j_virt).unwrap();
-                            let ij_virt_eigen = i_virt_eigen + j_virt_eigen;
+                    let i_state_occ = occupation_1.get(i_state).unwrap();
+                    let j_state_occ = occupation_2.get(j_state).unwrap();
 
-                            let mut double_gap = ij_virt_eigen - ij_state_eigen;
-                            if double_gap.abs()<=10E-6 {
-                                println!("Warning: too close to degeneracy")
-                            };
+                    if i_state_occ.abs() > 1.0e-6 && j_state_occ.abs() > 1.0e-6 {
+                        // because we generate ri3mo for [lumo..num_state, start_mo..num_occ], 
+                        // the indices in rimo are shifted
+                        let i_loc_state = i_state-occ_range.start;
+                        let j_loc_state = j_state-occ_range.start;
+                        let ri_i = rimo_1.get_reducing_matrix(i_loc_state).unwrap();
+                        let ri_j = rimo_2.get_reducing_matrix(j_loc_state).unwrap();
+                        let mut eri_virt = MatrixFull::new([vir_range.len(),vir_range.len()],0.0_f64);
+                        _dgemm(
+                            &ri_i, (0..num_auxbas,0..vir_range.len()), 'T', 
+                            &ri_j,(0..num_auxbas,0..vir_range.len()) , 'N', 
+                            &mut eri_virt, (0..vir_range.len(),0..vir_range.len()), 
+                            1.0,0.0);
+                        for i_virt in lumo_1..num_state {
+                            let i_virt_eigen = eigenvalues_1.get(i_virt).unwrap();
+                            let i_virt_occ = occupation_1.get(i_virt).unwrap();
+                            for j_virt in lumo_2..num_state {
+                                let j_virt_eigen = eigenvalues_2.get(j_virt).unwrap();
+                                let ij_virt_eigen = i_virt_eigen + j_virt_eigen;
+                                let j_virt_occ = occupation_2.get(j_virt).unwrap();
 
-                            // because we generate ri3mo for [lumo..num_state, start_mo..num_occ], 
-                            // the indices in rimo are shifted
-                            let i_loc_virt = i_virt-vir_range.start;
-                            let j_loc_virt = j_virt-vir_range.start;
-                            let e_mp2_a = eri_virt.get2d([i_loc_virt,j_loc_virt]).unwrap();
-                            e_mp2_term_os += e_mp2_a * e_mp2_a / double_gap;
+                                if (1.0-i_virt_occ).abs() > 1.0e-6 && (1.0-j_virt_occ).abs() > 1.0e-6 {
+                                    let mut double_gap = ij_virt_eigen - ij_state_eigen;
+                                    if double_gap.abs()<=1.0E-6 {
+                                        println!("Warning: too close to degeneracy")
+                                    };
+                                    double_gap /= (i_state_occ*j_state_occ*(1.0-i_virt_occ)*(1.0-j_virt_occ));
 
+                                    // because we generate ri3mo for [lumo..num_state, start_mo..num_occ], 
+                                    // the indices in rimo are shifted
+                                    let i_loc_virt = i_virt-vir_range.start;
+                                    let j_loc_virt = j_virt-vir_range.start;
+                                    let e_mp2_a = eri_virt.get2d([i_loc_virt,j_loc_virt]).unwrap();
+                                    e_mp2_term_os += e_mp2_a * e_mp2_a / double_gap;
+                                }
+                            }
                         }
                     }
                     s.send(e_mp2_term_os).unwrap()

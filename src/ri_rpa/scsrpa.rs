@@ -59,7 +59,7 @@ pub fn evaluate_spin_response_rayon(scf_data: &SCF, freq: f64) -> anyhow::Result
                         let k_state_occ = occ_numbers.get(k_state).unwrap();
 
                         let mut energy_gap = j_state_eigen - k_state_eigen;
-                        if energy_gap < 1.0e-6 && energy_gap > 0.0 {
+                        if energy_gap < 1.0e-6 && energy_gap >= 0.0 {
                             energy_gap += 1.0e-6
                         } else if energy_gap >-1.0e-6 && energy_gap < 0.0 {
                             energy_gap += -1.0e-6
@@ -146,7 +146,7 @@ pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Resul
                             //    ((j_state_eigen-k_state_eigen).powf(2.0) + freq*freq)*
                             //    (j_state_occ-k_state_occ);
                             let mut energy_gap = j_state_eigen - k_state_eigen;
-                            if energy_gap < 1.0e-6 && energy_gap > 0.0 {
+                            if energy_gap < 1.0e-6 && energy_gap >=0.0 {
                                 energy_gap += 1.0e-6
                             } else if energy_gap >-1.0e-6 && energy_gap < 0.0 {
                                 energy_gap += -1.0e-6
@@ -157,6 +157,16 @@ pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Resul
                             //=======================================================================
                             let zeta = 2.0f64*energy_gap/ (energy_gap.powf(2.0) + freq*freq)*
                                 (j_state_occ*frac_spin_occ)*(1.0f64-k_state_occ*frac_spin_occ);
+                            //=======================================================================
+                            // fractional occupation scheme suggested by Xinguo
+                            //=======================================================================
+                            //let zeta = num_spin*energy_gap / (energy_gap.powf(2.0) + freq*freq)*
+                            //    (j_state_occ-k_state_occ);
+
+                            //if energy_gap.abs() <= 2.0e-6 {
+                            //    println!("elec_pair: ({:2},{:2}), occ: ({:6.4},{:6.4})", j_state, k_state, j_state_occ, k_state_occ);
+                            //    println!("e_gap: {:16.8}, zeta: {:16.8}", energy_gap, zeta);
+                            //}
 
                             let k_loc_state = k_state - vir_range.start;
                             //timerecords.count_start("submatrix");

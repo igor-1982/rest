@@ -142,7 +142,7 @@ fn main() -> anyhow::Result<()> {
     let mut mol = Molecule::build(ctrl_file)?;
     if mol.ctrl.print_level>0 {println!("Molecule_name: {}", &mol.geom.name)};
     if mol.ctrl.print_level>=2 {
-        mol.ctrl.formated_output_in_toml();
+        println!("{}", mol.ctrl.formated_output_in_toml());
     }
 
     if mol.ctrl.deep_pot {

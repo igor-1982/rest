@@ -414,6 +414,31 @@ impl DFA4REST {
                 dfa_paramr_pos,
                 dfa_hybrid_pos
             })
+        } else if tmp_name.eq("rpa@b3lyp") {
+            let dfa_family_pos = Some(DFAFamily::RPA);
+            let dfa_compnt_pos: Option<Vec<usize>> = Some(vec![]);
+            let dfa_paramr_pos = Some(vec![]);
+            let dfa_hybrid_pos = Some(1.0);
+            let dfa_paramr_adv = Some(vec![1.0]);
+
+            let dfa_family_scf = DFAFamily::HybridGGA;
+            let scf_dfa = ["b3lyp"];
+            let dfa_compnt_scf: Vec<usize> = scf_dfa.iter().map(|xc| {
+                DFA4REST::xc_func_init_fdqc(*xc, spin_channel).into_iter()})
+                .flatten().collect();
+            let dfa_paramr_scf = vec![1.0;dfa_compnt_scf.len()];
+            let dfa_hybrid_scf = DFA4REST::get_hybrid_libxc(&dfa_compnt_scf,spin_channel);
+            Some(DFA4REST{
+                spin_channel,
+                dfa_compnt_scf,
+                dfa_paramr_scf,
+                dfa_hybrid_scf,
+                dfa_paramr_adv,
+                dfa_family_pos,
+                dfa_compnt_pos,
+                dfa_paramr_pos,
+                dfa_hybrid_pos
+            })
         } else if tmp_name.eq("rpa@pbe") {
             let dfa_family_pos = Some(DFAFamily::RPA);
             let dfa_compnt_pos: Option<Vec<usize>> = Some(vec![]);
@@ -2032,8 +2057,16 @@ impl Grids {
             for i_spin in 0..spin_channel {
                 let mo_s = mo.get(i_spin).unwrap();
                 // assume that the molecular obitals have been orderd: occupation first, then virtual.
-                let mut occ_s = occ.get(i_spin).unwrap()
-                    .iter().filter(|occ| **occ>0.0).map(|occ| occ.sqrt()).collect_vec();
+                //let mut occ_s = occ.get(i_spin).unwrap()
+                //    .iter().filter(|occ| **occ>0.0).map(|occ| occ.sqrt()).collect_vec();
+                //==================================
+                // now locate the highest obital that has electron with occupation largger than 1.0e-4
+                //let homo_s = occ[i_spin].iter().enumerate().fold(0_usize,|x, (ob, occ)| {if *occ>1.0e-4 {ob} else {x}});
+                let homo_s  = occ[i_spin].iter().enumerate()
+                    .filter(|(i,occ)| **occ >=1.0e-6)
+                    .map(|(i,occ)| i).max().unwrap();
+                let mut occ_s = occ.get(i_spin).unwrap()[0..homo_s+1].iter().map(|occ| occ.sqrt()).collect::<Vec<f64>>();
+                //==================================
                 let num_occ = occ_s.len();
                 // wmo = weigthed mo ('ij,j->ij'): mo_s(ij), occ_s(j) -> wmo(ij)
                 let mut wmo = _einsum_01_rayon(&mo_s.to_matrixfullslice(),&occ_s);
