@@ -369,7 +369,7 @@ impl InputKeywords {
 
                 tmp_input.pruning = match tmp_ctrl.get("pruning").unwrap_or(&serde_json::Value::Null){
                     serde_json::Value::String(tmp_type) => {tmp_type.to_lowercase()},
-                    other => {String::from("sg1")} //default prune method: sg1
+                    other => {String::from("nwchem")} //default prune method: sg1
                 };
                 if tmp_input.print_level>0 {println!("The pruning method will be {}", tmp_input.pruning)};
 
@@ -387,10 +387,8 @@ impl InputKeywords {
                         } else {tmp_eri.to_lowercase()}
                     },
                     other => {String::from("ri_v")},
-                    other => {String::from("analytic")},
-                    other => {String::from("ri_v")},
                 };
-                let mut eri_type = tmp_input.eri_type.clone();
+                let eri_type = tmp_input.eri_type.clone();
                 if eri_type.eq(&String::from("ri_v"))
                 {
                     tmp_input.use_auxbas = true;
@@ -715,8 +713,8 @@ impl InputKeywords {
                 };
                 tmp_input.scf_acc_rho = match tmp_ctrl.get("scf_acc_rho").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(1.0e-6)},
-                    serde_json::Value::Number(tmp_num) => {tmp_num.as_f64().unwrap_or(1.0e-6)},
-                    other => {1.0e-6}
+                    serde_json::Value::Number(tmp_num) => {tmp_num.as_f64().unwrap_or(1.0e-8)},
+                    other => {1.0e-8}
                 };
                 tmp_input.scf_acc_eev = match tmp_ctrl.get("scf_acc_eev").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(1.0e-6)},
@@ -726,27 +724,27 @@ impl InputKeywords {
                 tmp_input.scf_acc_etot = match tmp_ctrl.get("scf_acc_etot").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(1.0e-8)},
                     serde_json::Value::Number(tmp_num) => {tmp_num.as_f64().unwrap_or(1.0e-8)},
-                    other => {1.0e-6}
+                    other => {1.0e-8}
                 };
 
                 tmp_input.mixer = match tmp_ctrl.get("mixer").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase()},
-                    other => {String::from("direct")},
+                    other => {String::from("diis")},
                 };
                 tmp_input.mix_param = match tmp_ctrl.get("mix_param").unwrap_or(&serde_json::Value::Null) {
-                    serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(1.0)},
-                    serde_json::Value::Number(tmp_num) => {tmp_num.as_f64().unwrap_or(1.0)},
-                    other => {1.0}
+                    serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(0.2)},
+                    serde_json::Value::Number(tmp_num) => {tmp_num.as_f64().unwrap_or(0.2)},
+                    other => {0.2}
                 };
                 tmp_input.num_max_diis = match tmp_ctrl.get("num_max_diis").unwrap_or(&serde_json::Value::Null) {
-                    serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(2_usize)},
-                    serde_json::Value::Number(tmp_num) => {tmp_num.as_i64().unwrap_or(2) as usize},
-                    other => {2_usize}
+                    serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(8_usize)},
+                    serde_json::Value::Number(tmp_num) => {tmp_num.as_i64().unwrap_or(8) as usize},
+                    other => {8_usize}
                 };
                 tmp_input.start_diis_cycle = match tmp_ctrl.get("start_diis_cycle").unwrap_or(&serde_json::Value::Null) {
-                    serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(2_usize)},
-                    serde_json::Value::Number(tmp_num) => {tmp_num.as_i64().unwrap_or(2) as usize},
-                    other => {2_usize}
+                    serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(1_usize)},
+                    serde_json::Value::Number(tmp_num) => {tmp_num.as_i64().unwrap_or(1) as usize},
+                    other => {1_usize}
                 };
                 tmp_input.start_check_oscillation = match tmp_ctrl.get("start_check_oscillation").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(20_usize)},
@@ -780,7 +778,7 @@ impl InputKeywords {
 
                 tmp_input.initial_guess = match tmp_ctrl.get("initial_guess").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase()},
-                    other => {String::from("vsap")},
+                    other => {String::from("sad")},
                 };
                 tmp_input.noiter = match tmp_ctrl.get("noiter").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
