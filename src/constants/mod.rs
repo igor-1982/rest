@@ -78,8 +78,9 @@ lazy_static!{
 }
 
 // use for the inverse (sqrt inverse) of the auxiliary coulomb matrix
-pub const AUXBAS_THRESHOLD: f64 = 1.0e-8;
-pub const INVERSE_THRESHOLD: f64 = 1.0e-8;
+pub const AUXBAS_THRESHOLD: f64 = 1.0e-10;
+pub const INVERSE_THRESHOLD: f64 = 1.0e-10;
+pub const SQRT_THRESHOLD: f64 = 1.0e-10;
 
 pub const CM: f64 = 8065.541;
 pub const ANG:f64 = 0.5291772083;

@@ -30,15 +30,21 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
             atom_ctrl.auxbas_path = mol.ctrl.auxbas_path.clone();
             atom_ctrl.auxbas_type = mol.ctrl.auxbas_type.clone();
             atom_ctrl.use_auxbas = true;
-            atom_ctrl.num_threads = Some(1);
+            atom_ctrl.num_threads = mol.ctrl.num_threads.clone();
             atom_ctrl.eri_type = String::from("ri_v");
             atom_ctrl.num_threads = Some(mol.ctrl.num_threads.unwrap());
             atom_ctrl.mixer = "diis".to_string();
+            atom_ctrl.start_diis_cycle = 8;
+            atom_ctrl.start_check_oscillation = 100;
+            atom_ctrl.max_scf_cycle = 300;
             atom_ctrl.initial_guess = "vsap".to_string();
             atom_ctrl.print_level = if mol.ctrl.print_level<2 {0} else {mol.ctrl.print_level-1};
             atom_ctrl.atom_sad = true;
             atom_ctrl.occupation_type = OCCType::ATMSAD;
             atom_ctrl.charge = 0.0_f64;
+            atom_ctrl.scf_acc_eev = 1.0e-8;
+            atom_ctrl.scf_acc_rho = 1.0e-8;
+            atom_ctrl.scf_acc_etot = 1.0e-8;
             let (spin, spin_channel, spin_polarization) = ctrl_setting_atom_sad(ielem);
             atom_ctrl.spin = spin;
             atom_ctrl.spin_channel = spin_channel;
@@ -57,6 +63,12 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
 
             //println!("debug: elem prepared in this loop: {}, size: {:?}", ielem, atom_scf.density_matrix[0].size());
 
+            atom_scf.density_matrix.iter_mut().for_each(|dm_s| {
+                dm_s.iter_mut().for_each(|dm_ij| {
+                    if dm_ij.abs() < 1.0e-8 {*dm_ij = 0.0_f64}
+                });
+            });
+
 
             let mut dms: Vec<MatrixFull<f64>> = vec![];
 
@@ -74,7 +86,7 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
     });
 
     // reset the omp_num_threads to be the correct one
-    utilities::omp_set_num_threads_wrapper(mol.ctrl.num_threads.unwrap());
+    //utilities::omp_set_num_threads_wrapper(mol.ctrl.num_threads.unwrap());
 
     let (dms_alpha, dms_beta) = block_diag_specific(&atom_dms, &mol.geom.elem);
 

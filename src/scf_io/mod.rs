@@ -75,7 +75,7 @@ use crate::tensors::{TensorOpt,TensorOptMut,TensorSlice};
 use crate::dft::Grids;
 use crate::{utilities, initial_guess};
 use crate::initial_guess::initial_guess;
-use crate::constants::{SPECIES_INFO, INVERSE_THRESHOLD};
+use crate::constants::{INVERSE_THRESHOLD, SPECIES_INFO, SQRT_THRESHOLD};
 
 
 
@@ -3068,7 +3068,7 @@ pub fn vk_upper_with_rimatr_use_dm_only_sync_v02(
             *vk_s = MatrixUpper::new(num_baspair,0.0_f64);
             //let dm_s = &dm[i_spin];
             utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
-            let dm_s = _power_rayon(&dm[i_spin], 0.5, 1.0e-8).unwrap();
+            let dm_s = _power_rayon(&dm[i_spin], 0.5, SQRT_THRESHOLD).unwrap();
             utilities::omp_set_num_threads_wrapper(1);
             let batch_num_auxbas = utilities::balancing(num_auxbas, rayon::current_num_threads());
             let (sender, receiver) = channel();
@@ -4094,7 +4094,7 @@ pub fn initialize_scf(scf_data: &mut SCF) {
     time_mark.new_item("InitGuess", "Prepare initial guess");
     time_mark.count_start("InitGuess");
     initial_guess(scf_data);
-    if ! scf_data.mol.ctrl.atom_sad && scf_data.mol.ctrl.print_level>4 {
+    if ! scf_data.mol.ctrl.atom_sad && scf_data.mol.ctrl.print_level>2 {
         println!("Initial density matrix by Atom SAD:");
         scf_data.density_matrix[0].formated_output(5, "full");
     }

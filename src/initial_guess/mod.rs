@@ -135,7 +135,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
         //scf_data.generate_hf_hamiltonian();
     } else if scf_data.mol.ctrl.initial_guess.eq(&"sad") {
         scf_data.density_matrix = initial_guess_from_sad(&scf_data.mol);
-        //for DFT methods, it needs the eigenvectors to generate the hamiltoniam. In consequence, we use the hf method to prepare the eigenvectors from the guess dmß
+        //for DFT methods, it needs the eigenvectors to generate the hamiltoniam. In consequence, we use the hf method to prepare the eigenvectors from the guess dm
         //scf_data.generate_hf_hamiltonian_for_guess();
         //if scf_data.mol.ctrl.print_level>0 {println!("Initial guess HF energy: {:16.8}", scf_data.evaluate_hf_total_energy())};
         let original_flag = scf_data.mol.ctrl.use_dm_only;
@@ -143,7 +143,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
         scf_data.generate_hf_hamiltonian();
         scf_data.mol.ctrl.use_dm_only = original_flag;
         //println!("{:?}",scf_data.);
-        if scf_data.mol.ctrl.print_level>0 {println!("Initial guess HF energy: {:16.8}", scf_data.scf_energy)};
+        if scf_data.mol.ctrl.print_level>0 {println!("Initial guess HF energy: {:24.16}", scf_data.scf_energy)};
 
         scf_data.diagonalize_hamiltonian();
         scf_data.generate_occupation();
@@ -345,7 +345,9 @@ pub fn initial_guess_from_vsap(mol: &Molecule, grids: &Option<Grids>) -> MatrixU
         panic!("Density grids should be prepared at first for SAP initial guess")
     };
 
-    h_sap.data.iter_mut().zip(tmp_v.iter_matrixupper().unwrap()).for_each(|(t,f)| *t += f);
+    //tmp_v.formated_output_e(5, "full");
+
+    h_sap.data.iter_mut().zip(tmp_v.iter_matrixupper().unwrap()).for_each(|(t,f)| if f.abs() > 1.0e-8 {*t += f});
 
     //time_mark.count("SAP");
 
