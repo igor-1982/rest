@@ -189,6 +189,7 @@ pub struct InputKeywords {
     pub nforce_displacement: f64,
     pub force_state_occupation: Vec<ForceStateOccupation>,
     pub auxiliary_reference_states: Vec<(String,usize)>,
+    pub rpa_de_excitation_parameters: Option<[f64;4]>
 
 }
 
@@ -290,6 +291,7 @@ impl InputKeywords {
             frac_tolerant: 1.0e-3,
             auxiliary_reference_states: Vec::new(),
             force_state_occupation: Vec::new(),
+            rpa_de_excitation_parameters: None 
         }
     }
 
@@ -881,6 +883,20 @@ impl InputKeywords {
                         tmp_files
                     },
                     other => Vec::new(),
+                };
+                tmp_input.rpa_de_excitation_parameters = match tmp_ctrl.get("rpa_de_excitation_parameters").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::Array(tmp_op) => {
+                        if tmp_op.len() == 4 {
+                            let mut tmp_array = [0.0;4];
+                            tmp_array.iter_mut().zip(tmp_op.iter()).for_each(|(to, from)| {
+                                *to = from.as_f64().unwrap()
+                            });
+                            Some(tmp_array)
+                        } else {
+                            None
+                        }
+                    },
+                    other => None,
                 };
                 // ================================================
                 //  Keywords associated with the post-SCF analyais
