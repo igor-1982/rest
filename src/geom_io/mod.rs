@@ -539,15 +539,20 @@ impl GeomCell {
     }
 
     // evalate the dipole moment of the nuclear charge
-    pub fn evaluate_dipole_moment(&self) -> (Vec<f64>, f64) {
+    pub fn evaluate_dipole_moment(&self, orig: Option<Vec<f64>>) -> (Vec<f64>, f64) {
+        let r_orig = if let Some(u_orig) = orig {
+            u_orig.clone()
+        } else {
+            vec![0.0;3]
+        };
         let mut mass_charge = get_mass_charge(&self.elem);
         let mut dipole = vec![0.0;3];
         let mut mass_sum = 0.0;
         self.position.iter_columns_full().zip(mass_charge.iter()).for_each(|(pos, (mass, charge))| {
             mass_sum += mass;
-            dipole[0] += charge*pos[0];
-            dipole[1] += charge*pos[1];
-            dipole[2] += charge*pos[2];
+            dipole[0] += charge*(pos[0]-r_orig[0]);
+            dipole[1] += charge*(pos[1]-r_orig[1]);
+            dipole[2] += charge*(pos[2]-r_orig[2]);
         });
         //dipole[0] /= mass_sum;
         //dipole[1] /= mass_sum;

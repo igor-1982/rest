@@ -241,6 +241,8 @@ pub const ECP_LMAX: i32 = 5;
 pub const NUC_ECP:  i32 = 4;
 
 
+// for exp cutoff -libcint
+pub const PTR_EXPCUTOFF: i32 = 0;
 // for dipole - libcint
 pub const PTR_COMMON_ORG: i32 = 1;
 // for Gauge origin

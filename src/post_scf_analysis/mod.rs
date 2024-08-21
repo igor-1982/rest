@@ -5,7 +5,8 @@ pub mod mulliken;
 pub mod strong_correlation_correction;
 
 use std::path::Path;
-use tensors::{MathMatrix, MatrixFull};
+use rest_libcint::prelude::int1e_r;
+use tensors::{MathMatrix, MatrixFull, RIFull};
 
 use crate::constants::{ANG, AU2DEBYE, SPECIES_INFO};
 use crate::dft::DFAFamily;
@@ -54,12 +55,9 @@ pub fn post_scf_output(scf_data: &SCF) {
            save_geometry(&scf_data);
            scf_data.mol.geom.to_xyz("geometry.xyz".to_string());
         } else if output_type.eq("dipole") {
-            let dp = evaluate_dipole_moment(scf_data);
-            let mut tmp_s: String = format!("Dipole Moment in DEBYE: {:5}", "");
-            dp.iter().for_each(|x| {
-                tmp_s = format!("{},{:16.8}", tmp_s, x);
-            });
-            println!("{}", tmp_s);
+            let dp = evaluate_dipole_moment(scf_data, None);
+
+            println!("Dipole Moment in DEBYE: {:16.8}, {:16.8}, {:16.8}", dp[0], dp[1], dp[2]);
         } else if output_type.eq("force") {
             let displace = match scf_data.mol.geom.unit {
                 crate::geom_io::GeomUnit::Angstrom => scf_data.mol.ctrl.nforce_displacement/ANG,
@@ -411,28 +409,44 @@ fn fciqmc_dump(scf_data: &SCF) {
 // the dipole moment of the nuclear part (nucl_dip) is given by scf_data.mol.geom.evaluate_dipole_moment()
 // the dipole moment of the atomic orbitals (ao_dip) is given by scf_data.mol.int_ij_matrixuppers()
 // the dipole moment of the electronic part (el_dip) is given ('ij,ji', ao_dip[x], dm)
-pub fn evaluate_dipole_moment(scf_data: &SCF) -> Vec<f64> {
-    let (nucl_dip, mass_tot) = scf_data.mol.geom.evaluate_dipole_moment();
-    //println!("debug nucl_dip: {:?}",&nucl_dip);
-    let ao_dip = scf_data.mol.int_ij_matrixuppers(String::from("dipole"), 3);
-    //ao_dip[0].formated_output(5, "full");
+pub fn evaluate_dipole_moment(scf_data: &SCF, orig: Option<Vec<f64>>) -> Vec<f64> {
+
+    let (nucl_dip, mass_tot) = scf_data.mol.geom.evaluate_dipole_moment(None);
+
     let mut dm = scf_data.density_matrix[0].clone();
     if scf_data.mol.spin_channel == 2 {
         dm.self_add(&scf_data.density_matrix[1]);
     }
+
+    let mut cint_data = scf_data.mol.initialize_cint(false);
+
+    let p_orig = cint_data.get_common_origin();
+
+    let r_orig = if let Some(u_orig) = orig {
+        u_orig.clone()
+    } else {
+        p_orig.clone()
+    };
+    cint_data.set_common_origin(&r_orig);
+
+    let (out, out_shape)= cint_data.integral_s1::<int1e_r>(None);
+    let mut out_shape_1 = [0;3];
+    out_shape_1.iter_mut().zip(out_shape.iter()).for_each(|(out_shape_1, &out_shape)| {*out_shape_1 = out_shape});
+
+    let ao_dip = RIFull::from_vec(out_shape_1, out).unwrap();
+
     let mut el_dip = [0.0;3];
     for i in 0..3 {
-        let ao_dip_tmp = ao_dip[i].to_matrixfull().unwrap();
+        let ao_dip_tmp = ao_dip.get_reducing_matrix(i).unwrap();
         el_dip[i] = dm.iter_columns_full().zip(ao_dip_tmp.iter_columns_full()).fold(0.0,|acc_c,(dm_col, ao_dip_col)| {
             let acc_r = dm_col.iter().zip(ao_dip_col.iter()).fold(0.0, |acc_r, (dm_val, ao_dip_val)| {acc_r + dm_val*ao_dip_val});
             acc_c + acc_r
         });
-        //el_dip[i] = ao_dip_tmp.dot(&dm).unwrap();
-        //for j in 0..3 {
-        //    el_dip[i] += ao_dip[i][j]*scf_data.density_matrix[j];
-        //}
     }
 
+    cint_data.set_common_origin(&p_orig);
+
     nucl_dip.iter().zip(el_dip.iter()).map(|(nucl, el)| (*nucl - *el)*AU2DEBYE).collect::<Vec<f64>>()
+
 }
 
