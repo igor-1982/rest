@@ -5,7 +5,7 @@ pub mod mulliken;
 pub mod strong_correlation_correction;
 
 use std::path::Path;
-use tensors::MathMatrix;
+use tensors::{MathMatrix, MatrixFull};
 
 use crate::constants::{ANG, AU2DEBYE, SPECIES_INFO};
 use crate::dft::DFAFamily;
@@ -435,3 +435,4 @@ pub fn evaluate_dipole_moment(scf_data: &SCF) -> Vec<f64> {
 
     nucl_dip.iter().zip(el_dip.iter()).map(|(nucl, el)| (*nucl - *el)*AU2DEBYE).collect::<Vec<f64>>()
 }
+

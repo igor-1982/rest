@@ -4,6 +4,7 @@ mod pyrest_molecule_io;
 use array_tool::vec::Intersect;
 use pyo3::{pyclass, pymethods};
 use rayon::prelude::{IntoParallelRefIterator, IndexedParallelIterator, ParallelIterator};
+use rest_libcint::prelude::*;
 use rest_tensors::{ERIFull,RIFull,ERIFold4,TensorSlice,TensorSliceMut,TensorOptMut,TensorOpt, MatrixUpper, MatrixFull};
 use libc::regerror;
 use statrs::distribution::Continuous;
@@ -47,7 +48,8 @@ pub fn get_basis_name(ang: usize, ctype: &CintType, index: usize) -> String {
     };
     match ctype {
         CintType::Spheric => {ang_name = format!("{}-{}",ang_name, index)},
-        CintType::Cartesian => {ang_name = format!("{}-{}",ang_name, index)}, 
+        CintType::Cartesian => {ang_name = format!("{}-{}",ang_name, index)},
+        CintType::Spinor => {panic!("Spinor is not yet implemented")}, 
     };
     ang_name
 }
@@ -161,7 +163,9 @@ impl Molecule {
         println!("cint_aux_env: {:?}", self.cint_aux_env);
         println!("cint_type: {:}", match self.cint_type {
             CintType::Spheric => "Spheric",
-            CintType::Cartesian => "Cartesian"})
+            CintType::Cartesian => "Cartesian",
+            CintType::Spinor => "Spinor",
+        })
     }
 
     pub fn build(ctrl_file: String) -> anyhow::Result<Molecule> {
@@ -519,6 +523,8 @@ impl Molecule {
                 let (ang,tmp_bas_num) = match &cint_type {
                     CintType::Cartesian => {let ang = tmp_bas_vec[1] as usize; (ang,(ang+1)*(ang+2)/2)},
                     CintType::Spheric => {let ang = tmp_bas_vec[1] as usize; (ang, ang*2+1)},
+                    // NOTE:: Spinor is not implemented
+                    CintType::Spinor => {let ang = tmp_bas_vec[1] as usize; (ang, ang*2+1)},
                 };
                 let mut tmp_len = 0;
                 let tmp_start = if aux_cint_fdqc.len()==0 {0} 
@@ -685,6 +691,8 @@ impl Molecule {
                 let (ang,tmp_bas_num) = match &cint_type {
                     CintType::Cartesian => {let ang = tmp_bas_vec[1] as usize; (ang,(ang+1)*(ang+2)/2)},
                     CintType::Spheric => {let ang = tmp_bas_vec[1] as usize; (ang, ang*2+1)},
+                    // NOTE: Spinor is not yet implemented properly, IGOR 2024-08-18
+                    CintType::Spinor => {let ang = tmp_bas_vec[1] as usize; (ang, ang*2+1)},
                 };
                 let mut tmp_len = 0;
                 let tmp_start = if cint_fdqc.len()==0 {0} 
@@ -904,8 +912,12 @@ impl Molecule {
 
     }
 
+    pub fn int_ij_matrixupper(&self, op_name: String) -> MatrixUpper<f64> {
+        self.int_ij_matrixupper_v02(op_name)
+    }
+
     #[inline]
-    pub fn int_ij_matrixupper(&self,op_name: String) -> MatrixUpper<f64> {
+    pub fn int_ij_matrixupper_v01(&self,op_name: String) -> MatrixUpper<f64> {
         let mut cint_data = self.initialize_cint(false);
 
         if op_name == String::from("dipole") {
@@ -1063,6 +1075,54 @@ impl Molecule {
         cint_data.final_c2r();
         //vec_2d
         mat_global
+    }
+
+    pub fn int_ij_matrixupper_v02(&self, op_name: String) -> MatrixUpper<f64> {
+        let mut cint_data = self.initialize_cint(false);
+        //let mut cur_op = op_name.to_string();
+        let mut out = vec![]; 
+        let mut out_shape = vec![];
+        if op_name.eq("ovlp") {
+            (out,out_shape) = cint_data.integral_s2ij::<int1e_ovlp>(None);
+        } else if op_name.eq("kinetic") {
+            (out, out_shape) = cint_data.integral_s2ij::<int1e_kin>(None);
+        } else if op_name.eq("nuclear") {
+            (out, out_shape) = cint_data.integral_s2ij::<int1e_nuc>(None);
+        } else if op_name.eq("ecp") {
+            let mut tmp_out = vec![];
+            let mut tmp_out_shape = vec![];
+            //(out, out_shape) = cint_data.integral_ecp_s1::<ECPscalar>(None);
+            (tmp_out, tmp_out_shape) = cint_data.integral_ecp_s1::<ECPscalar>(None);
+            let tmp_ecp = MatrixFull::from_vec([self.num_basis,self.num_basis], tmp_out).unwrap();
+
+            out.iter_mut().zip(tmp_ecp.iter_matrixupper().unwrap()).for_each(|(o,f)| {
+                *o = *f
+            });
+
+        } else if op_name.eq("hcore") {
+            (out, out_shape) = cint_data.integral_s2ij::<int1e_kin>(None);
+            let mut tmp_out = vec![];
+            let mut tmp_out_shape = vec![];
+            (tmp_out, tmp_out_shape) = cint_data.integral_s2ij::<int1e_nuc>(None);
+
+            out.iter_mut().zip(tmp_out.iter()).for_each(|(o, t)| {
+                *o += *t
+            });
+
+            if let Some(ecpbas) = &self.cint_ecpbas {
+                (tmp_out, tmp_out_shape) = cint_data.integral_ecp_s1::<ECPscalar>(None);
+                let tmp_ecp = MatrixFull::from_vec([self.num_basis,self.num_basis], tmp_out).unwrap();
+
+                out.iter_mut().zip(tmp_ecp.iter_matrixupper().unwrap()).for_each(|(o,f)| {
+                    *o += *f
+                });
+            }
+        } else {
+            panic!("Error:: op_name: {}", op_name);
+        }
+
+        MatrixUpper::from_vec(out.len(), out).unwrap()
+
     }
 
     #[inline]
@@ -1532,7 +1592,7 @@ impl Molecule {
     }
 
     pub fn int_ij_aux_columb(&self) -> MatrixFull<f64> {
-        self.int_ij_aux_columb_rayon()
+        self.int_ij_aux_columb_new()
     }
 
     pub fn int_ij_aux_columb_serial(&self) -> MatrixFull<f64> {
@@ -1596,6 +1656,20 @@ impl Molecule {
         });
         //aux_v.formated_output_e(4, "full");
         aux_v
+    }
+
+    pub fn int_ij_aux_columb_new(&self) -> MatrixFull<f64> {
+        let n_auxbas = self.num_auxbas;
+        let mut cint_data = self.initialize_cint(true);
+        let n_basis_shell = self.cint_bas.len() as i32;
+        let n_auxbas_shell = self.cint_aux_bas.len() as i32;
+        let shl_slices = vec![[n_basis_shell, n_basis_shell + n_auxbas_shell], [n_basis_shell, n_basis_shell + n_auxbas_shell]];
+        let mut out = vec![];
+        //let mut out_shape = vec![];
+        (out, _) = cint_data.integral_s1::<int2c2e>(Some(&shl_slices));
+
+        MatrixFull::from_vec([n_auxbas, n_auxbas], out).unwrap()
+
     }
 
     pub fn prepare_ri3fn_for_ri_v(&self) -> RIFull<f64> {
@@ -2602,8 +2676,97 @@ impl Molecule {
 
     }
 
+    // generate the 3-center RI integrals and the basis pair symmetry is used to save the memory
+    pub fn prepare_rimatr_for_ri_v_rayon_v05(&self) -> (MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>) {
+
+        let mut time_records = utilities::TimeRecords::new();
+        time_records.new_item("all ri", "for the total evaluations of ri3fn");
+        time_records.count_start("all ri");
+
+        time_records.new_item("prim ri", "for the pure three-center integrals");
+        time_records.new_item("aux_ij", "for the coulomb matrix of auxiliary basis");
+        time_records.new_item("inv_sqrt", "for the sqrt inverse of aux_ij");
+
+        let n_basis = self.num_basis;
+        let n_auxbas = self.num_auxbas;
+        let n_baspar = (self.num_basis+1)*self.num_basis/2;
+
+        // First the Cholesky decomposition `L` of the inverse of the auxiliary 2-center coulumb matrix: V=(\nu|\mu)
+        time_records.count_start("aux_ij");
+        let mut aux_v = self.int_ij_aux_columb();
+        time_records.count("aux_ij");
+        time_records.count_start("inv_sqrt");
+        aux_v = _power_rayon(&aux_v, -0.5, AUXBAS_THRESHOLD).unwrap();
+        //aux_v = aux_v.to_matrixfullslicemut().cholesky_decompose_inverse('L').unwrap_or(
+        //    _power_rayon(&aux_v, -0.5, AUXBAS_THRESHOLD).unwrap()
+        //);
+        //let (tmp_aux_v, n_sigular, converge_flag) = _newton_schulz_inverse_square_root(&aux_v, 1.0e-8, 0.1, 100);
+        //if ! converge_flag {
+        //    aux_v = _power_rayon(&aux_v, -0.5, AUXBAS_THRESHOLD).unwrap();
+        //} else {
+        //    aux_v = tmp_aux_v.clone()
+        //}
+        time_records.count("inv_sqrt");
+
+        // Then, prepare the 3-center integrals: O_V = (ij|\nu), and multiple with `L`
+        time_records.count_start("prim ri");
+        let n_basis_shell = self.cint_bas.len() as i32;
+        let n_auxbas_shell = self.cint_aux_bas.len() as i32;
+        let cint_type = if self.ctrl.basis_type.to_lowercase()==String::from("spheric") {
+            CintType::Spheric
+        } else if self.ctrl.basis_type.to_lowercase()==String::from("cartesian") {
+            CintType::Cartesian
+        } else {
+            panic!("Error:: Unknown basis type '{}'. Please use either 'spheric' or 'Cartesian'", 
+                   self.ctrl.basis_type);
+        };
+
+        let mut out = vec![];
+        let mut out_shape = vec![];
+        let shl_slices = vec![[0, n_basis_shell], [0, n_basis_shell], [n_basis_shell, n_basis_shell + n_auxbas_shell]];
+
+        let mut cint_data = self.initialize_cint(true);
+
+        (out, out_shape) = cint_data.integral_s2ij::<int3c2e>(Some(&shl_slices));
+
+        let mut tmp_ri3fn = MatrixFull::from_vec([n_baspar, n_auxbas],out).unwrap();
+
+
+
+
+
+        let mut basbas2baspar = MatrixFull::new([n_basis,n_basis],0_usize);
+        let mut baspar2basbas = vec![[0_usize;2];n_baspar];
+        basbas2baspar.iter_columns_full_mut().enumerate().for_each(|(j,slice_x)| {
+            &slice_x.iter_mut().enumerate().for_each(|(i,map_v)| {
+                let baspar_ind = if i< j {(j+1)*j/2+i} else {(i+1)*i/2+j};
+                *map_v = baspar_ind;
+                baspar2basbas[baspar_ind] = [i,j];
+            });
+        });
+        time_records.count("prim ri");
+
+        time_records.new_item("ri_v","for RI dot aux_v^{-1/2}");
+        time_records.count_start("ri_v");
+        utilities::omp_set_num_threads_wrapper(self.ctrl.num_threads.unwrap());
+        let mut ri3fn = MatrixFull::new([n_baspar,n_auxbas],0.0);
+        _dgemm_full(&tmp_ri3fn, 'N', &aux_v, 'N', &mut ri3fn, 1.0, 0.0);
+        time_records.count("ri_v");
+
+
+        time_records.count("all ri");
+
+
+        if self.ctrl.print_level>=2 {
+            time_records.report_all();
+        }
+
+        (ri3fn,basbas2baspar,baspar2basbas)
+
+    }
+
     pub fn prepare_rimatr_for_ri_v_rayon(&self) -> (MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>) {
-        self.prepare_rimatr_for_ri_v_rayon_v04()
+        self.prepare_rimatr_for_ri_v_rayon_v05()
     }
 
 

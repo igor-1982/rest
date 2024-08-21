@@ -6,9 +6,6 @@ edition = "2021"
 build = "build.rs"
 
 [dependencies]
-rest_tensors = {path="../rest_tensors"}
-rest_libcint = {path="../rest_libcint"}
-liblbfgs = {path="../rust-lbfgs"}
 anyhow = "1"
 time = "0.1.12"
 clap = "3.0.0-beta.2"
@@ -45,6 +42,10 @@ miette = "5.0"
 reqwest = { version = "0.10", default-features = false, features = ["blocking", "json"] }
 # for cuda
 #cudarc = "0.10.0"
+rest_tensors = {path="../rest_tensors"}
+rest_libcint = {path="../rest_libcint"}
+#liblbfgs = {path="../rust-lbfgs"}
+liblbfgs = "0.1.0"
 
 [build-dependencies]
 autocxx-build = "0.26.0"
@@ -56,12 +57,12 @@ dunce = "1.0.0"
 version = "0.21.1"
 features = ["extension-module"]
 
-[package.metadata.docs.rs]
-rustdoc-args = [
-    "--html-in-header",
-    #".cargo/registry/src/github.com-1ecc6299db9ec823/katex-doc-0.1.0/katex.html",
-    "/share/home/tygao/REST3.0/rest/katex.html",
-]
+#[package.metadata.docs.rs]
+#rustdoc-args = [
+#    "--html-in-header",
+#    #".cargo/registry/src/github.com-1ecc6299db9ec823/katex-doc-0.1.0/katex.html",
+#    "/share/home/tygao/REST3.0/rest/katex.html",
+#]
 
 [dev-dependencies]
 criterion = "0.4"
@@ -76,8 +77,8 @@ harness = false
 name = "rest"
 path = "src/main.rs"
 
-# for pyrest
-[lib]
-name = "pyrest"
-path = "src/lib.rs"
-crate-type=["cdylib","lib"]
+## for pyrest
+#[lib]
+#name = "pyrest"
+#path = "src/lib.rs"
+#crate-type=["cdylib","lib"]

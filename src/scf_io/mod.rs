@@ -1,36 +1,7 @@
 use crate::check_norm::force_state_occupation::adapt_occupation_with_force_projection;
 use crate::check_norm::{self, generate_occupation_frac_occ, generate_occupation_integer, generate_occupation_sad, OCCType};
-//use clap::value_parser;
-//use pyo3::{pyclass, pymethods, pyfunction};
-//use tensors::matrix_blas_lapack::{_dgemm, _dinverse, _dsymm};
-//use tensors::{ERIFull,MatrixFull, ERIFold4, MatrixUpper, TensorSliceMut, RIFull, MatrixFullSlice, MatrixFullSliceMut, BasicMatrix, MathMatrix, MatrixUpperSlice, ParMathMatrix, ri};
-//use itertools::{Itertools, iproduct, izip};
-//use libc::SCHED_OTHER;
-//use core::num;
-//use std::fmt::format;
-//use std::io::Write;
-//use std::{fs, vec};
-//use std::thread::panicking;
-//use std::{vec, fs};
-//use rest_libcint::{CINTR2CDATA, CintType};
-//use crate::geom_io::{GeomCell,MOrC, GeomUnit};
-//use crate::basis_io::{Basis4Elem,BasInfo};
-//use crate::isdf::{prepare_for_ri_isdf, init_by_rho, prepare_m_isdf};
-////use crate::initial_guess::sad::sad_dm;
-//use crate::molecule_io::{Molecule, generate_ri3fn_from_rimatr};
-//use crate::tensors::{TensorOpt,TensorOptMut,TensorSlice};
-//use crate::dft::{Grids, numerical_density, par_numerical_density};
-//use crate::{utilities, initial_guess};
-//use crate::initial_guess::initial_guess;
-//use rayon::prelude::*;
-//use hdf5;
-////use blas::{ddot,daxpy};
-//use std::sync::{Mutex, Arc,mpsc};
-//use std::thread;
-//use crossbeam::{channel::{unbounded,bounded},thread::{Scope,scope}};
-////use std::sync::mpsc::{channel, Receiver};
-//use std::sync::mpsc::channel;
 use crate::dft::gen_grids::prune::prune_by_rho;
+use crate::dft::Grids;
 use crate::geom_io::calc_nuc_energy_with_ecp;
 use crate::utilities::{create_pool, TimeRecords};
 ////use blas_src::openblas::dgemm;
@@ -72,7 +43,6 @@ use std::sync::mpsc::{channel, Receiver};
 use crate::isdf::{prepare_for_ri_isdf, init_by_rho, prepare_m_isdf};
 use crate::molecule_io::{Molecule, generate_ri3fn_from_rimatr};
 use crate::tensors::{TensorOpt,TensorOptMut,TensorSlice};
-use crate::dft::Grids;
 use crate::{utilities, initial_guess};
 use crate::initial_guess::initial_guess;
 use crate::constants::{INVERSE_THRESHOLD, SPECIES_INFO, SQRT_THRESHOLD};
@@ -143,10 +113,10 @@ impl SCF {
             rimatr: None,
             ri3mo: None,
             eigenvalues: [vec![],vec![]],
-            hamiltonian: [MatrixUpper::new(1,0.0),
-                              MatrixUpper::new(1,0.0)],
-            eigenvectors: [MatrixFull::new([1,1],0.0),
-                           MatrixFull::new([1,1],0.0)],
+            hamiltonian: [MatrixUpper::empty(),
+                          MatrixUpper::empty()],
+            eigenvectors: [MatrixFull::empty(),
+                           MatrixFull::empty()],
             ref_eigenvectors: HashMap::new(),
             //density_matrix: [MatrixFull::new([1,1],0.0),
             //                     MatrixFull::new([1,1],0.0)],
@@ -2064,6 +2034,10 @@ impl SCF {
 
     pub fn diagonalize_hamiltonian(&mut self) {
         (self.eigenvectors, self.eigenvalues) = diagonalize_hamiltonian_outside(&self);
+        for i_spin in (0..self.mol.spin_channel) {
+            //println!("debug the number of eigenvalues in {} spin channel is {}", i_spin, self.eigenvalues[i_spin].len());
+            //println!("debug the number of occ in {} spin channel is {}", i_spin, self.occupation[i_spin].len());
+        }
     }
 
     pub fn check_scf_convergence(&self, scftracerecode: &ScfTraceRecord) -> [bool;2] {
@@ -2145,12 +2119,18 @@ impl SCF {
     }
 
     pub fn formated_eigenvalues(&self,num_state_to_print:usize) {
+        let mut cur_num_state_to_print = 0;
         let spin_channel = self.mol.spin_channel;
         if spin_channel==1 {
             println!("{:>8}{:>14}{:>18}",String::from("State"),
                                         String::from("Occupation"),
                                         String::from("Eigenvalue"));
-            for i_state in (0..num_state_to_print) {
+            if self.occupation[0].len() < num_state_to_print {
+                cur_num_state_to_print = self.eigenvalues[0].len();
+            } else {
+                cur_num_state_to_print = num_state_to_print;
+            }
+            for i_state in (0..cur_num_state_to_print) {
                 println!("{:>8}{:>14.5}{:>18.6}",i_state,self.occupation[0][i_state],self.eigenvalues[0][i_state]);
             }
         } else {
@@ -2166,8 +2146,14 @@ impl SCF {
                 println!("{:>8}{:>14}{:>18}",String::from("State"),
                                             String::from("Occupation"),
                                             String::from("Eigenvalue"));
-                for i_state in (0..num_state_to_print) {
-                    println!("{:>8}{:>14.5}{:>18.6}",i_state,self.occupation[i_spin][i_state],self.eigenvalues[i_spin][i_state]);
+                if self.occupation[i_spin].len() < num_state_to_print {
+                    cur_num_state_to_print = self.eigenvalues[i_spin].len();
+                    println!("the number of eigenvalues in {} spin channel is {}", i_spin, self.occupation[i_spin].len());
+                } else {
+                    cur_num_state_to_print = num_state_to_print;
+                    for i_state in (0..cur_num_state_to_print) {
+                        println!("{:>8}{:>14.5}{:>18.6}",i_state,self.occupation[i_spin][i_state],self.eigenvalues[i_spin][i_state]);
+                    }
                 }
             }
         }
@@ -3607,6 +3593,10 @@ impl ScfTraceRecord {
             //
             // prepare and store the fock matrix in full formate and the error vector in the current step
             //
+            //for i_spin in (0..spin_channel) {
+            //    //self.target_vector.push([scf.hamiltonian[i_spin].clone(), scf.hamiltonian[i_spin].clone()]);
+            //    scf.hamiltonian[i_spin].formated_output(5, "upper");
+            //}
             let (cur_error_vec, cur_target) = generate_diis_error_vector(&scf.hamiltonian, &scf.ovlp, &mut self.density_matrix, spin_channel);
             self.error_vector.push(cur_error_vec);
             self.target_vector.push(cur_target);
@@ -4146,10 +4136,14 @@ pub fn scf_without_build(scf_data: &mut SCF) {
 
         let dt2 = time::Local::now();
         let timecost = (dt2.timestamp_millis()-dt1.timestamp_millis()) as f64 /1000.0;
-        if scf_data.mol.ctrl.print_level>0 {println!("Energy: {:18.10} Ha after {:4} iterations (in {:10.2} seconds).",
+        if scf_data.mol.ctrl.print_level>0 {
+            let [square_spin, spin_z] = evaluate_spin_angular_momentum(&scf_data.density_matrix, &scf_data.ovlp, scf_data.mol.spin_channel);
+            println!("Energy: {:18.10} Ha with <S^2> = {:6.3} and <Sz> = {:6.3} after {:4} iterations (in {:10.2} seconds).",
                  scf_records.scf_energy,
+                 square_spin, spin_z,
                  scf_records.num_iter-1,
-                 timecost)};
+                 timecost)
+            };
         if scf_data.mol.ctrl.print_level>1 {
             println!("Detailed timing info in this SCF step:");
             let timecost = (dt1_1.timestamp_millis()-dt1.timestamp_millis()) as f64 /1000.0;
@@ -4471,6 +4465,35 @@ pub fn vj_on_the_fly_par_batch_by_batch(mol: &Molecule, dm: &Vec<MatrixFull<f64>
     }
     vj
 }
+
+// evaluate the expectation value of squre spin angular momentum operator (S^2) as well as the expectation value of spin angular momentum operator along z axis
+// the expectation value of S^2 is given by 3/4*Tr[(scf_data.density_matrix[0]] + scf_data.density_matrix[1])\dot scf_data.ovlp.to_matrixfull().unwrap()]
+// the expectation value of S_z^2  is given by 1/2*Tr[(scf_data.density_matrix[0] -scf_data.density_matrix[1])\dot scf_data.ovlp.to_matrixfull().unwrap()]
+// use MatrixFull::iter_diagonal() to get the diagonal elements of a matrix for the `Tr` evaluation
+pub fn evaluate_spin_angular_momentum(dm: &Vec<MatrixFull<f64>>, ovlp: &MatrixUpper<f64>,spin_channel: usize) -> [f64;2] {
+    let mut tr_spin_angular_momentum = [0.0;2];
+    let ovlp_full = ovlp.to_matrixfull().unwrap();
+
+    if spin_channel==1 {
+        let dm_s = dm.get(0).unwrap();
+        let mut tmp_matrix = dm_s.clone();
+        _dgemm_full(dm_s, 'N', &ovlp_full, 'N', &mut tmp_matrix, 1.0, 0.0);
+
+        [0.75*tmp_matrix.iter_diagonal().unwrap().fold(0.0, |acc, val| acc + val),0.0]
+    } else {
+        let mut tr_spin_angular_momentum = [0.0;2];
+        for i_spin in 0..spin_channel {
+            let dm_s = dm.get(i_spin).unwrap();
+            let mut tmp_matrix = dm_s.clone();
+            _dgemm_full(dm_s, 'N', &ovlp_full, 'N', &mut tmp_matrix, 1.0, 0.0);
+            tr_spin_angular_momentum[i_spin] = tmp_matrix.iter_diagonal().unwrap().fold(0.0, |acc, val| acc + val);
+        }
+
+        println!("debug Tr[P.O]: {:16.8}, {:16.8}", tr_spin_angular_momentum[0], tr_spin_angular_momentum[1]);
+        [0.75*(tr_spin_angular_momentum[0]+tr_spin_angular_momentum[1]),
+         0.50*(tr_spin_angular_momentum[0]-tr_spin_angular_momentum[1])]
+    }
+} 
 
 
 

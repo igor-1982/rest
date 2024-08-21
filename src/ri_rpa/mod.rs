@@ -394,10 +394,11 @@ fn evaluate_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Result<MatrixF
                     let k_state_occ = occ_numbers.get(k_state).unwrap();
 
                     let mut energy_gap = j_state_eigen - k_state_eigen;
+
                     if energy_gap < 1.0e-6 && energy_gap > 0.0 {
-                        energy_gap += 1.0e-6
+                        energy_gap = 1.0e-6
                     } else if energy_gap >-1.0e-6 && energy_gap < 0.0 {
-                        energy_gap += -1.0e-6
+                        energy_gap = -1.0e-6
                     };
                     //=======================================================================
                     // previous fractional occupation algorithm used by  Xinguo in FHI-aims

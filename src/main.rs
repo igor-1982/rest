@@ -57,7 +57,7 @@ use std::path::PathBuf;
 use pyo3::prelude::*;
 use autocxx::prelude::*;
 use ctrl_io::JobType;
-use pyrest::constants::ANG;
+use constants::ANG;
 use scf_io::{SCF,scf_without_build};
 use tensors::{MathMatrix, MatrixFull};
 
@@ -132,8 +132,6 @@ fn main() -> anyhow::Result<()> {
     time_mark.new_item("Overall", "the whole job");
     time_mark.count_start("Overall");
 
-    time_mark.new_item("SCF", "the scf procedure");
-    time_mark.count_start("SCF");
 
     let ctrl_file = utilities::parse_input().value_of("input_file").unwrap_or("ctrl.in").to_string();
     if ! PathBuf::from(ctrl_file.clone()).is_file() {
@@ -162,7 +160,10 @@ fn main() -> anyhow::Result<()> {
     }
 
     // initialize the SCF procedure
+    time_mark.new_item("SCF", "the scf procedure");
+    time_mark.count_start("SCF");
     let mut scf_data = scf_io::SCF::build(mol);
+    time_mark.count("SCF");
     // perform the SCF and post SCF evaluation for the specified xc method
     performance_essential_calculations(&mut scf_data, &mut time_mark);
 
@@ -326,15 +327,17 @@ pub fn performance_essential_calculations(scf_data: &mut SCF, time_mark: &mut ut
 
     let mut total_energy = 0.0;
 
-    //==================================================================
-    // Now evaluate the advanced correction energy for the given method
-    //===============================================================
+    //=================================================================
+    // Now evaluate the SCF energy for the given method
+    //=================================================================
+    time_mark.count_start("SCF");
     scf_without_build(scf_data);
+    time_mark.count("SCF");
 
     //==================================================================
     // Now evaluate the advanced correction energy for the given method
-    //===============================================================
-    let mut time_mark = utilities::TimeRecords::new();
+    //==================================================================
+    //let mut time_mark = utilities::TimeRecords::new();
     if let Some(dft_method) = &scf_data.mol.xc_data.dfa_family_pos {
         match dft_method {
             dft::DFAFamily::PT2 | dft::DFAFamily::SBGE2 => {
