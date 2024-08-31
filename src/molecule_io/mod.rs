@@ -19,7 +19,7 @@ use std::sync::mpsc::channel;
 use std::thread::panicking;
 use std::path::PathBuf;
 use crate::basis_io::etb::{get_etb_elem, etb_gen_for_atom_list, InfoV2};
-use crate::constants::{ATM_NUC, ATM_NUC_MOD_OF, AUXBAS_THRESHOLD, ELEM1ST, ELEM2ND, ELEM3RD, ELEM4TH, ELEM5TH, ELEM6TH, ELEMTMS, ENV_PRT_START, NUC_ECP};
+use crate::constants::{ATM_NUC, ATM_NUC_MOD_OF, AUXBAS_THRESHOLD, ELEM1ST, ELEM2ND, ELEM3RD, ELEM4TH, ELEM5TH, ELEM6TH, ELEMTMS, ENV_PRT_START, NUC_ECP, NUC_FRAC_CHARGE, NUC_STAD_CHARGE};
 use crate::dft::DFA4REST;
 use crate::geom_io::{GeomCell,MOrC, GeomUnit, get_mass_charge};
 use crate::basis_io::{ecp, BasInfo, Basis4Elem};
@@ -192,6 +192,7 @@ impl Molecule {
             = Molecule::collect_basis(&mut ctrl, &mut geom);
 
 
+
         let bas = &basis4elem;
         let ecp_electrons = bas.iter().fold(0, |acc, i| {
             //println!("debug {:?}", i);
@@ -220,20 +221,19 @@ impl Molecule {
         let use_eri = xc_data.use_eri() || ctrl.use_ri_vj;
         
 
-        // frozen-core pt2 and rpa are not yet implemented.
         let mut start_mo = count_frozen_core_states(ctrl.frozen_core_postscf, &geom.elem);
         let ecp_orbs = ecp_electrons/2;
-
-        if start_mo < ecp_orbs {
+        if ecp_orbs == 0 {
+            println!("For SCF calculation, no core orbital is frozen by effective core potential (ECP) approximation");
+        } else if start_mo < ecp_orbs {
             if ctrl.print_level >= 1 {
-                println!("The counted start_mo for the frozen-core post-scf methods {} is smaller than the number of ecp orbitals {}. Take the start_mo = ecp_orbitals",
+                println!("<start_mo> for the frozen-core post-SCF methods {} is smaller than the number of ecp orbitals {}. Set <start_mo> = 0",
                     start_mo, ecp_orbs);
             }
-            //start_mo = ecp_electrons;
             start_mo = 0;
         } else {
             if ctrl.print_level >= 1 {
-                println!("The counted start_mo for the frozen-core post-scf methods {} is larger than the number of ecp orbitals {}. Take the start_mo -= ecp_orbitals",
+                println!("<start_mo> for the frozen-core post-SCF methods {} is larger than the number of ecp orbitals {}. Take the <start_mo> -= ecp_orbitals",
                         start_mo, ecp_orbs);
             }
             start_mo = start_mo - ecp_orbs
@@ -457,8 +457,8 @@ impl Molecule {
 
         let ctrl_elem = ctrl_element_checker(geom);
         let local_elem = local_element_checker(&ctrl.auxbas_path);
-        //println!("local elements are {:?}", local_elem);
-        //println!("ctrl elements are {:?}", ctrl_elem);
+        println!("local elements are {:?}", local_elem);
+        println!("ctrl elements are {:?}", ctrl_elem);
         let etb_elem = get_etb_elem(geom, &ctrl.etb_start_atom_number);
 
         let elem_intersection = ctrl_elem.intersect(local_elem.clone());
@@ -476,8 +476,9 @@ impl Molecule {
             let re = Regex::new(r"/?(?P<basis>[^/]*)/?$").unwrap();
             let cap = re.captures(&ctrl.auxbas_path).unwrap();
             let auxbas_name = cap.name("basis").unwrap().to_string();
+            println!("auxbas_name = {} from {}", &auxbas_name, &ctrl.auxbas_path);
             if check_basis_name(&auxbas_name) {
-                bse_downloader::bse_auxbas_getter_v2(&auxbas_name,&geom, &ctrl.auxbas_path, &required_elem);
+                bse_downloader::bse_auxbas_getter_v2(&auxbas_name,&geom, &ctrl.auxbas_path, &required_elem, ctrl.print_level);
             }
             else {
                 println!("Error: Missing local aux basis sets for {:?}", &required_elem);
@@ -572,7 +573,6 @@ impl Molecule {
     pub fn collect_basis(ctrl: &InputKeywords,geom: &mut GeomCell) -> 
             (Vec<Basis4Elem>, Vec<Vec<i32>>, Vec<Vec<i32>>, Vec<f64>, Vec<BasInfo>, Vec<Vec<usize>>, [f64;3],usize, usize, Option<Vec<Vec<i32>>>) {
         //let (elem_name, elem_charge, elem_mass) = elements();
-        let mass_charge = get_mass_charge(&geom.elem);
         let mut atm: Vec<Vec<i32>> = vec![];
         let mut env: Vec<f64> = vec![0.0;ENV_PRT_START];
         let mut geom_start: i32 = ENV_PRT_START as i32;
@@ -587,11 +587,13 @@ impl Molecule {
         };
 
         // Prepare atm info.
+        // for standard atoms
+        let mass_charge = get_mass_charge(&geom.elem);
         let  mut num_elec = [0.0;3];
         geom.elem.iter().enumerate().zip(mass_charge.iter())
             .for_each(|((atm_index,atm_elem),(tmp_mass,tmp_charge))| {
             num_elec[0] += tmp_charge;
-            atm.push(vec![*tmp_charge as i32,geom_start,1,geom_start+3,0,0]);
+            atm.push(vec![*tmp_charge as i32,geom_start,NUC_STAD_CHARGE,geom_start+3,0,0]);
             (0..3).into_iter().for_each(|i| {
                 if let Some(tmp_value) = geom.position.get(&[i,atm_index]) {
                     //for the coordinates
@@ -602,6 +604,23 @@ impl Molecule {
             env.push(0.0);
             geom_start += 4;
         });
+        // for ghost atoms with basis sets
+        if geom.ghost_bs_elem.len() > 0 {
+            let ghost_mass_charge = get_mass_charge(&geom.ghost_bs_elem);
+            geom.ghost_bs_elem.iter().enumerate().zip(ghost_mass_charge.iter())
+                .for_each(|((atm_index, atm_elem), (tmp_mass, tmp_charge))| {
+                atm.push(vec![0, geom_start, NUC_STAD_CHARGE, geom_start+3, 0, 0]);
+                (0..3).into_iter().for_each(|i| {
+                    if let Some(tmp_value) = geom.ghost_bs_pos.get(&[i, atm_index]) {
+                        //for the coordinates
+                        env.push(*tmp_value);
+                    }
+                });
+                //for the nuclear charge distribution parameter
+                env.push(0.0);
+                geom_start += 4;
+            });
+        }
 
         // Now for bas inf.
         let mut basis_total: Vec<Basis4Elem> = vec![];
@@ -609,12 +628,9 @@ impl Molecule {
         let mut basis_start = geom_start;
         let mut bas_info: Vec<BasInfo> = vec![];
         let mut cint_fdqc: Vec<Vec<usize>> = vec![];
-        //let mut basis_global_index: Vec<(usize,usize)> = vec![(0,0);geom.elem.len()];
 
         let ctrl_elem = ctrl_element_checker(geom);
         let local_elem = local_element_checker(&ctrl.basis_path);
-        //println!("local elements are {:?}", local_elem);
-        //println!("ctrl elements are {:?}", ctrl_elem);
         let elem_intersection = ctrl_elem.intersect(local_elem.clone());
         let mut required_elem = vec![];
         for ctrl_item in ctrl_elem {
@@ -635,37 +651,15 @@ impl Molecule {
                 match matched {
                     Some(_) => panic!("{} may not be a valid basis set name, similar name is {}", basis_name, matched.unwrap()),
                     None => panic!("{} may not be a valid basis set name, please check.", basis_name),
+                }
             }
-        }
-        //bse_downloader::bse_basis_getter(&basis_name,&geom, &ctrl.basis_path);
         };
 
 
+        // for standard atoms
         for (atm_index, atm_elem) in geom.elem.iter().enumerate() {
-            //if atm_index !=0 {
-            //    basis_global_index[atm_index].0 = basis_global_index[atm_index-1].0+basis_global_index[atm_index-1].1;
-            //    basis_global_index[atm_index].1 = 0;
-            //} else {
-            //    basis_global_index[atm_index].0 = 0;
-            //    basis_global_index[atm_index].1 = 0;
-            //}
             let tmp_path = format!("{}/{}.json",&ctrl.basis_path, &atm_elem);
             let mut tmp_basis = Basis4Elem::parse_json_from_file(tmp_path,&cint_type).unwrap();
-/* 
-                if Path::new(&tmp_path).exists() {
-                    Basis4Elem::parse_json_from_file(tmp_path,&cint_type).unwrap()
-                }
-                else {
-
-                    let re = Regex::new(r"/{1}[^/]*$").unwrap();
-                    let cap = re.captures(&ctrl.basis_path).unwrap();
-                    let basis_name = cap[0][1..].to_string();
-                    println!("No local {} for {}, trying to download from BasisSetExchange.org...", basis_name, atm_elem);
-                    bse_downloader::bse_basis_getter(&basis_name,&geom, &ctrl.basis_path);
-                    basis_modifier(&tmp_path);
-                    Basis4Elem::parse_json_from_file(tmp_path,&cint_type).unwrap()        
-                };
- */
             let mut num_basis_per_atm = 0_usize;
             for tmp_bascell in &tmp_basis.electron_shells {
                 let mut num_primitive: i32 = tmp_bascell.exponents.len() as i32;
@@ -692,7 +686,7 @@ impl Molecule {
                     CintType::Cartesian => {let ang = tmp_bas_vec[1] as usize; (ang,(ang+1)*(ang+2)/2)},
                     CintType::Spheric => {let ang = tmp_bas_vec[1] as usize; (ang, ang*2+1)},
                     // NOTE: Spinor is not yet implemented properly, IGOR 2024-08-18
-                    CintType::Spinor => {let ang = tmp_bas_vec[1] as usize; (ang, ang*2+1)},
+                    CintType::Spinor => {panic!("Spinor is not yet implemented")},
                 };
                 let mut tmp_len = 0;
                 let tmp_start = if cint_fdqc.len()==0 {0} 
@@ -731,6 +725,80 @@ impl Molecule {
                 basis_total[atm_index].global_index.1 = num_basis_per_atm;
             }
         };
+        // for ghost atoms with basis sets
+        if geom.ghost_bs_elem.len() > 0 {
+            let atm_index_start = geom.elem.len();
+            for (local_atm_index, atm_elem) in geom.ghost_bs_elem.iter().enumerate() {
+                let atm_index = local_atm_index+atm_index_start;
+                let tmp_path = format!("{}/{}.json",&ctrl.basis_path, &atm_elem);
+                let mut tmp_basis = Basis4Elem::parse_json_from_file(tmp_path,&cint_type).unwrap();
+                let mut num_basis_per_atm = 0_usize;
+                for tmp_bascell in &tmp_basis.electron_shells {
+                    let mut num_primitive: i32 = tmp_bascell.exponents.len() as i32;
+                    let mut num_contracted: i32 = tmp_bascell.coefficients.len() as i32;
+                    let mut angular_mom: i32 = tmp_bascell.angular_momentum[0];
+                    let tmp_bas_info = BasInfo::new();
+                    tmp_bascell.exponents.iter().for_each(|x| {
+                        env.push(*x);
+                    });
+                    for (index, coe_vec) in tmp_bascell.coefficients.iter().enumerate() {
+                        coe_vec.iter().for_each(|x| {
+                            env.push(*x);
+                        });
+                    };
+                    let mut tmp_bas_vec: Vec<i32> = vec![atm_index as i32, 
+                                angular_mom,
+                                num_primitive,
+                                num_contracted,
+                                0,
+                                basis_start,
+                                basis_start+num_primitive,
+                                0];
+                    let (ang,tmp_bas_num) = match &cint_type {
+                        CintType::Cartesian => {let ang = tmp_bas_vec[1] as usize; (ang,(ang+1)*(ang+2)/2)},
+                        CintType::Spheric => {let ang = tmp_bas_vec[1] as usize; (ang, ang*2+1)},
+                        // NOTE: Spinor is not yet implemented properly, IGOR 2024-08-18
+                        CintType::Spinor => {panic!("Spinor is not yet implemented")},
+                    };
+                    let mut tmp_len = 0;
+                    let tmp_start = if cint_fdqc.len()==0 {0} 
+                                        else {cint_fdqc[cint_fdqc.len()-1][0]+cint_fdqc[cint_fdqc.len()-1][1]};
+                    //Now for bas info. of each basis function and their link to the libcint data structure
+                    (0..num_contracted as usize).into_iter().for_each(|index0| {
+                        (0..tmp_bas_num).into_iter().for_each(|index1| {
+                            let bas_type = if num_primitive == 1 {
+                                String::from("Primitive")
+                            } else {
+                                String::from("Contracted")
+                            };
+                            tmp_len += 1;
+                            bas_info.push(BasInfo {
+                                bas_name: get_basis_name(ang, &cint_type, index1),
+                                bas_type,
+                                elem_index0: atm_index,
+                                cint_index0: bas.len(),
+                                cint_index1: index0*tmp_bas_num+index1,
+                            })
+                        });
+                    });
+                    cint_fdqc.push(vec![tmp_start,tmp_len]);
+                    bas.push(tmp_bas_vec);
+                    basis_start += num_primitive + num_primitive*num_contracted;
+                    num_basis_per_atm += tmp_len;
+                }
+
+                basis_total.push(tmp_basis);
+
+                if atm_index !=0 {
+                    basis_total[atm_index].global_index.0 = basis_total[atm_index-1].global_index.0 + basis_total[atm_index-1].global_index.1; 
+                    basis_total[atm_index].global_index.1 = num_basis_per_atm;
+                } else {
+                    basis_total[atm_index].global_index.0 = 0;
+                    basis_total[atm_index].global_index.1 = num_basis_per_atm;
+                }
+            };
+        }
+
 
         let num_basis = bas_info.len();
         // IMPORTRANT:: At current stage, we skip the linear-dependence check of the basis sets
@@ -841,6 +909,33 @@ impl Molecule {
 
         (basis_total, atm, bas, env,bas_info,cint_fdqc,num_elec,num_basis, num_state, final_ecpbas)
     }
+
+    ///// it is important to import the ghost basis set after the procedure of importing the standard basis sets
+    //pub fn import_ghost_basis_set(geom: &GeomCell) {
+    //    if geom.ghost_bs_elem.len() > 0 {
+    //        let mut ghost_bas: Vec<Vec<i32>> = vec![];
+    //        let mut ghost_env: Vec<f64> = vec![];
+    //        let mut ghost_bas_info: Vec<BasInfo> = vec![];
+    //        let mut ghost_cint_fdqc: Vec<Vec<i32>> = vec![];
+    //        let mut ghost_num_elec: Vec<f64> = vec![0.0, 0.0, 0.0];
+    //        let mut ghost_num_basis: usize = 0;
+    //        let mut ghost_num_state: usize = 0;
+    //        let mut ghost_ecpbas: Option<Vec<Vec<i32>>> = None;
+    //        for (atm_index, atm_elem) in self.geom.ghost_bs_elem.iter().enumerate() {
+    //            let mut ghost_basis = Basis4Elem::parse_json_from_file(format!("{}/{}.json", &self.ctrl.basis_path, &atm_elem), &self.cint_type).unwrap();
+    //            let mut ghost_num_basis_per_atm = 0_usize;
+    //            for tmp_bascell in &ghost_basis.electron_shells {
+    //                let mut num_primitive: i32 = tmp_bascell.exponents.len() as i32;
+    //                let mut num_contracted: i32 = tmp_bascell.coefficients.len() as i32;
+    //                let mut angular_mom: i32 = tmp_bascell.angular_momentum[0];
+    //                let tmp_bas_info = BasInfo::new();
+    //                tmp_bascell.exponents.iter().for_each(|x| {
+    //                    ghost_env.push(*x);
+    //                });
+    //            }
+    //        }
+    //    }
+    //}
 
     pub fn int_ij_matrixuppers(&self,op_name: String, comp: usize) -> Vec<MatrixUpper<f64>> {
         let mut cur_op = op_name.clone();
@@ -1098,17 +1193,29 @@ impl Molecule {
             out.iter_mut().zip(tmp_ecp.iter_matrixupper().unwrap()).for_each(|(o,f)| {
                 *o = *f
             });
-
+        } else if op_name.eq("point charge") {
+            let orig_orig = cint_data.get_rinv_origin();
+            self.geom.ghost_pc_chrg.iter().zip(self.geom.ghost_pc_pos.iter_columns_full()).for_each(|(charge, pos)| {
+                cint_data.set_rinv_origin(pos);
+                let mut tmp_out = vec![];
+                let mut tmp_out_shape = vec![];
+                (tmp_out, tmp_out_shape) = cint_data.integral_s2ij::<int1e_rinv>(None);
+                out.iter_mut().zip(tmp_out.iter()).for_each(|(o, t)| {
+                    *o += charge * *t
+                });
+            });
+            cint_data.set_rinv_origin(&orig_orig);
         } else if op_name.eq("hcore") {
+            // for the kinetic term
             (out, out_shape) = cint_data.integral_s2ij::<int1e_kin>(None);
             let mut tmp_out = vec![];
             let mut tmp_out_shape = vec![];
+            // for the standard nuclear term
             (tmp_out, tmp_out_shape) = cint_data.integral_s2ij::<int1e_nuc>(None);
-
             out.iter_mut().zip(tmp_out.iter()).for_each(|(o, t)| {
                 *o += *t
             });
-
+            // for the standard ECP term
             if let Some(ecpbas) = &self.cint_ecpbas {
                 (tmp_out, tmp_out_shape) = cint_data.integral_ecp_s1::<ECPscalar>(None);
                 let tmp_ecp = MatrixFull::from_vec([self.num_basis,self.num_basis], tmp_out).unwrap();
@@ -1117,6 +1224,23 @@ impl Molecule {
                     *o += *f
                 });
             }
+            // for the ghost point charge term
+            // <a|-Za/|Ra-r||b> -> -Za*<a|1/|r||b> by setting PTR_RINV_ORIG as Ra
+            if self.geom.ghost_pc_chrg.len() > 0 {
+                let orig_orig = cint_data.get_rinv_origin();
+                self.geom.ghost_pc_chrg.iter().zip(self.geom.ghost_pc_pos.iter_columns_full()).for_each(|(charge, pos)| {
+                    //println!("debug pc_pos: {:?}, charg: {}", pos, charge);
+                    cint_data.set_rinv_origin(pos);
+                    let mut tmp_out = vec![];
+                    let mut tmp_out_shape = vec![];
+                    (tmp_out, tmp_out_shape) = cint_data.integral_s2ij::<int1e_rinv>(None);
+                    out.iter_mut().zip(tmp_out.iter()).for_each(|(o, t)| {
+                        *o -= charge * *t
+                    });
+                });
+                cint_data.set_rinv_origin(&orig_orig);
+            }
+
         } else {
             panic!("Error:: op_name: {}", op_name);
         }
@@ -2730,10 +2854,6 @@ impl Molecule {
         (out, out_shape) = cint_data.integral_s2ij::<int3c2e>(Some(&shl_slices));
 
         let mut tmp_ri3fn = MatrixFull::from_vec([n_baspar, n_auxbas],out).unwrap();
-
-
-
-
 
         let mut basbas2baspar = MatrixFull::new([n_basis,n_basis],0_usize);
         let mut baspar2basbas = vec![[0_usize;2];n_baspar];

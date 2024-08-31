@@ -310,7 +310,7 @@ pub fn bse_auxbas_getter(basis_set: &String, cell: &GeomCell, path: &String) {
 }
 
 
-pub fn bse_auxbas_getter_v2(basis_set: &String, cell: &GeomCell, path: &String, required_elem: &Vec<String>) {
+pub fn bse_auxbas_getter_v2(basis_set: &String, cell: &GeomCell, path: &String, required_elem: &Vec<String>, print_level: usize) {
 
     //check if path exists
     //create_dir_all(path);
@@ -344,9 +344,12 @@ pub fn bse_auxbas_getter_v2(basis_set: &String, cell: &GeomCell, path: &String, 
     let elem_set: String = required_elem.iter().map(|a| format!("{},",a)).collect();
     let elem_num = required_elem.len();
 
+    //println!("required_elem: {:?}", &required_elem);
+    //println!("elem_set: {:?}", &elem_set);
+
     let url = format!("http://basissetexchange.org/api/basis/{}/format/json?elements={}", basis_set, elem_set);
 
-    println!("url = {}", url);
+    if print_level >=2 {println!("url = {}", url)};
     
     let resp = reqwest::blocking::Client::new()
         .get(&url)
@@ -355,28 +358,39 @@ pub fn bse_auxbas_getter_v2(basis_set: &String, cell: &GeomCell, path: &String, 
         .expect("Download failed, please check auxiliary basis set name or element.")
         .json::<Info>()
         .unwrap();
-    //let response = reqwest::blocking::Client::new().get(&url).headers(headers).send().unwrap()..unwrap();
-    if elem_num == resp.elements.len() {
-        println!("{} for {:?} has been successfully downloaded.", basis_set, required_elem);
-    }
-    else {
-        println!("Warning: the number of elements downloaded ({}) is not equal to the number of required elements ({})",
-        resp.elements.len(), elem_num);
+
+    if print_level >= 1 { 
+        if elem_num == resp.elements.len() {
+            println!("{} for {:?} has been successfully downloaded.", basis_set, required_elem);
+        }
+        else {
+            println!("Warning: the number of elements downloaded ({}) is not equal to the number of required elements ({})",
+            resp.elements.len(), elem_num);
+        }
     }
 
     let required_elem_mass_charge = get_mass_charge(&required_elem);
     let required_elem_charge: Vec<String> = required_elem_mass_charge.iter().map(|(a, b)| (*b as usize).to_string()).collect();
 
-    let mut index = 0;
-    for elem in required_elem {
-        let path_to_elem = format!("{}/{}.json", path, elem); 
-        let atom_num = required_elem_charge[index].clone();
-        //let atom_num = elem_indexer(&elem).to_string();
-        let basis = resp.elements.get(&atom_num).unwrap();
+    println!("debug required_elem_charge: {:?}", &required_elem_charge);
+
+    //let mut index = 0;
+    required_elem.iter().zip(required_elem_charge.iter()).for_each(|(elem, atom_num)| {
+        let path_to_elem = format!("{}/{}.json", path, elem);
+        let basis = resp.elements.get(atom_num).unwrap();
         let mut f = File::create(&path_to_elem).unwrap();
         let basis_final = serde_json::to_writer_pretty(f, basis);
         //basis_modifier(&path_to_elem);
-    }
+    });
+    //for elem in required_elem {
+    //    let path_to_elem = format!("{}/{}.json", path, elem); 
+    //    let atom_num = required_elem_charge[index].clone();
+    //    //let atom_num = elem_indexer(&elem).to_string();
+    //    let basis = resp.elements.get(&atom_num).unwrap();
+    //    let mut f = File::create(&path_to_elem).unwrap();
+    //    let basis_final = serde_json::to_writer_pretty(f, basis);
+    //    //basis_modifier(&path_to_elem);
+    //}
 
 }
 
@@ -454,6 +468,12 @@ pub fn local_element_checker(path: &String) -> Vec<String> {
 pub fn ctrl_element_checker(cell: &GeomCell) -> Vec<String> {
     let raw_elem = &cell.elem;
     let mut elem_set = vec![];
+    for item in raw_elem.iter() {
+        if !elem_set.contains(item) {
+            elem_set.push(item.clone())
+        }
+    }
+    let raw_elem = &cell.ghost_bs_elem;
     for item in raw_elem.iter() {
         if !elem_set.contains(item) {
             elem_set.push(item.clone())

@@ -2,17 +2,13 @@ use crate::check_norm::force_state_occupation::adapt_occupation_with_force_proje
 use crate::check_norm::{self, generate_occupation_frac_occ, generate_occupation_integer, generate_occupation_sad, OCCType};
 use crate::dft::gen_grids::prune::prune_by_rho;
 use crate::dft::Grids;
-use crate::geom_io::calc_nuc_energy_with_ecp;
+use crate::geom_io::{calc_nuc_energy, calc_nuc_energy_with_point_charges};
 use crate::utilities::{create_pool, TimeRecords};
 ////use blas_src::openblas::dgemm;
 mod addons;
 mod fchk;
 mod pyrest_scf_io;
 
-//use crate::basis_io::ecp::test_ecp;
-
-//use libc::{abs, _SC_AIO_LISTIO_MAX};
-//use clap::value_parser;
 use pyo3::{pyclass, pymethods, pyfunction};
 use tensors::matrix_blas_lapack::{_dgemm, _dgemm_full, _dgemv, _dinverse, _dspgvx, _dsymm, _dsyrk, _power, _power_rayon};
 use tensors::{map_full_to_upper, map_upper_to_full, ri, BasicMatrix, ERIFold4, ERIFull, MathMatrix, MatrixFull, MatrixFullSlice, MatrixFullSliceMut, MatrixUpper, MatrixUpperSlice, ParMathMatrix, RIFull, TensorSliceMut};
@@ -24,22 +20,6 @@ use std::sync::{Mutex, Arc,mpsc};
 use std::thread;
 use crossbeam::{channel::{unbounded,bounded},thread::{Scope,scope}};
 use std::sync::mpsc::{channel, Receiver};
-//use std::arch;
-//use ndarray;
-//use hdf5;
-//use libc::SCHED_OTHER;
-//use core::num;
-//use std::fmt::format;
-//use std::io::Write;
-//use std::path::Path;
-//use std::{fs, vec};
-//use std::thread::panicking;
-//use std::{vec, fs};
-//use rest_libcint::{CINTR2CDATA, CintType};
-//use crate::geom_io::{GeomCell,MOrC, GeomUnit};
-//use crate::basis_io::{Basis4Elem,BasInfo};
-//use crate::post_scf_analysis::save_chkfile;
-//use crate::dft::{Grids, numerical_density, par_numerical_density};
 use crate::isdf::{prepare_for_ri_isdf, init_by_rho, prepare_m_isdf};
 use crate::molecule_io::{Molecule, generate_ri3fn_from_rimatr};
 use crate::tensors::{TensorOpt,TensorOptMut,TensorSlice};
@@ -166,8 +146,21 @@ impl SCF {
 
         let print_level = self.mol.ctrl.print_level;
 
-        self.nuc_energy = calc_nuc_energy_with_ecp(&self.mol.geom, &self.mol.basis4elem);
-        if print_level>0 {println!("Nuc_energy: {}",self.nuc_energy)};
+        self.nuc_energy = calc_nuc_energy(&self.mol.geom, &self.mol.basis4elem);
+
+
+        let nuc_energy_pc = calc_nuc_energy_with_point_charges(&self.mol.geom, &self.mol.basis4elem);
+
+        if print_level>0 {
+            println!("Nuc_energy: {:16.8} Hartree",self.nuc_energy);
+            if nuc_energy_pc.abs() > 1.0e-4 {
+                println!("External potential due to point charges exists: {:16.8} Hartree", &nuc_energy_pc);
+            }
+        }
+
+        self.nuc_energy += nuc_energy_pc;
+
+
 
         self.ovlp = self.mol.int_ij_matrixupper(String::from("ovlp"));
         self.h_core = self.mol.int_ij_matrixupper(String::from("hcore"));

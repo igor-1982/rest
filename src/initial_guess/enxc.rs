@@ -10,6 +10,7 @@ use pyo3::pyclass;
 
 use crate::{molecule_io::Molecule, scf_io::SCF};
 use crate::constants::{ATM_NUC_MOD_OF, NUC_ECP, SPECIES_INFO};
+use rest_libcint::prelude::ECPscalar;
 
 
 
@@ -374,7 +375,7 @@ pub fn effective_nxc_matrix(mol: &mut Molecule) -> MatrixUpper<f64> {
     let mut env = &mut mol.cint_env;
     mol.geom.elem.iter().zip(atm.iter_mut()).enumerate().for_each(|(atm_index, (elem, cur_atm))| {
         let file_name = format!("./enxc/{}.json", atm_index);
-        //println!("{}",&file_name);
+        println!("{}",&file_name);
         let mut tmp_enxc = parse_enxc_potential(&file_name[..]).unwrap();
 
         cur_atm[ATM_NUC_MOD_OF] = NUC_ECP;
@@ -449,49 +450,54 @@ pub fn evaluate_primitive_enxc_operator(enxc: &mut MatrixUpper<f64>,
     let nenxc = enxcbas.len() as i32;
     cint_data.initial_r2c_with_ecp(&final_cint_atm, natm, &final_cint_bas, nbas_shell, enxcbas, nenxc, &final_cint_env);
     cint_data.cint1e_ecp_optimizer_rust();
-    let mut cur_op = String::from("ecp");
 
-    //now fill the ENXC matrix
-    //let nbas_shell = mol.cint_bas.len();
-    for j in 0..nbas_shell as usize{
-        let bas_start_j = cint_fdqc[j][0];
-        let bas_len_j = cint_fdqc[j][1];
-        // for i < j
-        for i in 0..j {
-            let bas_start_i = cint_fdqc[i][0];
-            let bas_len_i = cint_fdqc[i][1];
-            let tmp_size = [bas_len_i,bas_len_j];
-            let mat_local = MatrixFull::from_vec(tmp_size,
-                cint_data.cint_ij(i as i32, j as i32, &cur_op)).unwrap();
-            (0..bas_len_j).into_iter().for_each(|tmp_j| {
-                let gj = tmp_j + bas_start_j;
-                let global_ij_start = gj*(gj+1)/2+bas_start_i;
-                let local_ij_start = tmp_j*bas_len_i;
-                //let length = if bas_start_i+bas_len_i <= gj+1 {bas_len_i} else {gj+1-bas_start_i};
-                let length = bas_len_i;
-                let mat_global_j = enxc.get1d_slice_mut(global_ij_start,length).unwrap();
-                let mat_local_j = mat_local.get1d_slice(local_ij_start,length).unwrap();
-                mat_global_j.iter_mut().zip(mat_local_j.iter()).for_each(|(gij,lij)| {
-                    *gij = *lij
-                });
-            });
-        };
-        // for i = j 
-        let tmp_size = [bas_len_j,bas_len_j];
-        let mat_local = MatrixFull::from_vec(tmp_size,
-            cint_data.cint_ij(j as i32, j as i32, &cur_op)).unwrap();
-        (0..bas_len_j).into_iter().for_each(|tmp_j| {
-            let gj = bas_start_j + tmp_j;
-            let global_ij_start = gj*(gj+1)/2+bas_start_j;
-            let local_ij_start = tmp_j*bas_len_j;
-            let length = tmp_j + 1;
-            let mat_global_j = enxc.get1d_slice_mut(global_ij_start,length).unwrap();
-            let mat_local_j = mat_local.get1d_slice(local_ij_start,length).unwrap();
-            mat_global_j.iter_mut().zip(mat_local_j.iter()).for_each(|(gij,lij)| {
-                *gij = *lij
-            });
-        });
-    }
+    let (out, shape) = cint_data.integral_ecp_s1::<ECPscalar>(None);
+    let out_matr = MatrixFull::from_vec([shape[0], shape[1]], out).unwrap();
+    enxc.iter_mut().zip(out_matr.iter_matrixupper().unwrap()).for_each(|(o,i)| {*o = *i});
+
+    //let mut cur_op = String::from("ecp");
+
+    ////now fill the ENXC matrix
+    ////let nbas_shell = mol.cint_bas.len();
+    //for j in 0..nbas_shell as usize{
+    //    let bas_start_j = cint_fdqc[j][0];
+    //    let bas_len_j = cint_fdqc[j][1];
+    //    // for i < j
+    //    for i in 0..j {
+    //        let bas_start_i = cint_fdqc[i][0];
+    //        let bas_len_i = cint_fdqc[i][1];
+    //        let tmp_size = [bas_len_i,bas_len_j];
+    //        let mat_local = MatrixFull::from_vec(tmp_size,
+    //            cint_data.cint_ij(i as i32, j as i32, &cur_op)).unwrap();
+    //        (0..bas_len_j).into_iter().for_each(|tmp_j| {
+    //            let gj = tmp_j + bas_start_j;
+    //            let global_ij_start = gj*(gj+1)/2+bas_start_i;
+    //            let local_ij_start = tmp_j*bas_len_i;
+    //            //let length = if bas_start_i+bas_len_i <= gj+1 {bas_len_i} else {gj+1-bas_start_i};
+    //            let length = bas_len_i;
+    //            let mat_global_j = enxc.get1d_slice_mut(global_ij_start,length).unwrap();
+    //            let mat_local_j = mat_local.get1d_slice(local_ij_start,length).unwrap();
+    //            mat_global_j.iter_mut().zip(mat_local_j.iter()).for_each(|(gij,lij)| {
+    //                *gij = *lij
+    //            });
+    //        });
+    //    };
+    //    // for i = j 
+    //    let tmp_size = [bas_len_j,bas_len_j];
+    //    let mat_local = MatrixFull::from_vec(tmp_size,
+    //        cint_data.cint_ij(j as i32, j as i32, &cur_op)).unwrap();
+    //    (0..bas_len_j).into_iter().for_each(|tmp_j| {
+    //        let gj = bas_start_j + tmp_j;
+    //        let global_ij_start = gj*(gj+1)/2+bas_start_j;
+    //        let local_ij_start = tmp_j*bas_len_j;
+    //        let length = tmp_j + 1;
+    //        let mat_global_j = enxc.get1d_slice_mut(global_ij_start,length).unwrap();
+    //        let mat_local_j = mat_local.get1d_slice(local_ij_start,length).unwrap();
+    //        mat_global_j.iter_mut().zip(mat_local_j.iter()).for_each(|(gij,lij)| {
+    //            *gij = *lij
+    //        });
+    //    });
+    //}
 }
 
 

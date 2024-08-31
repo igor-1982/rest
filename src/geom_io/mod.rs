@@ -40,6 +40,12 @@ pub struct GeomCell {
     #[pyo3(get,set)]
     pub nfree: usize,
     pub pbc: MOrC,
+    pub ghost_bs_elem:     Vec<String>,
+    pub ghost_bs_pos: MatrixFull<f64>,
+    pub ghost_pc_chrg:     Vec<f64>,
+    pub ghost_pc_pos: MatrixFull<f64>,
+    pub ghost_ep_path:     Vec<String>,
+    pub ghost_ep_pos: MatrixFull<f64>,
     #[pyo3(get,set)]
     pub rest : Vec<(usize,String)>,
 }
@@ -139,6 +145,12 @@ impl GeomCell {
             lattice         : MatrixFull::empty(),
             pbc             : MOrC::Molecule,
             rest            : vec![],
+            ghost_bs_elem   : vec![],
+            ghost_bs_pos    : MatrixFull::empty(),
+            ghost_pc_chrg   : vec![],
+            ghost_pc_pos    : MatrixFull::empty(),
+            ghost_ep_path   : vec![],
+            ghost_ep_pos    : MatrixFull::empty(),
         }
     }
     pub fn copy(&mut self, name:String) -> GeomCell {
@@ -501,6 +513,112 @@ impl GeomCell {
 
     }
 
+    pub fn parse_ghost_atoms_from_string(position: &String, unit: &GeomUnit) -> 
+        anyhow::Result<(Option<(Vec<String>,MatrixFull<f64>)>,
+                        Option<(Vec<f64>,MatrixFull<f64>)>,
+                        Option<(Vec<String>,MatrixFull<f64>)>)> {
+        // There are three types of ghost atoms:
+        // type = basis set:     consider the basis set of the element <elem> at the given position 
+        // type = point charge:  consider a point charge of <charge> at the given position
+        // type = potential:     consider an effective potential stored in <ecp_file> at the given position
+        let re0 = Regex::new(r"(?x)\s*
+                            basis\sset\s*,?            # the type 
+                            \s+
+                            (?P<elem>\w{1,2})\s*,?    # the element
+                            \s+
+                            (?P<x>[\+-]?\d+.\d+)\s*,?            # the 'x' position
+                            \s+
+                            (?P<y>[\+-]?\d+.\d+)\s*,?            # the 'y' position
+                            \s+
+                            (?P<z>[\+-]?\d+.\d+)\s*,?            # the 'z' position
+                            \s*").unwrap();
+        let mut tmp_bs_ele: Vec<String> = vec![];
+        let mut tmp_bs_pos: Vec<f64> = vec![];
+        for cap in re0.captures_iter(&position) {
+            tmp_bs_ele.push(cap[1].to_string());
+            tmp_bs_pos.push(cap[2].parse().unwrap());
+            tmp_bs_pos.push(cap[3].parse().unwrap());
+            tmp_bs_pos.push(cap[4].parse().unwrap());
+        };
+
+        let bs_return = if tmp_bs_ele.len() ==0 {
+            None
+        } else {
+            let tmp_size: [usize;2] = [3,tmp_bs_pos.len()/3];
+            let mut tmp_pos_tensor = MatrixFull::from_vec(tmp_size, tmp_bs_pos).unwrap();
+            if let GeomUnit::Angstrom = unit {
+                // To store the geometry position in "Bohr" according to the convention of quantum chemistry. 
+                tmp_pos_tensor.self_multiple(ANG.powf(-1.0));
+            };
+            Some((tmp_bs_ele, tmp_pos_tensor))
+        };
+        let re1 = Regex::new(r"(?x)\s*
+                            point\scharge\s*,?                 # the type 
+                            \s+
+                            (?P<charge>[\+-]?\d+.\d+)\s*,?       # the point charge 
+                            \s+
+                            (?P<x>[\+-]?\d+.\d+)\s*,?            # the 'x' position
+                            \s+
+                            (?P<y>[\+-]?\d+.\d+)\s*,?            # the 'y' position
+                            \s+
+                            (?P<z>[\+-]?\d+.\d+)\s*,?            # the 'z' position
+                            \s*").unwrap();
+        let mut tmp_pc_chg: Vec<f64> = vec![];
+        let mut tmp_pc_pos: Vec<f64> = vec![];
+        //println!("debug: {:?}", &position);
+        for cap in re1.captures_iter(&position) {
+            println!("debug find it");
+            tmp_pc_chg.push(cap[1].parse().unwrap());
+            tmp_pc_pos.push(cap[2].parse().unwrap());
+            tmp_pc_pos.push(cap[3].parse().unwrap());
+            tmp_pc_pos.push(cap[4].parse().unwrap());
+        };
+        let pc_return = if tmp_pc_chg.len() ==0 {
+            None
+        } else {
+            let tmp_size: [usize;2] = [3,tmp_pc_pos.len()/3];
+            let mut tmp_pos_tensor = MatrixFull::from_vec(tmp_size, tmp_pc_pos).unwrap();
+            if let GeomUnit::Angstrom = unit {
+                // To store the geometry position in "Bohr" according to the convention of quantum chemistry. 
+                tmp_pos_tensor.self_multiple(ANG.powf(-1.0));
+            };
+            Some((tmp_pc_chg, tmp_pos_tensor))
+        };
+        let re2 = Regex::new(r"(?x)\s*
+                            \s*potential\s*,?                    # the type 
+                            \s+
+                            (?P<ecp_file>\w+)\s*,?               # the path to the potential file
+                            \s+
+                            (?P<x>[\+-]?\d+.\d+)\s*,?            # the 'x' position
+                            \s+
+                            (?P<y>[\+-]?\d+.\d+)\s*,?            # the 'y' position
+                            \s+
+                            (?P<z>[\+-]?\d+.\d+)\s*,?            # the 'z' position
+                            \s*").unwrap();
+        let mut tmp_ep_pth: Vec<String> = vec![];
+        let mut tmp_ep_pos: Vec<f64> = vec![];
+        for cap in re2.captures_iter(&position) {
+            tmp_ep_pth.push(cap[1].to_string());
+            tmp_ep_pos.push(cap[2].parse().unwrap());
+            tmp_ep_pos.push(cap[3].parse().unwrap());
+            tmp_ep_pos.push(cap[4].parse().unwrap());
+        };
+        let ep_return = if tmp_ep_pth.len() ==0 {
+            None
+        } else {
+            let tmp_size: [usize;2] = [3,tmp_ep_pos.len()/3];
+            let mut tmp_pos_tensor = MatrixFull::from_vec(tmp_size, tmp_ep_pos).unwrap();
+            if let GeomUnit::Angstrom = unit {
+                // To store the geometry position in "Bohr" according to the convention of quantum chemistry. 
+                tmp_pos_tensor.self_multiple(ANG.powf(-1.0));
+            };
+            Some((tmp_ep_pth, tmp_pos_tensor))
+        };
+
+        Ok((bs_return, pc_return, ep_return))
+
+    }
+
     pub fn to_xyz(&self, filename: String) {
         let ang = crate::constants::ANG;
         let mut input = fs::File::create(&filename).unwrap();
@@ -539,14 +657,14 @@ impl GeomCell {
     }
 
     // evalate the dipole moment of the nuclear charge
-    pub fn evaluate_dipole_moment(&self, orig: Option<Vec<f64>>) -> (Vec<f64>, f64) {
+    pub fn evaluate_dipole_moment(&self, orig: Option<[f64;3]>) -> ([f64;3], f64) {
         let r_orig = if let Some(u_orig) = orig {
             u_orig.clone()
         } else {
-            vec![0.0;3]
+            [0.0;3]
         };
         let mut mass_charge = get_mass_charge(&self.elem);
-        let mut dipole = vec![0.0;3];
+        let mut dipole = [0.0;3];
         let mut mass_sum = 0.0;
         self.position.iter_columns_full().zip(mass_charge.iter()).for_each(|(pos, (mass, charge))| {
             mass_sum += mass;
@@ -563,7 +681,7 @@ impl GeomCell {
 
 }
 
-pub fn calc_nuc_energy_with_ecp(geom: &GeomCell, basis4elem: &Vec<Basis4Elem>) -> f64 {
+pub fn calc_nuc_energy(geom: &GeomCell, basis4elem: &Vec<Basis4Elem>) -> f64 {
     let mass_charge = get_mass_charge(&geom.elem);
     let mut nuc_energy = 0.0;
     let tmp_range1 = (0..geom.position.size[1]);
@@ -583,11 +701,40 @@ pub fn calc_nuc_energy_with_ecp(geom: &GeomCell, basis4elem: &Vec<Basis4Elem>) -
             nuc_energy += i_charge*j_charge/dd;
         });
     });
+
+    nuc_energy
+}
+pub fn calc_nuc_energy_with_point_charges(geom: &GeomCell, basis4elem: &Vec<Basis4Elem>) -> f64 {
+    let mass_charge = get_mass_charge(&geom.elem);
+    let mut nuc_energy = 0.0;
+    let tmp_range1 = (0..geom.position.size[1]);
+    if geom.ghost_pc_chrg.len() > 0 {
+        geom.ghost_pc_chrg.iter().zip(geom.ghost_pc_pos.iter_columns_full()).enumerate()
+        .for_each(|(i,(chg, ri))| {
+            // calculate the nuclear energy between the real and ghost atoms
+            geom.position.iter_columns_full().enumerate().for_each(|(j,rj)| {
+                let mut j_charge = mass_charge[j].1;
+                if let Some(j_ecp) = basis4elem.get(j).unwrap().ecp_electrons {
+                    j_charge -= j_ecp as f64;
+                };
+                let dd = ri.iter().zip(rj.iter())
+                    .fold(0.0, |acc, (ri, rj)| acc + (ri-rj).powf(2.0)).sqrt();
+                nuc_energy += *chg*j_charge/dd;
+            });
+            //// calculate the nuclear energy between the ghost atoms
+            //geom.ghost_pc_chrg[0..i].iter().zip(geom.ghost_pc_pos.iter_columns(0..i)).enumerate()
+            //.for_each(|(j,(chg_j, rj))| {
+            //    let dd = ri.iter().zip(rj.iter())
+            //        .fold(0.0, |acc, (ri, rj)| acc + (ri-rj).powf(2.0)).sqrt();
+            //    nuc_energy += *chg*chg_j/dd;
+            //});
+        });
+    };
     nuc_energy
 }
 
 #[test]
-fn test_string_parse() {
+fn test_string_parse_1() {
     let geom_str = "
         C   -6.1218053484 -0.7171513386  0.0000000000
         C   -4.9442285958 -1.4113046519  0.0000000000
@@ -683,5 +830,50 @@ fn test_string_parse() {
             cap[2].to_string(), 
             cap[3].to_string(), 
             cap[4].to_string());
+    }
+}
+#[test]
+pub fn test_parse() {
+    let position = "   point charge -0.523 +1.0000 1.0 1.0\n    point charge 1.3 0.3 0.2 1.33\n".to_string();
+    let position_2 = "   point charge -0.523\n    point charge 1.3\n".to_string();
+
+    let re1 = Regex::new(r"(?x)\s*
+                            point\scharge\s*,?                 # the type 
+                            \s+
+                            (?P<c>[\+-]?\d+.\d+)\s*,?       # the point charge 
+                            \s+
+                            (?P<x>[\+-]?\d+.\d+)\s*,?            # the 'x' position
+                            \s+
+                            (?P<y>[\+-]?\d+.\d+)\s*,?            # the 'y' position
+                            \s+
+                            (?P<z>[\+-]?\d+.\d+)                 # the 'z' position
+                            \s*").unwrap();
+    let re2 = Regex::new(r"(?x)\s*
+                            point\scharge\s*(?P<charge>[\+-]?\d+.\d+)
+                            "
+                            /*
+                            \s+
+                            (?P<x>[\+-]?\d+.\d+)            # the 'x' position
+                            \s+
+                            (?P<y>[\+-]?\d+.\d+)            # the 'y' position
+                            \s+
+                            (?P<z>[\+-]?\d+.\d+)                 # the 'z' position
+                            \s*"
+                            */
+                            ).unwrap();
+    println!("debug");
+    for x in re2.capture_names() {
+        match x {
+            Some(v) => println!("{}", v),
+            None => println!("None"),
+        }
+    };
+    for cap in re1.captures_iter(&position) {
+        println!("debug: re1_cap: {:?}", &cap);
+        //println!("{}, {}, {}, {}", 
+        //    cap[1].to_string(), 
+        //    cap[2].to_string(), 
+        //    cap[3].to_string(), 
+        //    cap[4].to_string());
     }
 }

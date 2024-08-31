@@ -1,6 +1,7 @@
 
 use pyo3::pyclass;
 use serde::{Deserialize,Serialize};
+use tensors::MatrixFull;
 //use std::{fs, str::pattern::StrSearcher};
 use std::{fs, sync::Arc};
 use crate::{check_norm::force_state_occupation::ForceStateOccupation, dft::{DFAFamily, DFA4REST}, geom_io::{GeomCell, GeomUnit, MOrC}, utilities};
@@ -1080,10 +1081,10 @@ impl InputKeywords {
                         tmp_geomcell.position = tmp3;
                         tmp_geomcell.nfree = tmp4;
                     },
-                    serde_json::Value::String(tmp_geom) => {
+                    serde_json::Value::String(tmp_str) => {
                         let tmp_unit = tmp_geomcell.unit.clone();
                         
-                        let (tmp1,tmp2,tmp3,tmp4) = GeomCell::parse_position_from_string(tmp_geom, &tmp_unit)?;
+                        let (tmp1,tmp2,tmp3,tmp4) = GeomCell::parse_position_from_string(tmp_str, &tmp_unit)?;
 
                         tmp_geomcell.elem = tmp1;
                         tmp_geomcell.fix = tmp2;
@@ -1107,6 +1108,43 @@ impl InputKeywords {
                             println!("It is a cluster calculation for finite molecules");
                         }
                         tmp_geomcell.pbc = MOrC::Molecule;
+                    }
+                }
+                match tmp_geom.get("ghost").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_str) => {
+                        let tmp_unit = tmp_geomcell.unit.clone();
+                        //println!("debug Igor: {:?}", tmp_str);
+                        let (bs, pc, ep) = GeomCell::parse_ghost_atoms_from_string(tmp_str, &tmp_unit)?;
+                        if let Some((bs_elem, bs_pos)) = bs {
+                            tmp_geomcell.ghost_bs_elem = bs_elem;
+                            tmp_geomcell.ghost_bs_pos = bs_pos;
+                        } else {
+                            tmp_geomcell.ghost_bs_elem = vec![];
+                            tmp_geomcell.ghost_bs_pos = MatrixFull::empty();
+                        }
+                        if let Some((pc_chrg, pc_pos)) = pc {
+                            tmp_geomcell.ghost_pc_chrg = pc_chrg;
+                            tmp_geomcell.ghost_pc_pos = pc_pos;
+                        } else {
+                            tmp_geomcell.ghost_pc_chrg = vec![];
+                            tmp_geomcell.ghost_pc_pos = MatrixFull::empty();
+                        }
+                        if let Some((ep_path, ep_pos)) = ep {
+                            tmp_geomcell.ghost_ep_path = ep_path;
+                            tmp_geomcell.ghost_ep_pos = ep_pos;
+                        } else {
+                            tmp_geomcell.ghost_ep_path = vec![];
+                            tmp_geomcell.ghost_ep_pos = MatrixFull::empty();
+                        }
+                    },
+                    other => {
+                        //println!("debug: cannot recognize ghost");
+                        tmp_geomcell.ghost_bs_elem = vec![];
+                        tmp_geomcell.ghost_bs_pos = MatrixFull::empty();
+                        tmp_geomcell.ghost_pc_chrg = vec![];
+                        tmp_geomcell.ghost_pc_pos = MatrixFull::empty();
+                        tmp_geomcell.ghost_ep_path = vec![];
+                        tmp_geomcell.ghost_ep_pos = MatrixFull::empty();
                     }
                 }
             },

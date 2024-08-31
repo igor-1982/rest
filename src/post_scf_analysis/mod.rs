@@ -409,9 +409,9 @@ fn fciqmc_dump(scf_data: &SCF) {
 // the dipole moment of the nuclear part (nucl_dip) is given by scf_data.mol.geom.evaluate_dipole_moment()
 // the dipole moment of the atomic orbitals (ao_dip) is given by scf_data.mol.int_ij_matrixuppers()
 // the dipole moment of the electronic part (el_dip) is given ('ij,ji', ao_dip[x], dm)
-pub fn evaluate_dipole_moment(scf_data: &SCF, orig: Option<Vec<f64>>) -> Vec<f64> {
+pub fn evaluate_dipole_moment(scf_data: &SCF, orig: Option<[f64;3]>) -> [f64;3] {
 
-    let (nucl_dip, mass_tot) = scf_data.mol.geom.evaluate_dipole_moment(None);
+    let (mut tot_dip, mass_tot) = scf_data.mol.geom.evaluate_dipole_moment(None);
 
     let mut dm = scf_data.density_matrix[0].clone();
     if scf_data.mol.spin_channel == 2 {
@@ -422,8 +422,8 @@ pub fn evaluate_dipole_moment(scf_data: &SCF, orig: Option<Vec<f64>>) -> Vec<f64
 
     let p_orig = cint_data.get_common_origin();
 
-    let r_orig = if let Some(u_orig) = orig {
-        u_orig.clone()
+    let r_orig: [f64;3] = if let Some(u_orig) = orig {
+        u_orig.try_into().unwrap()
     } else {
         p_orig.clone()
     };
@@ -446,7 +446,11 @@ pub fn evaluate_dipole_moment(scf_data: &SCF, orig: Option<Vec<f64>>) -> Vec<f64
 
     cint_data.set_common_origin(&p_orig);
 
-    nucl_dip.iter().zip(el_dip.iter()).map(|(nucl, el)| (*nucl - *el)*AU2DEBYE).collect::<Vec<f64>>()
+    //nucl_dip.iter().zip(el_dip.iter()).map(|(nucl, el)| (*nucl - *el)*AU2DEBYE).collect::<Vec<f64>>()
+
+    tot_dip.iter_mut().zip(el_dip.iter()).for_each(|(nucl, el)| *nucl = (*nucl - *el)*AU2DEBYE);
+
+    tot_dip
 
 }
 
