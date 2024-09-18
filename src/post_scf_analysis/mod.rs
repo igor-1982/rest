@@ -430,10 +430,10 @@ pub fn evaluate_dipole_moment(scf_data: &SCF, orig: Option<[f64;3]>) -> [f64;3] 
     cint_data.set_common_origin(&r_orig);
 
     let (out, out_shape)= cint_data.integral_s1::<int1e_r>(None);
-    let mut out_shape_1 = [0;3];
-    out_shape_1.iter_mut().zip(out_shape.iter()).for_each(|(out_shape_1, &out_shape)| {*out_shape_1 = out_shape});
+    //let mut out_shape_1 = [0;3];
+    //out_shape_1.iter_mut().zip(out_shape.iter()).for_each(|(out_shape_1, &out_shape)| {*out_shape_1 = out_shape});
 
-    let ao_dip = RIFull::from_vec(out_shape_1, out).unwrap();
+    let ao_dip = RIFull::from_vec(out_shape.try_into().unwrap(), out).unwrap();
 
     let mut el_dip = [0.0;3];
     for i in 0..3 {

@@ -54,6 +54,8 @@ extern crate chrono as time;
 extern crate lazy_static;
 use std::{f64, fs::File, io::Write};
 use std::path::PathBuf;
+use basis_io::ecp::ghost_effective_potential_matrix;
+use num_traits::Pow;
 use pyo3::prelude::*;
 use autocxx::prelude::*;
 use ctrl_io::JobType;
@@ -146,16 +148,38 @@ fn main() -> anyhow::Result<()> {
     if mol.ctrl.deep_pot {
         //let mut scf_data = scf_io::SCF::build(&mut mol);
         let mut effective_hamiltonian = mol.int_ij_matrixupper(String::from("hcore"));
-        effective_hamiltonian.formated_output(5, "full");
+        //effective_hamiltonian.formated_output(5, "full");
         let effective_nxc = effective_nxc_matrix(&mut mol);
         effective_nxc.formated_output(5, "full");
         effective_hamiltonian.data.iter_mut().zip(effective_nxc.data.iter()).for_each(|(to,from)| {*to += from});
 
-        let effective_nxc = effective_nxc_tensors(&mut mol);
-        effective_nxc.formated_output(5, "full");
+        let mut ecp = mol.int_ij_matrixupper(String::from("ecp"));
+        //println!("ecp: {:?}", ecp);
+        ecp.iter_mut().zip(effective_nxc.iter()).for_each(|(to, from)| {*to -= from});
 
-        //let mut ecp = mol.int_ij_matrixupper(String::from("ecp"));
-        //ecp.formated_output(5, "full");
+        ecp.formated_output(5, "full");
+        let acc_error = ecp.iter().fold(0.0, |acc, x| {acc + x.abs()});
+        println!("acc_error: {}", acc_error);
+        
+        return Ok(())
+    }
+
+    if mol.ctrl.bench_eps {
+        let ecp = mol.int_ij_matrixupper(String::from("ecp"));
+        let enxc = effective_nxc_matrix(&mut mol);
+        let gep = ghost_effective_potential_matrix(
+            &mol.cint_env, &mol.cint_atm, &mol.cint_bas, &mol.cint_type, mol.num_basis, 
+            &mol.geom.ghost_ep_path, &mol.geom.ghost_ep_pos);
+
+        let d12 = ecp.data.iter().zip(enxc.data.iter()).fold(0.0, |acc, dt| {acc + (dt.0 -dt.1).powf(2.0)});
+        let d13 = ecp.data.iter().zip(gep.data.iter()).fold(0.0, |acc, dt| {acc + (dt.0 -dt.1).powf(2.0)});
+        let num_data = ecp.data.len() as f64;
+        println!("Compare between ECP, ENXC and GEP with the matrix sizes of");
+        println!(" {:?}, {:?}, and {:?}, respectively", ecp.size(), enxc.size(), gep.size());
+        println!("RMSDs between (ECP, ENXC) and (ECP, GEP): ({:16.8}, {:16.8})", 
+            (d12/num_data).powf(0.5), (d13/num_data).powf(0.5)
+        );
+
         return Ok(())
     }
 

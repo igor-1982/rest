@@ -108,8 +108,9 @@ pub fn initial_guess(scf_data: &mut SCF) {
             let mut effective_hamiltonian = effective_nxc_matrix(&mut cur_mol);
             init_fock.data.iter_mut().zip(effective_hamiltonian.data.iter()).for_each(|(to, from)| {*to += *from});
             scf_data.hamiltonian = [init_fock,MatrixUpper::new(1,0.0)];
+            //scf_data.hamiltonian[0].formated_output(10, "full");
         } else {
-            panic!("Error: at present the 'deep_enxc' initial guess can only be used for the close-shell problem");
+            panic!("Error: at present the 'deep_enxc' initial guess is only available for close-shell calculations");
         };
         scf_data.diagonalize_hamiltonian();
         scf_data.generate_occupation();
@@ -191,7 +192,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
 
 
 pub fn initial_guess_from_hdf5guess(mol: &Molecule) -> Vec<MatrixFull<f64>> {
-    if mol.ctrl.print_level>0 {println!("Importing density matrix from external inital guess file")};
+    if mol.ctrl.print_level>0 {println!("Importing density matrix from external initial guess file")};
     let file = hdf5::File::open(&mol.ctrl.guessfile).unwrap();
     let init_guess = file.dataset("init_guess").unwrap().read_raw::<f64>().unwrap();
     let mut dm = vec![MatrixFull::empty(),MatrixFull::empty()];

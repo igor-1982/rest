@@ -1,3 +1,4 @@
+use crate::basis_io::ecp::ghost_effective_potential_matrix;
 use crate::check_norm::force_state_occupation::adapt_occupation_with_force_projection;
 use crate::check_norm::{self, generate_occupation_frac_occ, generate_occupation_integer, generate_occupation_sad, OCCType};
 use crate::dft::gen_grids::prune::prune_by_rho;
@@ -164,6 +165,21 @@ impl SCF {
 
         self.ovlp = self.mol.int_ij_matrixupper(String::from("ovlp"));
         self.h_core = self.mol.int_ij_matrixupper(String::from("hcore"));
+
+        // For ghost effective potential
+        if self.mol.geom.ghost_ep_path.len() > 0 {
+            let tmp_matr = ghost_effective_potential_matrix(
+                &self.mol.cint_env, &self.mol.cint_atm, &self.mol.cint_bas,&self.mol.cint_type, self.mol.num_basis,
+                &self.mol.geom.ghost_ep_path, &self.mol.geom.ghost_ep_pos
+            );
+            //println!("debug ghost potential");
+            //tmp_matr.formated_output(10, "upper");
+            self.h_core.iter_mut().zip(tmp_matr.iter()).for_each(|(a,b)| *a += *b);
+        } else {
+            println!("No ghost effective potential");
+        }
+
+
         self.ijkl = if self.mol.ctrl.use_auxbas {
             None
         } else {

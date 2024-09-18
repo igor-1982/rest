@@ -403,9 +403,10 @@ impl Molecule {
         let mut cint_env = self.cint_env.clone();
         self.cint_atm.iter().zip(position.iter_columns_full()).for_each(|(atm, position)| {
             let pos_env_start = atm[1] as usize;
-            cint_env[pos_env_start] = position[0];
-            cint_env[pos_env_start+1] = position[1];
-            cint_env[pos_env_start+2] = position[2];
+            cint_env[pos_env_start..pos_env_start+3].iter_mut().zip(position.iter()).for_each(|(x, y)| {*x = *y})
+            //cint_env[pos_env_start] = position[0];
+            //cint_env[pos_env_start+1] = position[1];
+            //cint_env[pos_env_start+2] = position[2];
         });
         cint_env
     }
@@ -457,8 +458,10 @@ impl Molecule {
 
         let ctrl_elem = ctrl_element_checker(geom);
         let local_elem = local_element_checker(&ctrl.auxbas_path);
-        println!("local elements are {:?}", local_elem);
-        println!("ctrl elements are {:?}", ctrl_elem);
+        if ctrl.print_level>0 {
+            println!("local elements are {:?}", local_elem);
+            println!("ctrl elements are {:?}", ctrl_elem);
+        }
         let etb_elem = get_etb_elem(geom, &ctrl.etb_start_atom_number);
 
         let elem_intersection = ctrl_elem.intersect(local_elem.clone());
@@ -839,8 +842,6 @@ impl Molecule {
                     //    panic!("bad ecp basis for the elem of {}", &geom.elem[atm_index]);
                     //}
 
-                    //STOP HERE Igor
-
                     r_exponents_group.iter().for_each(|(r_exponent, index_vec)| {
                         let mut ecp_exp_start = env.len() as i32;
                         let num_index_vec = index_vec.len() as i32;
@@ -909,33 +910,6 @@ impl Molecule {
 
         (basis_total, atm, bas, env,bas_info,cint_fdqc,num_elec,num_basis, num_state, final_ecpbas)
     }
-
-    ///// it is important to import the ghost basis set after the procedure of importing the standard basis sets
-    //pub fn import_ghost_basis_set(geom: &GeomCell) {
-    //    if geom.ghost_bs_elem.len() > 0 {
-    //        let mut ghost_bas: Vec<Vec<i32>> = vec![];
-    //        let mut ghost_env: Vec<f64> = vec![];
-    //        let mut ghost_bas_info: Vec<BasInfo> = vec![];
-    //        let mut ghost_cint_fdqc: Vec<Vec<i32>> = vec![];
-    //        let mut ghost_num_elec: Vec<f64> = vec![0.0, 0.0, 0.0];
-    //        let mut ghost_num_basis: usize = 0;
-    //        let mut ghost_num_state: usize = 0;
-    //        let mut ghost_ecpbas: Option<Vec<Vec<i32>>> = None;
-    //        for (atm_index, atm_elem) in self.geom.ghost_bs_elem.iter().enumerate() {
-    //            let mut ghost_basis = Basis4Elem::parse_json_from_file(format!("{}/{}.json", &self.ctrl.basis_path, &atm_elem), &self.cint_type).unwrap();
-    //            let mut ghost_num_basis_per_atm = 0_usize;
-    //            for tmp_bascell in &ghost_basis.electron_shells {
-    //                let mut num_primitive: i32 = tmp_bascell.exponents.len() as i32;
-    //                let mut num_contracted: i32 = tmp_bascell.coefficients.len() as i32;
-    //                let mut angular_mom: i32 = tmp_bascell.angular_momentum[0];
-    //                let tmp_bas_info = BasInfo::new();
-    //                tmp_bascell.exponents.iter().for_each(|x| {
-    //                    ghost_env.push(*x);
-    //                });
-    //            }
-    //        }
-    //    }
-    //}
 
     pub fn int_ij_matrixuppers(&self,op_name: String, comp: usize) -> Vec<MatrixUpper<f64>> {
         let mut cur_op = op_name.clone();
@@ -1015,7 +989,7 @@ impl Molecule {
     pub fn int_ij_matrixupper_v01(&self,op_name: String) -> MatrixUpper<f64> {
         let mut cint_data = self.initialize_cint(false);
 
-        if op_name == String::from("dipole") {
+        if op_name.eq("dipole") {
             panic!("Error:: for dipole moment calculation: {}, please use int_ij_matrxuppers",&op_name);
         }
 
@@ -1067,7 +1041,7 @@ impl Molecule {
                 });
             });
         }
-        if op_name == String::from("hcore") {
+        if op_name.eq("hcore") {
             //println!("Debug: The Kinetic matrix:");
             //mat_global.formated_output(5, "lower".to_string());
             cint_data.cint_del_optimizer_rust();
@@ -1188,12 +1162,15 @@ impl Molecule {
             let mut tmp_out_shape = vec![];
             //(out, out_shape) = cint_data.integral_ecp_s1::<ECPscalar>(None);
             (tmp_out, tmp_out_shape) = cint_data.integral_ecp_s1::<ECPscalar>(None);
-            let tmp_ecp = MatrixFull::from_vec([self.num_basis,self.num_basis], tmp_out).unwrap();
+            let tmp_ecp = MatrixFull::from_vec(tmp_out_shape.try_into().unwrap(), tmp_out).unwrap();
 
-            out.iter_mut().zip(tmp_ecp.iter_matrixupper().unwrap()).for_each(|(o,f)| {
-                *o = *f
-            });
+            out = tmp_ecp.iter_matrixupper().unwrap().map(|x| *x).collect::<Vec<f64>>();
+            //.iter_matrixupper().unwrap()).for_each(|(o,f)| {
+            //    *o = *f
+            //});
         } else if op_name.eq("point charge") {
+            // for the ghost point charge term
+            // <a|-Za/|Ra-r||b> -> -Za*<a|1/|r||b> by setting PTR_RINV_ORIG as Ra
             let orig_orig = cint_data.get_rinv_origin();
             self.geom.ghost_pc_chrg.iter().zip(self.geom.ghost_pc_pos.iter_columns_full()).for_each(|(charge, pos)| {
                 cint_data.set_rinv_origin(pos);

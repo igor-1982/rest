@@ -567,7 +567,6 @@ impl GeomCell {
         let mut tmp_pc_pos: Vec<f64> = vec![];
         //println!("debug: {:?}", &position);
         for cap in re1.captures_iter(&position) {
-            println!("debug find it");
             tmp_pc_chg.push(cap[1].parse().unwrap());
             tmp_pc_pos.push(cap[2].parse().unwrap());
             tmp_pc_pos.push(cap[3].parse().unwrap());
@@ -587,7 +586,7 @@ impl GeomCell {
         let re2 = Regex::new(r"(?x)\s*
                             \s*potential\s*,?                    # the type 
                             \s+
-                            (?P<ecp_file>\w+)\s*,?               # the path to the potential file
+                            (?P<ecp_file>[\w\.\\]+)\s*,?               # the path to the potential file
                             \s+
                             (?P<x>[\+-]?\d+.\d+)\s*,?            # the 'x' position
                             \s+
@@ -614,6 +613,10 @@ impl GeomCell {
             };
             Some((tmp_ep_pth, tmp_pos_tensor))
         };
+
+        //println!("debug bs: {:?}", &bs_return);
+        //println!("debug pc: {:?}", &pc_return);
+        //println!("debug ep: {:?}", &ep_return);
 
         Ok((bs_return, pc_return, ep_return))
 
@@ -742,7 +745,7 @@ fn test_string_parse_1() {
         C   -2.4688049693 -1.4084918967  0.0000000000
         C   -1.2270315983 -0.7284607452  0.0000000000
         C    0.0000000000 -1.4090846909  0.0000000000
-        C    1.22703159Do83 -0.7284607452  0.0000000000
+        C    1.2270315983 -0.7284607452  0.0000000000
         C    2.4688049693 -1.4084918967  0.0000000000
         C    3.6803098659 -0.7276441672  0.0000000000
         C    4.9442285958 -1.4113046519  0.0000000000
@@ -875,5 +878,14 @@ pub fn test_parse() {
         //    cap[2].to_string(), 
         //    cap[3].to_string(), 
         //    cap[4].to_string());
+    }
+
+    let info = "RMSDs between (ECP, ENXC) and (ECP, GEP): (      0.00000000,       0.00000000)".to_string();
+
+    let re3 = Regex::new(r"RMSDs\sbetween\s\(ECP, ENXC\)\sand\s\(ECP, GEP\):\s\(\s*(?P<rmsd1>\d+.\d+),\s*(?P<rmsd2>\d+.\d+)\)").unwrap();
+
+    for cap in re3.captures_iter(&info) {
+        println!("debug: re3_cap: {:?}", &cap);
+        println!("{}, {}", cap["rmsd1"].to_string(), cap["rmsd2"].to_string());
     }
 }

@@ -155,7 +155,7 @@ impl Basis4Elem {
         } else {
             (None, None)
         };
-        println!("debug 0");
+        //println!("debug 0");
         if let Some(ecp_electrons_unwrap)=&ecp_electrons {
             println!("ecp_electrons: {}", &ecp_electrons_unwrap)
         };

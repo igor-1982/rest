@@ -145,16 +145,21 @@ pub struct InputKeywords {
     #[pyo3(get, set)]
     pub restart: bool,
     #[pyo3(get, set)]
+    // The initial MO coefficients and eigenvalues can be imported by setting chkfile
     pub chkfile: String,
     #[pyo3(get, set)]
+    // At present, only the hdf5 format is available
     pub chkfile_type: String,
     #[pyo3(get, set)]
+    // The initial density matrix can be imported by setting guessfile
     pub guessfile: String,
     #[pyo3(get, set)]
+    // At present, only the hdf5 format is available
     pub guessfile_type: String,
     #[pyo3(get, set)]
     pub external_init_guess: bool,
     #[pyo3(get, set)]
+    // There are three kinds of available initital guesses: 1) sad (default), 2) hcore, 3) vsap
     pub initial_guess: String,
     #[pyo3(get, set)]
     pub noiter: bool,
@@ -182,6 +187,9 @@ pub struct InputKeywords {
     // Keywords for DeepPot
     #[pyo3(get, set)]
     pub deep_pot: bool,
+    // Keywords for benchmarking various effective potentials, including ECP, ENXC, and Ghost EP
+    #[pyo3(get, set)]
+    pub bench_eps: bool,
     // Keywords for parallism
     #[pyo3(get, set)]
     pub num_threads: Option<usize>,
@@ -288,6 +296,7 @@ impl InputKeywords {
             //use_dft: false,
             //dft_type: None,
             deep_pot: false,
+            bench_eps: false,
             occupation_type: OCCType::INTEGER,
             frac_tolerant: 1.0e-3,
             auxiliary_reference_states: Vec::new(),
@@ -299,8 +308,6 @@ impl InputKeywords {
     pub fn formated_output_in_toml(&self) -> String {
         toml::to_string(self).unwrap()
     }
-
-
 
     pub fn parse_ctl_from_json(tmp_keys: &serde_json::Value) -> anyhow::Result<(InputKeywords,GeomCell)> {
         //let tmp_cont = fs::read_to_string(&filename[..])?;
@@ -764,7 +771,9 @@ impl InputKeywords {
                     serde_json::Value::String(tmp_guess) => tmp_guess.to_lowercase().clone(),
                     other => String::from("none"),
                 };
-                tmp_input.external_init_guess = ! tmp_input.guessfile.to_lowercase().eq(&"none") &&
+
+                // Fix a bug reported by Linyue Yu, 2024-09-03
+                tmp_input.external_init_guess = (! tmp_input.guessfile.to_lowercase().eq(&"none") ) &&
                             std::path::Path::new(&tmp_input.guessfile).exists();
 
                 tmp_input.chkfile = match tmp_ctrl.get("chkfile").unwrap_or(&serde_json::Value::Null) {
@@ -783,6 +792,7 @@ impl InputKeywords {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase()},
                     other => {String::from("sad")},
                 };
+
                 tmp_input.noiter = match tmp_ctrl.get("noiter").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
                     serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
@@ -957,7 +967,10 @@ impl InputKeywords {
                     other => {vec![]},
                 };
                 tmp_input.deep_pot = match tmp_ctrl.get("deep_potential").unwrap_or(&serde_json::Value::Null) {
-                //tmp_input.use_ri_symm = match tmp_ctrl.get("use_ri_symm").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::Bool(tmp_str) => {*tmp_str},
+                    other => {false},
+                };
+                tmp_input.bench_eps = match tmp_ctrl.get("bench_eps").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::Bool(tmp_str) => {*tmp_str},
                     other => {false},
                 };
@@ -1026,7 +1039,7 @@ impl InputKeywords {
                 }
                 if tmp_input.external_init_guess  {
                     if ! std::path::Path::new(&tmp_input.guessfile).exists() {
-                        println!("WARNING: The specified external initial guess file (guessfile) is missing \n({}). \n The external initial guess will not be imported.\n",&tmp_input.guessfile);
+                        println!("WARNING: Initial density matrix is required by the keyword of guessfile, which, however, does not exist: \n({}). \n The external initial guess will not be imported.\n",&tmp_input.guessfile);
                         tmp_input.external_init_guess = false;
                     } else {
                         if tmp_input.print_level>0 {

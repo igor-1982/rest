@@ -2,7 +2,7 @@
 use pyo3::{pymethods, PyResult};
 use crate::initial_guess::enxc::ENXC;
 
-use super::enxc::PotCell;
+use crate::basis_io::ecp::PotCell;
 
 #[pymethods]
 impl ENXC {
@@ -47,27 +47,4 @@ impl ENXC {
     }
 }
 
-#[pymethods]
-impl PotCell {
-    #[new]
-    pub fn new(coeffs: Vec<f64>, gaussian_exponents: Vec<f64>, angular_momentum: i32, r_exponent: i32) -> Self {
-        PotCell {
-            coefficients: vec![coeffs],
-            gaussian_exponents,
-            angular_momentum: vec![angular_momentum],
-            r_exponents: vec![r_exponent] 
-        }
-    }
-    pub fn py_set_coeff(&mut self, coeff: Vec<f64>) {
-        self.coefficients[0]=coeff;
-    }
-
-    pub fn py_set_gaussian_exponents(&mut self, gaussian_exponents: Vec<f64>) {
-        self.gaussian_exponents = gaussian_exponents;
-    }
-
-    pub fn py_set_r_exponents(&mut self, r_exponents: i32) {
-        self.r_exponents = vec![r_exponents];
-    }
-}
 
