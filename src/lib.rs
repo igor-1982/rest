@@ -70,7 +70,7 @@ use initial_guess::enxc::ENXC;
 use pyo3::prelude::*;
 use tensors::MatrixUpper;
 
-use crate::initial_guess::enxc::PotCell;
+use crate::basis_io::ecp::PotCell;
 use crate::{molecule_io::Molecule, scf_io::SCF, scf_io::scf};
 use crate::geom_io::GeomCell;
 use crate::ctrl_io::InputKeywords;

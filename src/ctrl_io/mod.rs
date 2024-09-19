@@ -1,6 +1,7 @@
 
 use pyo3::pyclass;
 use serde::{Deserialize,Serialize};
+use tensors::MatrixFull;
 //use std::{fs, str::pattern::StrSearcher};
 use std::{fs, sync::Arc};
 use crate::{check_norm::force_state_occupation::ForceStateOccupation, dft::{DFAFamily, DFA4REST}, geom_io::{GeomCell, GeomUnit, MOrC}, utilities};
@@ -20,7 +21,7 @@ use toml;
 
 mod pyrest_ctrl_io;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone,Copy,Debug, Deserialize, Serialize)]
 pub enum JobType {
     SinglePoint,
     GeomOpt,
@@ -38,7 +39,7 @@ pub enum JobType {
 ///  - `even_tempered-basis`: `Bool`. True: turn on ETB to generate the auxiliary basis set
 ///  - `etb_start_atom_number`: `Usize`. Use ETB, for the element with atomic index larger than this value  
 ///  - `etb_beta`: `f64`. Relevant to the ETB basis set size. Smaller value indicates larger ETB basis set. NOTE: etb_beta should be larger than 1.0
-#[derive(Debug,Clone)]
+#[derive(Debug,Clone,Serialize, Deserialize)]
 #[pyclass]
 pub struct InputKeywords {
     pub job_type: JobType,
@@ -144,16 +145,21 @@ pub struct InputKeywords {
     #[pyo3(get, set)]
     pub restart: bool,
     #[pyo3(get, set)]
+    // The initial MO coefficients and eigenvalues can be imported by setting chkfile
     pub chkfile: String,
     #[pyo3(get, set)]
+    // At present, only the hdf5 format is available
     pub chkfile_type: String,
     #[pyo3(get, set)]
+    // The initial density matrix can be imported by setting guessfile
     pub guessfile: String,
     #[pyo3(get, set)]
+    // At present, only the hdf5 format is available
     pub guessfile_type: String,
     #[pyo3(get, set)]
     pub external_init_guess: bool,
     #[pyo3(get, set)]
+    // There are three kinds of available initital guesses: 1) sad (default), 2) hcore, 3) vsap
     pub initial_guess: String,
     #[pyo3(get, set)]
     pub noiter: bool,
@@ -168,7 +174,7 @@ pub struct InputKeywords {
     // Kyewords for post scf analysis
     pub outputs: Vec<String>,
     pub cube_orb_setting: [f64;2],
-    pub cube_orb_indices: Vec<[usize;2]>,
+    pub cube_orb_indices: Vec<[usize;3]>,
     //pub output_wfn_in_real_space: usize,
     //pub output_cube: bool,
     //pub output_molden: bool,
@@ -182,13 +188,18 @@ pub struct InputKeywords {
     // Keywords for DeepPot
     #[pyo3(get, set)]
     pub deep_pot: bool,
+    // Keywords for benchmarking various effective potentials, including ECP, ENXC, and Ghost EP
+    #[pyo3(get, set)]
+    pub bench_eps: bool,
     // Keywords for parallism
     #[pyo3(get, set)]
     pub num_threads: Option<usize>,
     // batch size for each thread
     pub batch_size: usize,
     pub nforce_displacement: f64,
-    pub force_state_occupation: Vec<ForceStateOccupation>
+    pub force_state_occupation: Vec<ForceStateOccupation>,
+    pub auxiliary_reference_states: Vec<(String,usize)>,
+    pub rpa_de_excitation_parameters: Option<[f64;4]>
 
 }
 
@@ -270,13 +281,13 @@ impl InputKeywords {
             // True:  using only density matrix in the evaluation
             // False: use coefficients as well with higher efficiency
             use_dm_only: false,
-            use_ri_vj: false,
+            use_ri_vj: true,
             // Keywords for the fciqmc dump
             fciqmc_dump: false,
             // Kyewords for post scf
             outputs: vec![],
             cube_orb_setting: [3.0,80.0],
-            cube_orb_indices: vec![],
+            cube_orb_indices: Vec::new(),
             //output_wfn_in_real_space: 0,
             //output_cube: false,
             //output_molden: false,
@@ -287,13 +298,18 @@ impl InputKeywords {
             //use_dft: false,
             //dft_type: None,
             deep_pot: false,
+            bench_eps: false,
             occupation_type: OCCType::INTEGER,
             frac_tolerant: 1.0e-3,
-            force_state_occupation: vec![],
+            auxiliary_reference_states: Vec::new(),
+            force_state_occupation: Vec::new(),
+            rpa_de_excitation_parameters: None 
         }
     }
 
-
+    pub fn formated_output_in_toml(&self) -> String {
+        toml::to_string(self).unwrap()
+    }
 
     pub fn parse_ctl_from_json(tmp_keys: &serde_json::Value) -> anyhow::Result<(InputKeywords,GeomCell)> {
         //let tmp_cont = fs::read_to_string(&filename[..])?;
@@ -365,7 +381,7 @@ impl InputKeywords {
 
                 tmp_input.pruning = match tmp_ctrl.get("pruning").unwrap_or(&serde_json::Value::Null){
                     serde_json::Value::String(tmp_type) => {tmp_type.to_lowercase()},
-                    other => {String::from("sg1")} //default prune method: sg1
+                    other => {String::from("nwchem")} //default prune method: sg1
                 };
                 if tmp_input.print_level>0 {println!("The pruning method will be {}", tmp_input.pruning)};
 
@@ -383,10 +399,8 @@ impl InputKeywords {
                         } else {tmp_eri.to_lowercase()}
                     },
                     other => {String::from("ri_v")},
-                    other => {String::from("analytic")},
-                    other => {String::from("ri_v")},
                 };
-                let mut eri_type = tmp_input.eri_type.clone();
+                let eri_type = tmp_input.eri_type.clone();
                 if eri_type.eq(&String::from("ri_v"))
                 {
                     tmp_input.use_auxbas = true;
@@ -715,8 +729,8 @@ impl InputKeywords {
                 };
                 tmp_input.scf_acc_rho = match tmp_ctrl.get("scf_acc_rho").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(1.0e-6)},
-                    serde_json::Value::Number(tmp_num) => {tmp_num.as_f64().unwrap_or(1.0e-6)},
-                    other => {1.0e-6}
+                    serde_json::Value::Number(tmp_num) => {tmp_num.as_f64().unwrap_or(1.0e-8)},
+                    other => {1.0e-8}
                 };
                 tmp_input.scf_acc_eev = match tmp_ctrl.get("scf_acc_eev").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(1.0e-6)},
@@ -726,27 +740,27 @@ impl InputKeywords {
                 tmp_input.scf_acc_etot = match tmp_ctrl.get("scf_acc_etot").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(1.0e-8)},
                     serde_json::Value::Number(tmp_num) => {tmp_num.as_f64().unwrap_or(1.0e-8)},
-                    other => {1.0e-6}
+                    other => {1.0e-8}
                 };
 
                 tmp_input.mixer = match tmp_ctrl.get("mixer").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase()},
-                    other => {String::from("direct")},
+                    other => {String::from("diis")},
                 };
                 tmp_input.mix_param = match tmp_ctrl.get("mix_param").unwrap_or(&serde_json::Value::Null) {
-                    serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(1.0)},
-                    serde_json::Value::Number(tmp_num) => {tmp_num.as_f64().unwrap_or(1.0)},
-                    other => {1.0}
+                    serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(0.2)},
+                    serde_json::Value::Number(tmp_num) => {tmp_num.as_f64().unwrap_or(0.2)},
+                    other => {0.2}
                 };
                 tmp_input.num_max_diis = match tmp_ctrl.get("num_max_diis").unwrap_or(&serde_json::Value::Null) {
-                    serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(2_usize)},
-                    serde_json::Value::Number(tmp_num) => {tmp_num.as_i64().unwrap_or(2) as usize},
-                    other => {2_usize}
+                    serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(8_usize)},
+                    serde_json::Value::Number(tmp_num) => {tmp_num.as_i64().unwrap_or(8) as usize},
+                    other => {8_usize}
                 };
                 tmp_input.start_diis_cycle = match tmp_ctrl.get("start_diis_cycle").unwrap_or(&serde_json::Value::Null) {
-                    serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(2_usize)},
-                    serde_json::Value::Number(tmp_num) => {tmp_num.as_i64().unwrap_or(2) as usize},
-                    other => {2_usize}
+                    serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(1_usize)},
+                    serde_json::Value::Number(tmp_num) => {tmp_num.as_i64().unwrap_or(1) as usize},
+                    other => {1_usize}
                 };
                 tmp_input.start_check_oscillation = match tmp_ctrl.get("start_check_oscillation").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(20_usize)},
@@ -763,7 +777,9 @@ impl InputKeywords {
                     serde_json::Value::String(tmp_guess) => tmp_guess.to_lowercase().clone(),
                     other => String::from("none"),
                 };
-                tmp_input.external_init_guess = ! tmp_input.guessfile.to_lowercase().eq(&"none") &&
+
+                // Fix a bug reported by Linyue Yu, 2024-09-03
+                tmp_input.external_init_guess = (! tmp_input.guessfile.to_lowercase().eq(&"none") ) &&
                             std::path::Path::new(&tmp_input.guessfile).exists();
 
                 tmp_input.chkfile = match tmp_ctrl.get("chkfile").unwrap_or(&serde_json::Value::Null) {
@@ -780,8 +796,9 @@ impl InputKeywords {
 
                 tmp_input.initial_guess = match tmp_ctrl.get("initial_guess").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase()},
-                    other => {String::from("vsap")},
+                    other => {String::from("sad")},
                 };
+
                 tmp_input.noiter = match tmp_ctrl.get("noiter").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
                     serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
@@ -798,9 +815,9 @@ impl InputKeywords {
                     other => false,
                 };
                 tmp_input.use_ri_vj = match tmp_ctrl.get("use_ri_vj").unwrap_or(&serde_json::Value::Null) {
-                    serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(false),
+                    serde_json::Value:: String(tmp_str) => tmp_str.to_lowercase().parse().unwrap_or(true),
                     serde_json::Value:: Bool(tmp_bool) => tmp_bool.clone(),
-                    other => false,
+                    other => true,
                 };
                 // ================================================
                 //  Keywords associated with the elec occupation 
@@ -833,12 +850,26 @@ impl InputKeywords {
                         tmp_op.iter().for_each(|x| {
                             let tmp_obj = match x {
                                 serde_json::Value::Array(tmp_value) => {
-                                    let prev_state: usize = tmp_value[0].as_u64().unwrap_or(0) as usize;
-                                    let prev_spin: usize = tmp_value[1].as_u64().unwrap_or(0) as usize;
-                                    let force_occ: f64 = tmp_value[2].as_f64().unwrap_or(0.0);
-                                    let force_check_min: usize = tmp_value[3].as_u64().unwrap_or(0) as usize;
-                                    let force_check_max: usize = tmp_value[4].as_u64().unwrap_or(0) as usize;
-                                    Some(ForceStateOccupation::init(prev_state, prev_spin, force_occ, force_check_min, force_check_max))
+                                        // by default, the reference state is the previous SCF converged one
+                                        if tmp_value.len() == 5 {
+                                        let prev_state: usize = tmp_value[0].as_u64().unwrap_or(0) as usize;
+                                        let prev_spin: usize = tmp_value[1].as_u64().unwrap_or(0) as usize;
+                                        let force_occ: f64 = tmp_value[2].as_f64().unwrap_or(0.0);
+                                        let force_check_min: usize = tmp_value[3].as_u64().unwrap_or(0) as usize;
+                                        let force_check_max: usize = tmp_value[4].as_u64().unwrap_or(0) as usize;
+                                        Some(ForceStateOccupation::init(tmp_input.chkfile.clone(), prev_state, prev_spin, force_occ, force_check_min, force_check_max))
+                                    } else if tmp_value.len() == 6 {
+                                        let ref_index: String = tmp_value[0].as_str().unwrap_or("none").to_string();
+                                        let prev_state: usize = tmp_value[1].as_u64().unwrap_or(0) as usize;
+                                        let prev_spin: usize = tmp_value[2].as_u64().unwrap_or(0) as usize;
+                                        let force_occ: f64 = tmp_value[3].as_f64().unwrap_or(0.0);
+                                        let force_check_min: usize = tmp_value[4].as_u64().unwrap_or(0) as usize;
+                                        let force_check_max: usize = tmp_value[5].as_u64().unwrap_or(0) as usize;
+                                        Some(ForceStateOccupation::init(ref_index, prev_state, prev_spin, force_occ, force_check_min, force_check_max))
+                                    } else {
+                                        panic!("ERROR:: incorrect force_state_occupation setting: {:?}", &tmp_op);
+                                        None
+                                    }
                                 },
                                 other => None
                             };
@@ -849,6 +880,40 @@ impl InputKeywords {
                         tmp_vec
                     },
                     other => {vec![]},
+                };
+                //
+                tmp_input.auxiliary_reference_states = match tmp_ctrl.get("auxiliary_reference_states").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_chk) => vec![(String::from("none"),0)],
+                    serde_json::Value::Array(tmp_op) => {
+                        let mut tmp_files = vec![];
+                        tmp_op.iter().for_each(|x| {
+                            match x {
+                                serde_json::Value::String(tmp_str) => {tmp_files.push((tmp_str.clone(),0))},
+                                serde_json::Value::Array(tmp_value) => {
+                                    let aux_file_name = tmp_value[0].as_str().unwrap().to_string();
+                                    let global_start = tmp_value[1].as_u64().unwrap() as usize;
+                                    tmp_files.push((aux_file_name,global_start));
+                                },
+                                _ => {}
+                            }
+                        });
+                        tmp_files
+                    },
+                    other => Vec::new(),
+                };
+                tmp_input.rpa_de_excitation_parameters = match tmp_ctrl.get("rpa_de_excitation_parameters").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::Array(tmp_op) => {
+                        if tmp_op.len() == 4 {
+                            let mut tmp_array = [0.0;4];
+                            tmp_array.iter_mut().zip(tmp_op.iter()).for_each(|(to, from)| {
+                                *to = from.as_f64().unwrap()
+                            });
+                            Some(tmp_array)
+                        } else {
+                            None
+                        }
+                    },
+                    other => None,
                 };
                 // ================================================
                 //  Keywords associated with the post-SCF analyais
@@ -883,12 +948,12 @@ impl InputKeywords {
                 tmp_input.cube_orb_indices = match tmp_ctrl.get("cube_orb_indices").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::Array(tmp_op) => {
                         //let mut tmp_array = [0.0;2];
-                        let mut tmp_indices = vec![[0;2];tmp_op.len()];
+                        let mut tmp_indices = vec![[0;3];tmp_op.len()];
                         tmp_indices.iter_mut().zip(tmp_op.iter()).for_each(|(to, from)| {
                             let tmp_to = match from {
                                 serde_json::Value::Array(tmp_opp) => {
-                                    let mut tmp_array = [0_usize;2];
-                                    tmp_array.iter_mut().zip(tmp_opp[0..2].iter()).for_each(|(to, from)| {
+                                    let mut tmp_array = [0_usize;3];
+                                    tmp_array.iter_mut().zip(tmp_opp[0..3].iter()).for_each(|(to, from)| {
                                         match from {
                                             serde_json::Value::String(tmp_str) => {*to = tmp_str.parse().unwrap_or(0)},
                                             serde_json::Value::Number(tmp_num) => {*to = tmp_num.as_u64().unwrap_or(0) as usize},
@@ -908,7 +973,10 @@ impl InputKeywords {
                     other => {vec![]},
                 };
                 tmp_input.deep_pot = match tmp_ctrl.get("deep_potential").unwrap_or(&serde_json::Value::Null) {
-                //tmp_input.use_ri_symm = match tmp_ctrl.get("use_ri_symm").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::Bool(tmp_str) => {*tmp_str},
+                    other => {false},
+                };
+                tmp_input.bench_eps = match tmp_ctrl.get("bench_eps").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::Bool(tmp_str) => {*tmp_str},
                     other => {false},
                 };
@@ -977,7 +1045,7 @@ impl InputKeywords {
                 }
                 if tmp_input.external_init_guess  {
                     if ! std::path::Path::new(&tmp_input.guessfile).exists() {
-                        println!("WARNING: The specified external initial guess file (guessfile) is missing \n({}). \n The external initial guess will not be imported.\n",&tmp_input.guessfile);
+                        println!("WARNING: Initial density matrix is required by the keyword of guessfile, which, however, does not exist: \n({}). \n The external initial guess will not be imported.\n",&tmp_input.guessfile);
                         tmp_input.external_init_guess = false;
                     } else {
                         if tmp_input.print_level>0 {
@@ -1032,10 +1100,10 @@ impl InputKeywords {
                         tmp_geomcell.position = tmp3;
                         tmp_geomcell.nfree = tmp4;
                     },
-                    serde_json::Value::String(tmp_geom) => {
+                    serde_json::Value::String(tmp_str) => {
                         let tmp_unit = tmp_geomcell.unit.clone();
                         
-                        let (tmp1,tmp2,tmp3,tmp4) = GeomCell::parse_position_from_string(tmp_geom, &tmp_unit)?;
+                        let (tmp1,tmp2,tmp3,tmp4) = GeomCell::parse_position_from_string(tmp_str, &tmp_unit)?;
 
                         tmp_geomcell.elem = tmp1;
                         tmp_geomcell.fix = tmp2;
@@ -1061,6 +1129,43 @@ impl InputKeywords {
                         tmp_geomcell.pbc = MOrC::Molecule;
                     }
                 }
+                match tmp_geom.get("ghost").unwrap_or(&serde_json::Value::Null) {
+                    serde_json::Value::String(tmp_str) => {
+                        let tmp_unit = tmp_geomcell.unit.clone();
+                        //println!("debug Igor: {:?}", tmp_str);
+                        let (bs, pc, ep) = GeomCell::parse_ghost_atoms_from_string(tmp_str, &tmp_unit)?;
+                        if let Some((bs_elem, bs_pos)) = bs {
+                            tmp_geomcell.ghost_bs_elem = bs_elem;
+                            tmp_geomcell.ghost_bs_pos = bs_pos;
+                        } else {
+                            tmp_geomcell.ghost_bs_elem = vec![];
+                            tmp_geomcell.ghost_bs_pos = MatrixFull::empty();
+                        }
+                        if let Some((pc_chrg, pc_pos)) = pc {
+                            tmp_geomcell.ghost_pc_chrg = pc_chrg;
+                            tmp_geomcell.ghost_pc_pos = pc_pos;
+                        } else {
+                            tmp_geomcell.ghost_pc_chrg = vec![];
+                            tmp_geomcell.ghost_pc_pos = MatrixFull::empty();
+                        }
+                        if let Some((ep_path, ep_pos)) = ep {
+                            tmp_geomcell.ghost_ep_path = ep_path;
+                            tmp_geomcell.ghost_ep_pos = ep_pos;
+                        } else {
+                            tmp_geomcell.ghost_ep_path = vec![];
+                            tmp_geomcell.ghost_ep_pos = MatrixFull::empty();
+                        }
+                    },
+                    other => {
+                        //println!("debug: cannot recognize ghost");
+                        tmp_geomcell.ghost_bs_elem = vec![];
+                        tmp_geomcell.ghost_bs_pos = MatrixFull::empty();
+                        tmp_geomcell.ghost_pc_chrg = vec![];
+                        tmp_geomcell.ghost_pc_pos = MatrixFull::empty();
+                        tmp_geomcell.ghost_ep_path = vec![];
+                        tmp_geomcell.ghost_ep_pos = MatrixFull::empty();
+                    }
+                }
             },
             other => {
                 panic!("Error:: no 'geom' keyword or some inproper settings of 'geom' keyword in the input file");
@@ -1082,4 +1187,13 @@ impl InputKeywords {
 
         InputKeywords::parse_ctl_from_json(&tmp_keys)
     }
+}
+
+
+#[test]
+fn iter_inputkeywords()  {
+    let dd = InputKeywords::init_ctrl();
+    let ff = toml::to_string(&dd).unwrap();
+    println!("{}", ff);
+
 }

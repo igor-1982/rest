@@ -270,8 +270,8 @@ fn evaluate_response_rayon(scf_data: &SCF, freq: f64) -> anyhow::Result<MatrixFu
             let occ_numbers = scf_data.occupation.get(i_spin).unwrap();
             let homo = scf_data.homo.get(i_spin).unwrap().clone();
             let lumo = scf_data.lumo.get(i_spin).unwrap().clone();
-            //let num_occu = homo + 1;
-            let num_occu = lumo;
+            let num_occu = if scf_data.mol.num_elec[i_spin+1] <= 1.0e-6 {0} else {homo + 1};
+            //let num_occu = lumo;
 
             let (ri3mo, vir_range, occ_range) = ri3mo_vec.get(i_spin).unwrap();
 
@@ -299,9 +299,28 @@ fn evaluate_response_rayon(scf_data: &SCF, freq: f64) -> anyhow::Result<MatrixFu
 
                 let k_state_eigen = eigenvalues.get(k_state).unwrap();
                 let k_state_occ = occ_numbers.get(k_state).unwrap();
-                let zeta = num_spin*(j_state_eigen-k_state_eigen) /
-                    ((j_state_eigen-k_state_eigen).powf(2.0) + freq*freq)*
-                    (j_state_occ-k_state_occ);
+                //let zeta = num_spin*(j_state_eigen-k_state_eigen) /
+                //    ((j_state_eigen-k_state_eigen).powf(2.0) + freq*freq)*
+                //    (j_state_occ-k_state_occ);
+                let mut energy_gap = j_state_eigen - k_state_eigen;
+                if energy_gap < 1.0e-6 && energy_gap > 0.0 {
+                    energy_gap += 1.0e-6
+                } else if energy_gap >-1.0e-6 && energy_gap < 0.0 {
+                    energy_gap += -1.0e-6
+                };
+                //=======================================================================
+                // previous fractional occupation algorithm used by  Xinguo in FHI-aims
+                //=======================================================================
+                //let zeta = num_spin*energy_gap /
+                //    (energy_gap.powf(2.0) + freq.powf(2.0))*
+                //    (j_state_occ-k_state_occ);
+                //=======================================================================
+                // suggested by Weitao Yang, which was derived from the ensemble of Green function
+                //=======================================================================
+                let zeta = 2.0f64*energy_gap /
+                    (energy_gap.powf(2.0) + freq.powf(2.0))*
+                    j_state_occ*num_spin/2.0f64*(1.0f64-k_state_occ*num_spin/2.0f64);
+                //=======================================================================
 
                 let k_loc_state = k_state - vir_range.start;
                 let from_iter = ri3mo.get_slices(0..num_auxbas, k_loc_state..k_loc_state+1, j_loc_state..j_loc_state+1);
@@ -353,7 +372,8 @@ fn evaluate_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Result<MatrixF
             let homo = scf_data.homo.get(i_spin).unwrap().clone();
             let lumo = scf_data.lumo.get(i_spin).unwrap().clone();
             //let num_occu = homo + 1;
-            let num_occu = lumo;
+            let num_occu = if scf_data.mol.num_elec[i_spin+1] <= 1.0e-6 {0} else {homo + 1};
+            //let num_occu = lumo;
 
             let (ri3mo, vir_range, occ_range) = ri3mo_vec.get(i_spin).unwrap();
 
@@ -361,20 +381,38 @@ fn evaluate_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Result<MatrixF
             //let mut rimo = riao.ao2mo(eigenvector).unwrap();
             let mut elec_pair: Vec<[usize;2]> = vec![];
             for j_state in start_mo..num_occu {
-                    let j_state_eigen = eigenvalues[j_state];
-                    let j_state_occ = occ_numbers[j_state];
-                    let j_loc_state = j_state - occ_range.start;
-                    let rimo_j = ri3mo.get_reducing_matrix(j_loc_state).unwrap();
+                let j_state_eigen = eigenvalues[j_state];
+                let j_state_occ = occ_numbers[j_state];
+                let j_loc_state = j_state - occ_range.start;
+                let rimo_j = ri3mo.get_reducing_matrix(j_loc_state).unwrap();
 
-                    let mut tmp_matrix = MatrixFull::new([num_auxbas,vir_range.len()],0.0);
+                let mut tmp_matrix = MatrixFull::new([num_auxbas,vir_range.len()],0.0);
 
-                    for k_state in lumo..num_state {
+                for k_state in lumo..num_state {
 
                     let k_state_eigen = eigenvalues.get(k_state).unwrap();
                     let k_state_occ = occ_numbers.get(k_state).unwrap();
-                    let zeta = num_spin*(j_state_eigen-k_state_eigen) /
-                        ((j_state_eigen-k_state_eigen).powf(2.0) + freq*freq)*
-                        (j_state_occ-k_state_occ);
+
+                    let mut energy_gap = j_state_eigen - k_state_eigen;
+
+                    if energy_gap < 1.0e-6 && energy_gap > 0.0 {
+                        energy_gap = 1.0e-6
+                    } else if energy_gap >-1.0e-6 && energy_gap < 0.0 {
+                        energy_gap = -1.0e-6
+                    };
+                    //=======================================================================
+                    // previous fractional occupation algorithm used by  Xinguo in FHI-aims
+                    //=======================================================================
+                    //let zeta = num_spin*energy_gap /
+                    //    (energy_gap.powf(2.0) + freq.powf(2.0))*
+                    //    (j_state_occ-k_state_occ);
+                    //=======================================================================
+                    // suggested by Weitao Yang, which was derived from the ensemble of Green function
+                    //=======================================================================
+                    let zeta = 2.0f64*energy_gap /
+                        (energy_gap.powf(2.0) + freq.powf(2.0))*
+                        j_state_occ*num_spin/2.0f64*(1.0f64-k_state_occ*num_spin/2.0f64);
+                    //=======================================================================
 
                     let k_loc_state = k_state - vir_range.start;
                     let from_iter = ri3mo.get_slices(0..num_auxbas, k_loc_state..k_loc_state+1, j_loc_state..j_loc_state+1);

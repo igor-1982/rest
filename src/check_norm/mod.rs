@@ -2,8 +2,9 @@ use crate::constants::{F_SHELL, XE_SHELL, NELE_IN_SHELLS, SPECIES_INFO};
 use crate::geom_io::formated_element_name;
 use crate::scf_io::SCFType;
 use crate::molecule_io::Molecule;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone,Copy,Debug)]
+#[derive(Clone,Copy,Debug, Deserialize, Serialize)]
 pub enum OCCType {
     INTEGER,
     FRAC,
@@ -28,7 +29,7 @@ pub fn generate_occupation_frac_occ(mol: &Molecule, scftype: &SCFType, eigenvalu
             let mo_energy = &eigenvalues[i_spin];
             let tmp_homo = mo_energy[num_occs-1];
             let tmp_lumo = mo_energy[num_occs];
-            let mut frac_orb_list: Vec<usize> = vec![];
+            let mut frac_orb_list: Vec<usize> = Vec::new();
             // determine which orbitals are degenerated with HOMO
             mo_energy.iter().enumerate().for_each(|(i, orb_ene)| {
                 if (orb_ene - tmp_homo).abs() < tolerant {

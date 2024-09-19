@@ -171,6 +171,8 @@ impl SCF {
         let shell_type_fac = match self.mol.cint_type {
             CintType::Spheric => -1,
             CintType::Cartesian => 1,
+            // NOTE: Spinor is not yet implemented properly, IGOR 2024-08-18
+            CintType::Spinor => 1,
         };
         self.mol.basis4elem.iter().enumerate().for_each(|(i_atom,ibas)| {
             ibas.electron_shells.iter().for_each(|ibascell| {

@@ -94,27 +94,32 @@ pub fn tabulated_ao_fig (mol: &Molecule, points: &Vec<[f64; 3]>) -> MatrixFull<f
     tab_den // N_p * Nao
 }
 
-pub fn get_cube_orb(scf_data:&SCF) -> MatrixFull<f64>{
+pub fn get_cube_orb(scf_data:&SCF) -> [MatrixFull<f64>;2]{
 
+    let spin_channel = scf_data.mol.spin_channel;
     let n_p = scf_data.mol.ctrl.cube_orb_setting[1] as usize;
     let orb_indices = &scf_data.mol.ctrl.cube_orb_indices;
     let num_state = scf_data.mol.num_state;
-    let mut orb_indices_2: Vec<usize> = vec![];
+    let mut orb_indices_2: [Vec<usize>;2] = [vec![],vec![]];
 
     // expend orb_indices to specific orbital indices: orb_indices_2
     if orb_indices.len() == 0{
-        orb_indices_2 = (0..num_state).collect();
+        for i_spin in 0..spin_channel {
+            orb_indices_2[i_spin] = (0..num_state).collect();
+        }
     } else {
         orb_indices.iter().for_each(|x| {
             (x[0]..x[1]+1).for_each(|y| {
-                if ! orb_indices_2.contains(&y) && y < num_state {
-                    orb_indices_2.push(y);
+                if ! orb_indices_2[x[2]].contains(&y) && y < num_state {
+                    orb_indices_2[x[2]].push(y);
                 }
-
             });
         });
     }
-    orb_indices_2.sort_by(|a,b| a.cmp(b));
+
+    for i_spin in 0..spin_channel{
+        orb_indices_2[i_spin].sort_by(|a,b| a.cmp(b));
+    }
     //println!("{:?}", &orb_indices);
     //println!("{:?}", &orb_indices_2);
 
@@ -132,79 +137,89 @@ pub fn get_cube_orb(scf_data:&SCF) -> MatrixFull<f64>{
     let delta = gen_delta(n_p, &box_extent);
     let ao = tabulated_ao_fig(&mol, &coords);
     //let all_orb = scf_data.eigenvectors[0].clone();
-    let mut prod = MatrixFull::new([ao.size[0],scf_data.eigenvectors[0].size[1]],0.0);
-    //prod.to_matrixfullslicemut().lapack_dgemm(&mut ao.to_matrixfullslice(), &mut all_orb.to_matrixfullslice(), 'N', 'N', 1.0, 0.0);
-    _dgemm_full(&ao, 'N', &scf_data.eigenvectors[0], 'N', &mut prod, 1.0, 0.0);
-    
-    // generate cube file  
-    prod.iter_columns_full().enumerate().for_each(|(index, x)|{
-        if orb_indices_2.contains(&index){
-            let mut cube_string = "Orbital value in real space (1/Bohr^3)\nREST Version: \n".to_owned();
-            cube_string += &natm.to_string();
-            boxorig.iter().for_each(|x|{
-                cube_string += "    ";
-                cube_string +=  &x.to_string();
-                });
-            cube_string += "\n";
+    let mut prod = [MatrixFull::empty(),MatrixFull::empty()];
 
-            for j in (0..3){
-                cube_string += &n_p.to_string();
-                if j == 0{
+    for i_spin in 0..spin_channel {
+
+        let orb_indices_s = &orb_indices_2[i_spin];
+
+        prod[i_spin] = MatrixFull::new([ao.size[0],scf_data.eigenvectors[i_spin].size[1]],0.0);
+        _dgemm_full(&ao, 'N', &scf_data.eigenvectors[i_spin], 'N', &mut prod[i_spin], 1.0, 0.0);
+    
+        // generate cube file  
+        prod[i_spin].iter_columns_full().enumerate().for_each(|(index, x)|{
+            if orb_indices_s.contains(&index){
+                let mut cube_string = "Orbital value in real space (1/Bohr^3)\nREST Version: \n".to_owned();
+                cube_string += &natm.to_string();
+                boxorig.iter().for_each(|x|{
                     cube_string += "    ";
-                    cube_string += &delta[0].to_string();
-                    cube_string += "     0.000000     0.000000\n";
-                }else if j == 1 {
-                    cube_string += "    0.000000    ";
-                    cube_string += &delta[1].to_string();
-                    cube_string += "     0.000000\n";
-                }else{
-                    cube_string += "    0.000000    0.000000    ";
-                    cube_string += &delta[2].to_string();
+                    cube_string +=  &x.to_string();
+                    });
+                cube_string += "\n";
+
+                for j in (0..3){
+                    cube_string += &n_p.to_string();
+                    if j == 0{
+                        cube_string += "    ";
+                        cube_string += &delta[0].to_string();
+                        cube_string += "     0.000000     0.000000\n";
+                    }else if j == 1 {
+                        cube_string += "    0.000000    ";
+                        cube_string += &delta[1].to_string();
+                        cube_string += "     0.000000\n";
+                    }else{
+                        cube_string += "    0.000000    0.000000    ";
+                        cube_string += &delta[2].to_string();
+                        cube_string += "\n";
+                    };
+                }
+
+                atom_mass_charge.iter().zip(mol.geom.position.iter_columns_full()).for_each(|((mass,charge),position)|{
+                    let charge_u = *charge as usize;
+                    cube_string += &charge_u.to_string();
+                    cube_string += "    0.000000";
+                    position.iter().for_each(|x|{
+                        cube_string += "    ";
+                        cube_string += &x.to_string();
+                    });
                     cube_string += "\n";
+                });
+            
+                let mut count = 0;
+                x.iter().zip(0..n_p*n_p*n_p).for_each(|(value,index1)|{
+                    if index1 == 0 {
+                        cube_string += &value.to_string();
+                        count += 1;
+                    }
+                    if index1 % n_p == 0 && index1 != 0{
+                        cube_string += "\n";
+                        cube_string += &value.to_string();
+                        count += 1;
+                    }
+                    if (index1-(count-1)*n_p) % 6 == 0 && index1-(count-1)*n_p!= 0 {
+                        cube_string += "\n";
+                        cube_string += &value.to_string();
+                    }else if index1-(count-1)*n_p!= 0{
+                        cube_string += "    ";
+                        cube_string += &value.to_string();
+                    }
+                });
+
+                //write
+                let mut path = mol.geom.name.clone();
+                path = if i_spin==0 {
+                    format!("{}-{}-alpha",path, index)
+                } else {
+                    format!("{}-{}-beta",path, index)
                 };
+                path += ".cube";
+                let file = File::create(path);
+                let mut file = LineWriter::new(file.unwrap());
+                file.write_all(&cube_string.into_bytes());
             }
 
-            atom_mass_charge.iter().zip(mol.geom.position.iter_columns_full()).for_each(|((mass,charge),position)|{
-                let charge_u = *charge as usize;
-                cube_string += &charge_u.to_string();
-                cube_string += "    0.000000";
-                position.iter().for_each(|x|{
-                    cube_string += "    ";
-                    cube_string += &x.to_string();
-                });
-                cube_string += "\n";
-            });
-        
-            let mut count = 0;
-            x.iter().zip(0..n_p*n_p*n_p).for_each(|(value,index1)|{
-                if index1 == 0 {
-                    cube_string += &value.to_string();
-                    count += 1;
-                }
-                if index1 % n_p == 0 && index1 != 0{
-                    cube_string += "\n";
-                    cube_string += &value.to_string();
-                    count += 1;
-                }
-                if (index1-(count-1)*n_p) % 6 == 0 && index1-(count-1)*n_p!= 0 {
-                    cube_string += "\n";
-                    cube_string += &value.to_string();
-                }else if index1-(count-1)*n_p!= 0{
-                    cube_string += "    ";
-                    cube_string += &value.to_string();
-                }
-            });
-
-            //write
-            let mut path = mol.geom.name.clone();
-            path += &index.to_string();
-            path += ".cube";
-            let file = File::create(path);
-            let mut file = LineWriter::new(file.unwrap());
-            file.write_all(&cube_string.into_bytes());
-        }
-
-    });
+        });
+    }
     
     prod // n_p*nmo matrix
 }

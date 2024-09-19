@@ -155,7 +155,7 @@ impl Basis4Elem {
         } else {
             (None, None)
         };
-        println!("debug 0");
+        //println!("debug 0");
         if let Some(ecp_electrons_unwrap)=&ecp_electrons {
             println!("ecp_electrons: {}", &ecp_electrons_unwrap)
         };
@@ -427,6 +427,7 @@ impl BasCell {
             let (ang,n_len) = match &cint_type {
                 CintType::Cartesian => {let ang = tmp_ang as usize; (ang,(ang+1)*(ang+2)/2)},
                 CintType::Spheric => {let ang = tmp_ang as usize; (ang, ang*2+1)},
+                _ => panic!("The angular momentum is missing for the basis set : {:?}", &self)
             };
             //let n_len = (tmp_ang*2+1) as usize;
             cint_data.initial_r2c(&atm, natm, &bas, nbas, &env);

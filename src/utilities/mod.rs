@@ -10,7 +10,7 @@ enum DebugTiming {
 const DEBUG_PRINT: DebugTiming = DebugTiming::Not;
 
 pub fn parse_input() -> ArgMatches {
-    Command::new("fdqc")
+    Command::new("rest")
         .version("0.1")
         .author("Igor Ying Zhang <igor_zhangying@fudan.edu.cn>")
         .about("Rust-based Electronic-Structure Tool (REST)")
@@ -35,8 +35,13 @@ impl TimeRecords {
     }
 
     pub fn new_item(&mut self, name: &str, comment: &str) {
-        let item = (Instant::now(),0.0,false, comment.to_string());
-        &self.items.insert(name.to_string(),item);
+        if let Some(_) = self.items.get_mut(name) {
+            println!("WARNING: the time record for {} has been initialized previously.", name);
+            //self.count_start(name);
+        } else {
+            let item = (Instant::now(),0.0,false, comment.to_string());
+            &self.items.insert(name.to_string(),item);
+        }
     }
 
     pub fn count_start(&mut self, name: &str) {
@@ -48,6 +53,7 @@ impl TimeRecords {
                 println!("WARNING: the time record for {} has been turned on previously.", name);
             }
         } else {
+            self.new_item(name, "");
             println!("WARNING: the time record for {} has not been initialized.", name);
         }
     }

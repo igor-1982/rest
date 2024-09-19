@@ -78,8 +78,9 @@ lazy_static!{
 }
 
 // use for the inverse (sqrt inverse) of the auxiliary coulomb matrix
-pub const AUXBAS_THRESHOLD: f64 = 1.0e-8;
-pub const INVERSE_THRESHOLD: f64 = 1.0e-8;
+pub const AUXBAS_THRESHOLD: f64 = 1.0e-10;
+pub const INVERSE_THRESHOLD: f64 = 1.0e-10;
+pub const SQRT_THRESHOLD: f64 = 1.0e-10;
 
 pub const CM: f64 = 8065.541;
 pub const ANG:f64 = 0.5291772083;
@@ -222,6 +223,7 @@ pub const ATOM_CONFIGURATION: [[usize; 4]; 119] = [
     [14,36,40,28],     //118  Og
 ];
 
+// =========== libcint ===================================
 // for the bas index - libcint
 pub const BAS_ATM: usize = 0;
 pub const BAS_ANG: usize = 1;
@@ -233,17 +235,26 @@ pub const BAS_SLOTS: usize = 6;
 pub const ATM_NUC: usize = 0;
 pub const ATM_ENV: usize = 1;
 pub const ATM_NUC_MOD_OF: usize = 2;
+pub const ATM_FRAC_CHARGE_OF: usize = 3;
 pub const ATM_SLOTS: usize = 6;
 
 // for ECP - libcint
 pub const ECP_LMAX: i32 = 5;
 pub const NUC_ECP:  i32 = 4;
 
-
+// for exp cutoff -libcint
+pub const PTR_EXPCUTOFF: i32 = 0;
 // for dipole - libcint
 pub const PTR_COMMON_ORG: i32 = 1;
 // for Gauge origin
 pub const PTR_RINV_ORIG: i32 = 4;
+
+pub const NUC_MOD_OF: i32 = 2;
+
+pub const NUC_STAD_CHARGE: i32 = 1;
+pub const NUC_GAUS_CHARGE: i32 = 2;
+pub const NUC_FRAC_CHARGE: i32 = 3;
+// =========== libcint ===================================
 
 
 //// for the atm index - libcint

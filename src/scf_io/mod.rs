@@ -1,47 +1,15 @@
+use crate::basis_io::ecp::ghost_effective_potential_matrix;
 use crate::check_norm::force_state_occupation::adapt_occupation_with_force_projection;
 use crate::check_norm::{self, generate_occupation_frac_occ, generate_occupation_integer, generate_occupation_sad, OCCType};
-//use clap::value_parser;
-//use pyo3::{pyclass, pymethods, pyfunction};
-//use tensors::matrix_blas_lapack::{_dgemm, _dinverse, _dsymm};
-//use tensors::{ERIFull,MatrixFull, ERIFold4, MatrixUpper, TensorSliceMut, RIFull, MatrixFullSlice, MatrixFullSliceMut, BasicMatrix, MathMatrix, MatrixUpperSlice, ParMathMatrix, ri};
-//use itertools::{Itertools, iproduct, izip};
-//use libc::SCHED_OTHER;
-//use core::num;
-//use std::fmt::format;
-//use std::io::Write;
-//use std::{fs, vec};
-//use std::thread::panicking;
-//use std::{vec, fs};
-//use rest_libcint::{CINTR2CDATA, CintType};
-//use crate::geom_io::{GeomCell,MOrC, GeomUnit};
-//use crate::basis_io::{Basis4Elem,BasInfo};
-//use crate::isdf::{prepare_for_ri_isdf, init_by_rho, prepare_m_isdf};
-////use crate::initial_guess::sad::sad_dm;
-//use crate::molecule_io::{Molecule, generate_ri3fn_from_rimatr};
-//use crate::tensors::{TensorOpt,TensorOptMut,TensorSlice};
-//use crate::dft::{Grids, numerical_density, par_numerical_density};
-//use crate::{utilities, initial_guess};
-//use crate::initial_guess::initial_guess;
-//use rayon::prelude::*;
-//use hdf5;
-////use blas::{ddot,daxpy};
-//use std::sync::{Mutex, Arc,mpsc};
-//use std::thread;
-//use crossbeam::{channel::{unbounded,bounded},thread::{Scope,scope}};
-////use std::sync::mpsc::{channel, Receiver};
-//use std::sync::mpsc::channel;
 use crate::dft::gen_grids::prune::prune_by_rho;
-use crate::geom_io::calc_nuc_energy_with_ecp;
+use crate::dft::Grids;
+use crate::geom_io::{calc_nuc_energy, calc_nuc_energy_with_point_charges};
 use crate::utilities::{create_pool, TimeRecords};
 ////use blas_src::openblas::dgemm;
 mod addons;
 mod fchk;
 mod pyrest_scf_io;
 
-//use crate::basis_io::ecp::test_ecp;
-
-//use libc::{abs, _SC_AIO_LISTIO_MAX};
-//use clap::value_parser;
 use pyo3::{pyclass, pymethods, pyfunction};
 use tensors::matrix_blas_lapack::{_dgemm, _dgemm_full, _dgemv, _dinverse, _dspgvx, _dsymm, _dsyrk, _power, _power_rayon};
 use tensors::{map_full_to_upper, map_upper_to_full, ri, BasicMatrix, ERIFold4, ERIFull, MathMatrix, MatrixFull, MatrixFullSlice, MatrixFullSliceMut, MatrixUpper, MatrixUpperSlice, ParMathMatrix, RIFull, TensorSliceMut};
@@ -53,30 +21,13 @@ use std::sync::{Mutex, Arc,mpsc};
 use std::thread;
 use crossbeam::{channel::{unbounded,bounded},thread::{Scope,scope}};
 use std::sync::mpsc::{channel, Receiver};
-//use std::arch;
-//use ndarray;
-//use hdf5;
-//use libc::SCHED_OTHER;
-//use core::num;
-//use std::fmt::format;
-//use std::io::Write;
-//use std::path::Path;
-//use std::{fs, vec};
-//use std::thread::panicking;
-//use std::{vec, fs};
-//use rest_libcint::{CINTR2CDATA, CintType};
-//use crate::geom_io::{GeomCell,MOrC, GeomUnit};
-//use crate::basis_io::{Basis4Elem,BasInfo};
-//use crate::post_scf_analysis::save_chkfile;
-//use crate::dft::{Grids, numerical_density, par_numerical_density};
 use crate::isdf::{prepare_for_ri_isdf, init_by_rho, prepare_m_isdf};
 use crate::molecule_io::{Molecule, generate_ri3fn_from_rimatr};
 use crate::tensors::{TensorOpt,TensorOptMut,TensorSlice};
-use crate::dft::Grids;
 use crate::{utilities, initial_guess};
 use crate::initial_guess::initial_guess;
-use crate::constants::{SPECIES_INFO, INVERSE_THRESHOLD};
 use crate::external_libs::dftd;
+use crate::constants::{INVERSE_THRESHOLD, SPECIES_INFO, SQRT_THRESHOLD};
 
 
 
@@ -120,7 +71,7 @@ pub struct SCF {
     pub grids: Option<Grids>,
     pub empirical_dispersion_energy: f64,
     pub energies: HashMap<String,Vec<f64>>,
-    pub ref_eigenvectors: [MatrixFull<f64>;2],
+    pub ref_eigenvectors: HashMap<String, ([MatrixFull<f64>;2], [usize;4])>,
 }
 
 #[derive(Clone,Copy)]
@@ -145,12 +96,11 @@ impl SCF {
             rimatr: None,
             ri3mo: None,
             eigenvalues: [vec![],vec![]],
-            hamiltonian: [MatrixUpper::new(1,0.0),
-                              MatrixUpper::new(1,0.0)],
-            eigenvectors: [MatrixFull::new([1,1],0.0),
-                           MatrixFull::new([1,1],0.0)],
-            ref_eigenvectors: [MatrixFull::new([1,1],0.0),
-                           MatrixFull::new([1,1],0.0)],
+            hamiltonian: [MatrixUpper::empty(),
+                          MatrixUpper::empty()],
+            eigenvectors: [MatrixFull::empty(),
+                           MatrixFull::empty()],
+            ref_eigenvectors: HashMap::new(),
             //density_matrix: [MatrixFull::new([1,1],0.0),
             //                     MatrixFull::new([1,1],0.0)],
             density_matrix: vec![MatrixFull::empty(),
@@ -198,66 +148,61 @@ impl SCF {
         // prepare standard two, three, and four-center integrals.
         // for ISDF integrals, they needs density grids, and thus should be prepared after the grid initialization
 
-        //new_scf.nuc_energy = new_scf.mol.geom.calc_nuc_energy();
-        new_scf.nuc_energy = calc_nuc_energy_with_ecp(&new_scf.mol.geom, &new_scf.mol.basis4elem);
+        let print_level = self.mol.ctrl.print_level;
 
-        if new_scf.mol.ctrl.print_level>0 {println!("Nuc_energy: {}",new_scf.nuc_energy)};
+        self.nuc_energy = calc_nuc_energy(&self.mol.geom, &self.mol.basis4elem);
 
-        //let dt1 = time::Local::now();
-        new_scf.ovlp = new_scf.mol.int_ij_matrixupper(String::from("ovlp"));
-        new_scf.h_core = new_scf.mol.int_ij_matrixupper(String::from("hcore"));
+        let nuc_energy_pc = calc_nuc_energy_with_point_charges(&self.mol.geom, &self.mol.basis4elem);
+        self.nuc_energy += nuc_energy_pc;
 
-        //========================================
-        // Now for emperial dispersion correction
-        //========================================
-        if let Some(empirical_dispersion_name) = &new_scf.mol.ctrl.empirical_dispersion {
+        if print_level>0 {
+            println!("Nuc_energy: {:16.8} Hartree",self.nuc_energy);
+            if nuc_energy_pc.abs() > 1.0e-4 {
+                println!("External potential due to point charges exists: {:16.8} Hartree", &nuc_energy_pc);
+            }
+        }
+
+        // For emperial dispersion correction
+        if let Some(empirical_dispersion_name) = &self.mol.ctrl.empirical_dispersion {
             //time_mark.new_item("Empirical Dispersion", "the empirical dispersion correction");
             //time_mark.count_start("Empirical Dispersion");
-        
-            let (engy_disp, grad_disp, sigma_disp) = dftd(&new_scf);
-
-            println!("The empirical dispersion energy of {} is {}.", new_scf.mol.ctrl.empirical_dispersion.clone().unwrap().to_uppercase(), engy_disp);
-
-            if new_scf.mol.ctrl.print_level>3 { 
+            let (engy_disp, grad_disp, sigma_disp) = dftd(self);
+            println!("The empirical dispersion energy of {} is {}.", self.mol.ctrl.empirical_dispersion.clone().unwrap().to_uppercase(), engy_disp);
+            if self.mol.ctrl.print_level>3 { 
                 println!("{:?}, {:?}", &grad_disp, &sigma_disp);
             };
-
-            new_scf.empirical_dispersion_energy = engy_disp;
+            self.empirical_dispersion_energy = engy_disp;
             //time_mark.count("Empirical Dispersion");
         } else {
             println!("no empirical dispersion correction");
         }
+        //========================================
 
-        //new_scf.h_core.formated_output(5, "full");
+        // For ghost effective potential
+        if self.mol.geom.ghost_ep_path.len() > 0 {
+            let tmp_matr = ghost_effective_potential_matrix(
+                &self.mol.cint_env, &self.mol.cint_atm, &self.mol.cint_bas,&self.mol.cint_type, self.mol.num_basis,
+                &self.mol.geom.ghost_ep_path, &self.mol.geom.ghost_ep_pos
+            );
+            self.h_core.iter_mut().zip(tmp_matr.iter()).for_each(|(a,b)| *a += *b);
+        } else {
+            println!("No ghost effective potential");
+        }
+        //========================================
 
-        //run_ecpint(&mol);
 
-        //new_scf.generate_occupation();
-        //test_ecp();
-        //let dt2 = time::Local::now();
-        //let timecost = (dt2.timestamp_millis()-dt1.timestamp_millis()) as f64 /1000.0;
-        //if mol.ctrl.print_level>1 {println!("The evaluation of 2D-tensors spends {:16.2} seconds",timecost)};
-        //let dt1 = time::Local::now();
-
-        // check and prepare the auxiliary basis sets
-        //if new_scf.mol.ctrl.use_auxbas {new_scf.mol.initialize_auxbas()};
-        //if new_scf.mol.ctrl.print_level>0 {
-        //    println!("numbasis: {:2}, num_auxbas: {:2}", new_scf.mol.num_basis,new_scf.mol.num_auxbas)
-        //};
-
-        //new_scf.mol.print_auxbas();
-        let print_level = self.mol.ctrl.print_level;
-
-        self.nuc_energy = calc_nuc_energy_with_ecp(&self.mol.geom, &self.mol.basis4elem);
-        if print_level>0 {println!("Nuc_energy: {}",self.nuc_energy)};
-
+        // For two-center integrals
         self.ovlp = self.mol.int_ij_matrixupper(String::from("ovlp"));
         self.h_core = self.mol.int_ij_matrixupper(String::from("hcore"));
+        //========================================
+
+        // For four-center integrals
         self.ijkl = if self.mol.ctrl.use_auxbas {
             None
         } else {
             Some(self.mol.int_ijkl_erifold4())
         };
+        //========================================
 
         if self.mol.ctrl.print_level>3 {
             println!("The S matrix:");
@@ -2116,6 +2061,10 @@ impl SCF {
 
     pub fn diagonalize_hamiltonian(&mut self) {
         (self.eigenvectors, self.eigenvalues) = diagonalize_hamiltonian_outside(&self);
+        for i_spin in (0..self.mol.spin_channel) {
+            //println!("debug the number of eigenvalues in {} spin channel is {}", i_spin, self.eigenvalues[i_spin].len());
+            //println!("debug the number of occ in {} spin channel is {}", i_spin, self.occupation[i_spin].len());
+        }
     }
 
     pub fn check_scf_convergence(&self, scftracerecode: &ScfTraceRecord) -> [bool;2] {
@@ -2197,12 +2146,18 @@ impl SCF {
     }
 
     pub fn formated_eigenvalues(&self,num_state_to_print:usize) {
+        let mut cur_num_state_to_print = 0;
         let spin_channel = self.mol.spin_channel;
         if spin_channel==1 {
             println!("{:>8}{:>14}{:>18}",String::from("State"),
                                         String::from("Occupation"),
                                         String::from("Eigenvalue"));
-            for i_state in (0..num_state_to_print) {
+            if self.occupation[0].len() < num_state_to_print {
+                cur_num_state_to_print = self.eigenvalues[0].len();
+            } else {
+                cur_num_state_to_print = num_state_to_print;
+            }
+            for i_state in (0..cur_num_state_to_print) {
                 println!("{:>8}{:>14.5}{:>18.6}",i_state,self.occupation[0][i_state],self.eigenvalues[0][i_state]);
             }
         } else {
@@ -2218,8 +2173,14 @@ impl SCF {
                 println!("{:>8}{:>14}{:>18}",String::from("State"),
                                             String::from("Occupation"),
                                             String::from("Eigenvalue"));
-                for i_state in (0..num_state_to_print) {
-                    println!("{:>8}{:>14.5}{:>18.6}",i_state,self.occupation[i_spin][i_state],self.eigenvalues[i_spin][i_state]);
+                if self.occupation[i_spin].len() < num_state_to_print {
+                    cur_num_state_to_print = self.eigenvalues[i_spin].len();
+                    println!("the number of eigenvalues in {} spin channel is {}", i_spin, self.occupation[i_spin].len());
+                } else {
+                    cur_num_state_to_print = num_state_to_print;
+                    for i_state in (0..cur_num_state_to_print) {
+                        println!("{:>8}{:>14.5}{:>18.6}",i_state,self.occupation[i_spin][i_state],self.eigenvalues[i_spin][i_state]);
+                    }
                 }
             }
         }
@@ -3120,7 +3081,7 @@ pub fn vk_upper_with_rimatr_use_dm_only_sync_v02(
             *vk_s = MatrixUpper::new(num_baspair,0.0_f64);
             //let dm_s = &dm[i_spin];
             utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
-            let dm_s = _power_rayon(&dm[i_spin], 0.5, 1.0e-8).unwrap();
+            let dm_s = _power_rayon(&dm[i_spin], 0.5, SQRT_THRESHOLD).unwrap();
             utilities::omp_set_num_threads_wrapper(1);
             let batch_num_auxbas = utilities::balancing(num_auxbas, rayon::current_num_threads());
             let (sender, receiver) = channel();
@@ -3659,6 +3620,10 @@ impl ScfTraceRecord {
             //
             // prepare and store the fock matrix in full formate and the error vector in the current step
             //
+            //for i_spin in (0..spin_channel) {
+            //    //self.target_vector.push([scf.hamiltonian[i_spin].clone(), scf.hamiltonian[i_spin].clone()]);
+            //    scf.hamiltonian[i_spin].formated_output(5, "upper");
+            //}
             let (cur_error_vec, cur_target) = generate_diis_error_vector(&scf.hamiltonian, &scf.ovlp, &mut self.density_matrix, spin_channel);
             self.error_vector.push(cur_error_vec);
             self.target_vector.push(cur_target);
@@ -4036,15 +4001,37 @@ pub fn generate_occupation_outside(scf_data: &SCF) -> ([Vec<f64>;2], [usize;2], 
         &scf_data.eigenvectors, 
         &scf_data.ovlp, 
         &scf_data.ref_eigenvectors);
-    }
-
-
-    if scf_data.mol.ctrl.print_level>3 {
-        println!("Occupation in Alpha Channel: {:?}", &occ[0]);
-        if scf_data.mol.spin_channel == 2{
-            println!("Occupation in Beta Channel:  {:?}", &occ[1]);
+        if scf_data.mol.ctrl.print_level>=2 {
+            let mut window = [occ[0].len()-1,0];
+            force_occ.iter().map(|x| x.get_check_window())
+                .for_each(|[x,y]| {
+                    if x< window[0] {window[0] = x};
+                    if y>window[1] {window[1]=y}
+                });
+            println!("Occupation in Alpha Channel ({}-{}):", window[0], window[1]);
+            let mut output = String::new();
+            &occ[0][window[0]..window[1]].iter().enumerate().for_each(|(li,x)| {
+                output = format!("{} ({:4}, {:6.3})", output, li+window[0], x);
+                if (li+1)%5 == 0 {
+                    output = format!("{}\n", output);
+                }
+            });
+            println!("{}",output);
+            if scf_data.mol.spin_channel == 2{
+                println!("Occupation in Beta Channel: ({}-{}):", window[0], window[1]);
+                let mut output = String::new();
+                &occ[1][window[0]..window[1]].iter().enumerate().for_each(|(li,x)| {
+                    output = format!("{} ({:4}, {:6.3})", output, li+window[0], x);
+                    if (li+1)%5 == 0 {
+                        output = format!("{}\n", output);
+                    }
+                });
+                println!("{}",output);
+            }
         }
     }
+
+
 
     (occ, homo, lumo)
 }
@@ -4128,7 +4115,7 @@ pub fn initialize_scf(scf_data: &mut SCF) {
     time_mark.new_item("InitGuess", "Prepare initial guess");
     time_mark.count_start("InitGuess");
     initial_guess(scf_data);
-    if ! scf_data.mol.ctrl.atom_sad && scf_data.mol.ctrl.print_level>4 {
+    if ! scf_data.mol.ctrl.atom_sad && scf_data.mol.ctrl.print_level>2 {
         println!("Initial density matrix by Atom SAD:");
         scf_data.density_matrix[0].formated_output(5, "full");
     }
@@ -4180,10 +4167,14 @@ pub fn scf_without_build(scf_data: &mut SCF) {
 
         let dt2 = time::Local::now();
         let timecost = (dt2.timestamp_millis()-dt1.timestamp_millis()) as f64 /1000.0;
-        if scf_data.mol.ctrl.print_level>0 {println!("Energy: {:18.10} Ha after {:4} iterations (in {:10.2} seconds).",
+        if scf_data.mol.ctrl.print_level>0 {
+            let [square_spin, spin_z] = evaluate_spin_angular_momentum(&scf_data.density_matrix, &scf_data.ovlp, scf_data.mol.spin_channel);
+            println!("Energy: {:18.10} Ha with <S^2> = {:6.3} and <Sz> = {:6.3} after {:4} iterations (in {:10.2} seconds).",
                  scf_records.scf_energy,
+                 square_spin, spin_z,
                  scf_records.num_iter-1,
-                 timecost)};
+                 timecost)
+            };
         if scf_data.mol.ctrl.print_level>1 {
             println!("Detailed timing info in this SCF step:");
             let timecost = (dt1_1.timestamp_millis()-dt1.timestamp_millis()) as f64 /1000.0;
@@ -4284,8 +4275,12 @@ pub fn vj_on_the_fly_par(mol: &Molecule, dm: &Vec<MatrixFull<f64>>) -> Vec<Matri
 
     let par_tasks = utilities::balancing(index_new.len(), rayon::current_num_threads());
     let (sender, receiver) = channel();
+    //println!("debug {:?}", &par_tasks);
 
     par_tasks.par_iter().for_each_with(sender, |s,task_range| {
+        //rayon::current_thread_index();
+        let mut cint_data = mol.initialize_cint(false);
+        cint_data.cint2e_optimizer_rust();
 
         let mut out_submatrix = Vec::new();
 
@@ -4295,7 +4290,8 @@ pub fn vj_on_the_fly_par(mol: &Molecule, dm: &Vec<MatrixFull<f64>>) -> Vec<Matri
             let bas_start_l = mol.cint_fdqc[*l][0];
             let bas_len_l = mol.cint_fdqc[*l][1];
 
-            let klij = mol.int_ijkl_given_kl_v03(*k, *l, &matrixupper_index);
+
+            let klij = mol.int_ijkl_given_kl_v03(*k, *l, &matrixupper_index, &mut cint_data);
             let mut out = vec![
                 MatrixFull::new([bas_len_k, bas_len_l],0.0),
                 if spin_channel==2 {
@@ -4331,6 +4327,8 @@ pub fn vj_on_the_fly_par(mol: &Molecule, dm: &Vec<MatrixFull<f64>>) -> Vec<Matri
             out_submatrix.push((out,*k,*l));
 
         });
+
+        cint_data.final_c2r();
         s.send(out_submatrix).unwrap();
     });
 
@@ -4498,6 +4496,35 @@ pub fn vj_on_the_fly_par_batch_by_batch(mol: &Molecule, dm: &Vec<MatrixFull<f64>
     }
     vj
 }
+
+// evaluate the expectation value of squre spin angular momentum operator (S^2) as well as the expectation value of spin angular momentum operator along z axis
+// the expectation value of S^2 is given by 3/4*Tr[(scf_data.density_matrix[0]] + scf_data.density_matrix[1])\dot scf_data.ovlp.to_matrixfull().unwrap()]
+// the expectation value of S_z^2  is given by 1/2*Tr[(scf_data.density_matrix[0] -scf_data.density_matrix[1])\dot scf_data.ovlp.to_matrixfull().unwrap()]
+// use MatrixFull::iter_diagonal() to get the diagonal elements of a matrix for the `Tr` evaluation
+pub fn evaluate_spin_angular_momentum(dm: &Vec<MatrixFull<f64>>, ovlp: &MatrixUpper<f64>,spin_channel: usize) -> [f64;2] {
+    let mut tr_spin_angular_momentum = [0.0;2];
+    let ovlp_full = ovlp.to_matrixfull().unwrap();
+
+    if spin_channel==1 {
+        let dm_s = dm.get(0).unwrap();
+        let mut tmp_matrix = dm_s.clone();
+        _dgemm_full(dm_s, 'N', &ovlp_full, 'N', &mut tmp_matrix, 1.0, 0.0);
+
+        [0.75*tmp_matrix.iter_diagonal().unwrap().fold(0.0, |acc, val| acc + val),0.0]
+    } else {
+        let mut tr_spin_angular_momentum = [0.0;2];
+        for i_spin in 0..spin_channel {
+            let dm_s = dm.get(i_spin).unwrap();
+            let mut tmp_matrix = dm_s.clone();
+            _dgemm_full(dm_s, 'N', &ovlp_full, 'N', &mut tmp_matrix, 1.0, 0.0);
+            tr_spin_angular_momentum[i_spin] = tmp_matrix.iter_diagonal().unwrap().fold(0.0, |acc, val| acc + val);
+        }
+
+        println!("debug Tr[P.O]: {:16.8}, {:16.8}", tr_spin_angular_momentum[0], tr_spin_angular_momentum[1]);
+        [0.75*(tr_spin_angular_momentum[0]+tr_spin_angular_momentum[1]),
+         0.50*(tr_spin_angular_momentum[0]-tr_spin_angular_momentum[1])]
+    }
+} 
 
 
 

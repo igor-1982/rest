@@ -54,10 +54,12 @@ extern crate chrono as time;
 extern crate lazy_static;
 use std::{f64, fs::File, io::Write};
 use std::path::PathBuf;
+use basis_io::ecp::ghost_effective_potential_matrix;
+use num_traits::Pow;
 use pyo3::prelude::*;
 use autocxx::prelude::*;
 use ctrl_io::JobType;
-use pyrest::constants::ANG;
+use constants::ANG;
 use scf_io::{SCF,scf_without_build};
 use tensors::{MathMatrix, MatrixFull};
 
@@ -132,8 +134,6 @@ fn main() -> anyhow::Result<()> {
     time_mark.new_item("Overall", "the whole job");
     time_mark.count_start("Overall");
 
-    time_mark.new_item("SCF", "the scf procedure");
-    time_mark.count_start("SCF");
 
     let ctrl_file = utilities::parse_input().value_of("input_file").unwrap_or("ctrl.in").to_string();
     if ! PathBuf::from(ctrl_file.clone()).is_file() {
@@ -141,25 +141,53 @@ fn main() -> anyhow::Result<()> {
     }
     let mut mol = Molecule::build(ctrl_file)?;
     if mol.ctrl.print_level>0 {println!("Molecule_name: {}", &mol.geom.name)};
+    if mol.ctrl.print_level>=2 {
+        println!("{}", mol.ctrl.formated_output_in_toml());
+    }
 
     if mol.ctrl.deep_pot {
         //let mut scf_data = scf_io::SCF::build(&mut mol);
         let mut effective_hamiltonian = mol.int_ij_matrixupper(String::from("hcore"));
-        effective_hamiltonian.formated_output(5, "full");
+        //effective_hamiltonian.formated_output(5, "full");
         let effective_nxc = effective_nxc_matrix(&mut mol);
         effective_nxc.formated_output(5, "full");
         effective_hamiltonian.data.iter_mut().zip(effective_nxc.data.iter()).for_each(|(to,from)| {*to += from});
 
-        let effective_nxc = effective_nxc_tensors(&mut mol);
-        effective_nxc.formated_output(5, "full");
+        let mut ecp = mol.int_ij_matrixupper(String::from("ecp"));
+        //println!("ecp: {:?}", ecp);
+        ecp.iter_mut().zip(effective_nxc.iter()).for_each(|(to, from)| {*to -= from});
 
-        //let mut ecp = mol.int_ij_matrixupper(String::from("ecp"));
-        //ecp.formated_output(5, "full");
+        ecp.formated_output(5, "full");
+        let acc_error = ecp.iter().fold(0.0, |acc, x| {acc + x.abs()});
+        println!("acc_error: {}", acc_error);
+        
+        return Ok(())
+    }
+
+    if mol.ctrl.bench_eps {
+        let ecp = mol.int_ij_matrixupper(String::from("ecp"));
+        let enxc = effective_nxc_matrix(&mut mol);
+        let gep = ghost_effective_potential_matrix(
+            &mol.cint_env, &mol.cint_atm, &mol.cint_bas, &mol.cint_type, mol.num_basis, 
+            &mol.geom.ghost_ep_path, &mol.geom.ghost_ep_pos);
+
+        let d12 = ecp.data.iter().zip(enxc.data.iter()).fold(0.0, |acc, dt| {acc + (dt.0 -dt.1).powf(2.0)});
+        let d13 = ecp.data.iter().zip(gep.data.iter()).fold(0.0, |acc, dt| {acc + (dt.0 -dt.1).powf(2.0)});
+        let num_data = ecp.data.len() as f64;
+        println!("Compare between ECP, ENXC and GEP with the matrix sizes of");
+        println!(" {:?}, {:?}, and {:?}, respectively", ecp.size(), enxc.size(), gep.size());
+        println!("RMSDs between (ECP, ENXC) and (ECP, GEP): ({:16.8}, {:16.8})", 
+            (d12/num_data).powf(0.5), (d13/num_data).powf(0.5)
+        );
+
         return Ok(())
     }
 
     // initialize the SCF procedure
+    time_mark.new_item("SCF", "the scf procedure");
+    time_mark.count_start("SCF");
     let mut scf_data = scf_io::SCF::build(mol);
+    time_mark.count("SCF");
     // perform the SCF and post SCF evaluation for the specified xc method
     performance_essential_calculations(&mut scf_data, &mut time_mark);
 
@@ -323,15 +351,17 @@ pub fn performance_essential_calculations(scf_data: &mut SCF, time_mark: &mut ut
 
     let mut total_energy = 0.0;
 
-    //==================================================================
-    // Now evaluate the advanced correction energy for the given method
-    //===============================================================
+    //=================================================================
+    // Now evaluate the SCF energy for the given method
+    //=================================================================
+    time_mark.count_start("SCF");
     scf_without_build(scf_data);
+    time_mark.count("SCF");
 
     //==================================================================
     // Now evaluate the advanced correction energy for the given method
-    //===============================================================
-    let mut time_mark = utilities::TimeRecords::new();
+    //==================================================================
+    //let mut time_mark = utilities::TimeRecords::new();
     if let Some(dft_method) = &scf_data.mol.xc_data.dfa_family_pos {
         match dft_method {
             dft::DFAFamily::PT2 | dft::DFAFamily::SBGE2 => {

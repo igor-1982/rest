@@ -1,5 +1,6 @@
 use tensors::{MatrixFull, MatrixUpper, BasicMatrix};
 
+use crate::constants::E;
 use crate::initial_guess::enxc::effective_nxc_matrix;
 use crate::scf_io::{scf, SCFType};
 use crate::{molecule_io::Molecule, scf_io::SCF, dft::Grids};
@@ -37,13 +38,20 @@ pub fn initial_guess(scf_data: &mut SCF) {
     // import the eigenvalues and eigen vectors from a hdf5 file directly
     } else if scf_data.mol.ctrl.restart && std::path::Path::new(&scf_data.mol.ctrl.chkfile).exists()  {
         if scf_data.mol.ctrl.chkfile_type.eq(&"hdf5") {
-            let (eigenvectors, eigenvalues) = initial_guess_from_hdf5chk(&scf_data.mol);
+            let (eigenvectors, eigenvalues, is_occupation) = initial_guess_from_hdf5chk(&scf_data.mol);
 
             //=============================
             // for MOM projection
+            //=============================
             if scf_data.mol.ctrl.force_state_occupation.len()>0 {
-                scf_data.ref_eigenvectors = eigenvectors.clone();
-                // validate the force occupation setting
+                let restart = scf_data.mol.ctrl.chkfile.clone();
+                //let is_exist = scf_data.ref_eigenvectors.contains_key(&restart);
+                //if ! is_exist {
+                scf_data.ref_eigenvectors.insert(
+                    restart, 
+                    (eigenvectors.clone(),[0,scf_data.mol.num_basis,scf_data.mol.num_state,scf_data.mol.spin_channel])
+                );
+                //};
                 match scf_data.scftype {
                     SCFType::RHF => {
                         scf_data.mol.ctrl.force_state_occupation.iter().enumerate().for_each(|(i,x)| {
@@ -66,14 +74,28 @@ pub fn initial_guess(scf_data: &mut SCF) {
                         })
 
                     }
-                    
-
                 }
             }
+            //println!("{:?}", &scf_data.mol.ctrl.auxiliary_reference_states);
+            if scf_data.mol.ctrl.auxiliary_reference_states.len() > 0 {
+                scf_data.mol.ctrl.auxiliary_reference_states.iter().for_each(|(chkname,global_index)| {
+                    println!("{}", chkname);
+                    let is_exist = scf_data.ref_eigenvectors.contains_key(chkname);
+                    if ! is_exist {
+                        let (reference,[num_basis, num_state, spin_channel]) = import_mo_coeff_from_hdf5chkfile(chkname);
+                        println!("{},{},{},{},{}", chkname,global_index, num_basis, num_state, spin_channel);
+                        scf_data.ref_eigenvectors.insert(chkname.clone(), (reference,[global_index.clone(),num_basis, num_state, spin_channel]));
+                    }
+                });
+ ;           }
             //=============================
             scf_data.eigenvalues = eigenvalues;
             scf_data.eigenvectors = eigenvectors;
-            scf_data.generate_occupation();
+            if let Some(occupation) = is_occupation {
+                scf_data.occupation = occupation;
+            } else {
+                scf_data.generate_occupation();
+            }
             scf_data.generate_density_matrix();
         } else {
             panic!("WARNNING: at present only hdf5 type check file is supported");
@@ -86,8 +108,9 @@ pub fn initial_guess(scf_data: &mut SCF) {
             let mut effective_hamiltonian = effective_nxc_matrix(&mut cur_mol);
             init_fock.data.iter_mut().zip(effective_hamiltonian.data.iter()).for_each(|(to, from)| {*to += *from});
             scf_data.hamiltonian = [init_fock,MatrixUpper::new(1,0.0)];
+            //scf_data.hamiltonian[0].formated_output(10, "full");
         } else {
-            panic!("Error: at present the 'deep_enxc' initial guess can only be used for the close-shell problem");
+            panic!("Error: at present the 'deep_enxc' initial guess is only available for close-shell calculations");
         };
         scf_data.diagonalize_hamiltonian();
         scf_data.generate_occupation();
@@ -113,7 +136,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
         //scf_data.generate_hf_hamiltonian();
     } else if scf_data.mol.ctrl.initial_guess.eq(&"sad") {
         scf_data.density_matrix = initial_guess_from_sad(&scf_data.mol);
-        //for DFT methods, it needs the eigenvectors to generate the hamiltoniam. In consequence, we use the hf method to prepare the eigenvectors from the guess dmß
+        //for DFT methods, it needs the eigenvectors to generate the hamiltoniam. In consequence, we use the hf method to prepare the eigenvectors from the guess dm
         //scf_data.generate_hf_hamiltonian_for_guess();
         //if scf_data.mol.ctrl.print_level>0 {println!("Initial guess HF energy: {:16.8}", scf_data.evaluate_hf_total_energy())};
         let original_flag = scf_data.mol.ctrl.use_dm_only;
@@ -121,7 +144,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
         scf_data.generate_hf_hamiltonian();
         scf_data.mol.ctrl.use_dm_only = original_flag;
         //println!("{:?}",scf_data.);
-        if scf_data.mol.ctrl.print_level>0 {println!("Initial guess HF energy: {:16.8}", scf_data.scf_energy)};
+        if scf_data.mol.ctrl.print_level>0 {println!("Initial guess HF energy: {:24.16}", scf_data.scf_energy)};
 
         scf_data.diagonalize_hamiltonian();
         scf_data.generate_occupation();
@@ -169,7 +192,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
 
 
 pub fn initial_guess_from_hdf5guess(mol: &Molecule) -> Vec<MatrixFull<f64>> {
-    if mol.ctrl.print_level>0 {println!("Importing density matrix from external inital guess file")};
+    if mol.ctrl.print_level>0 {println!("Importing density matrix from external initial guess file")};
     let file = hdf5::File::open(&mol.ctrl.guessfile).unwrap();
     let init_guess = file.dataset("init_guess").unwrap().read_raw::<f64>().unwrap();
     let mut dm = vec![MatrixFull::empty(),MatrixFull::empty()];
@@ -181,47 +204,130 @@ pub fn initial_guess_from_hdf5guess(mol: &Molecule) -> Vec<MatrixFull<f64>> {
     dm
 }
 
-pub fn initial_guess_from_hdf5chk(mol: &Molecule) -> ([MatrixFull<f64>;2],[Vec<f64>;2]) {
+pub fn initial_guess_from_hdf5chk(mol: &Molecule) -> ([MatrixFull<f64>;2],[Vec<f64>;2],Option<[Vec<f64>;2]>) {
+
+    initial_guess_from_hdf5chkfile(&mol.ctrl.chkfile, 
+        mol.spin_channel,
+        mol.num_state,
+        mol.num_basis,
+        mol.ctrl.print_level)
+}
+
+pub fn initial_guess_from_hdf5chkfile(
+    chkname: &str, 
+    spin_channel: usize,
+    num_state: usize,
+    num_basis: usize,
+    print_level: usize,
+) -> ([MatrixFull<f64>;2],[Vec<f64>;2], Option<[Vec<f64>;2]>) {
     
     //let mut tmp_scf = SCF::new(&mol);
     //tmp_scf.generate_occupation();
 
-    let file = hdf5::File::open(&mol.ctrl.chkfile).unwrap();
+    let file = hdf5::File::open(chkname).unwrap();
     let scf = file.group("scf").unwrap();
     let member = scf.member_names().unwrap();
     let e_tot = scf.dataset("e_tot").unwrap().read_scalar::<f64>().unwrap();
-    if mol.ctrl.print_level>1 {
+    if print_level>1 {
         println!("HDF5 Group: {:?} \nMembers: {:?}", scf, member);
     }
-    if mol.ctrl.print_level>0 {println!("E_tot from chkfile: {:18.10}", e_tot)};
+    if print_level>0 {println!("E_tot from chkfile: {:18.10}", e_tot)};
+    // importing MO coefficients
     let buf01 = scf.dataset("mo_coeff").unwrap().read_raw::<f64>().unwrap();
+    if buf01.len() != num_state*num_basis*spin_channel {
+        panic!("Inconsistency happens when importing the molecular coefficients from \'{}\':\n buf01 length: {}, num_state*num_basis*spin_channel: {}", 
+        chkname, buf01.len(), num_state*num_basis*spin_channel);
+    }
+    // importing MO eigenvalues
     let buf02 = scf.dataset("mo_energy").unwrap().read_raw::<f64>().unwrap();
+    if buf02.len() != num_state*spin_channel {
+        panic!("Inconsistency happens when importing the molecular orbital eigenvalues from \'{}\':\n buf02 length: {}, num_state*spin_channel: {}", 
+        chkname, buf02.len(), num_state*spin_channel);
+    }
     let mut tmp_eigenvectors: [MatrixFull<f64>;2] = [MatrixFull::empty(),MatrixFull::empty()];
     let mut tmp_eigenvalues: [Vec<f64>;2] = [vec![],vec![]];
-    (0..mol.spin_channel).into_iter().for_each(|i| {
-        let start = (0 + i)*mol.num_state*mol.num_basis;
-        let end = (1 + i)*mol.num_state*mol.num_basis;
+    (0..spin_channel).into_iter().for_each(|i| {
+        let start = (0 + i)*num_state*num_basis;
+        let end = (1 + i)*num_state*num_basis;
 
-        let tmp_eigen = MatrixFull::from_vec([mol.num_state,mol.num_basis], buf01[start..end].to_vec()).unwrap();
+        let tmp_eigen = MatrixFull::from_vec([num_state,num_basis], buf01[start..end].to_vec()).unwrap();
         tmp_eigenvectors[i]=tmp_eigen.transpose_and_drop();
 
         //tmp_scf.eigenvectors[i] = tmp_eigenvectors[i].transpose();
 
-        tmp_eigenvalues[i]=buf02[ (0+i)*mol.num_state..(1+i)*mol.num_state].to_vec();
+        tmp_eigenvalues[i]=buf02[ (0+i)*num_state..(1+i)*num_state].to_vec();
     });
-    if mol.ctrl.print_level>3 {
-        (0..mol.spin_channel).into_iter().for_each(|i| {
+    if print_level>3 {
+        (0..spin_channel).into_iter().for_each(|i| {
             tmp_eigenvectors[i].formated_output(5, "full");
             println!("eigenval {:?}", &tmp_eigenvalues[i]);
         });
     }
 
+    // importing MO occupation
+    let is_exist = scf.member_names().unwrap().iter().fold(false, |is_exist, x| x.eq("mo_occupation"));
+    let buf03 = if is_exist {
+        Some(scf.dataset("mo_occupation").unwrap().read_raw::<f64>().unwrap())
+    } else {
+        None
+    };
+    let tmp_occupation = if let Some(tmp_buf03) = &buf03 {
+        if tmp_buf03.len() != num_state*spin_channel {
+            panic!("Inconsistency happens when importing the molecular orbital occupation from \'{}\':\n buf03 length: {}, num_state*spin_channel: {}", 
+            chkname, tmp_buf03.len(), num_state*spin_channel);
+            let mut tmp_occupation_0 = [vec![],vec![]];
+            (0..spin_channel).into_iter().for_each(|i_spin| {
+                tmp_occupation_0[i_spin]=tmp_buf03[ (0+i_spin)*num_state..(1+i_spin)*num_state].to_vec();
+            });
+            Some(tmp_occupation_0)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     //tmp_scf.generate_density_matrix();
 
     //tmp_scf.density_matrix
-    (tmp_eigenvectors,tmp_eigenvalues)
+    (tmp_eigenvectors,tmp_eigenvalues,tmp_occupation)
 
 }
+
+pub fn import_mo_coeff_from_hdf5chkfile(chkname: &str) -> ([MatrixFull<f64>;2], [usize;3]) {
+    
+    //let mut tmp_scf = SCF::new(&mol);
+    //tmp_scf.generate_occupation();
+
+    let file = hdf5::File::open(chkname).unwrap();
+    let scf = file.group("scf").unwrap();
+    let member = scf.member_names().unwrap();
+
+    let num_basis = scf.dataset("num_basis").unwrap().read_scalar::<usize>().unwrap();
+    let num_state = scf.dataset("num_state").unwrap().read_scalar::<usize>().unwrap();
+    let spin_channel = scf.dataset("spin_channel").unwrap().read_scalar::<usize>().unwrap();
+
+    // importing MO coefficients
+    let buf01 = scf.dataset("mo_coeff").unwrap().read_raw::<f64>().unwrap();
+    if buf01.len() != num_state*num_basis*spin_channel {
+        panic!("Inconsistency happens when importing the molecular coefficients from \'{}\':\n buf01 length: {}, num_state*num_basis*spin_channel: {}", 
+        chkname, buf01.len(), num_state*num_basis*spin_channel);
+    }
+    let mut tmp_eigenvectors: [MatrixFull<f64>;2] = [MatrixFull::empty(),MatrixFull::empty()];
+
+    (0..spin_channel).into_iter().for_each(|i| {
+        let start = (0 + i)*num_state*num_basis;
+        let end = (1 + i)*num_state*num_basis;
+
+        let tmp_eigen = MatrixFull::from_vec([num_state,num_basis], buf01[start..end].to_vec()).unwrap();
+        tmp_eigenvectors[i]=tmp_eigen.transpose_and_drop();
+
+    });
+
+    (tmp_eigenvectors, [num_basis, num_state, spin_channel])
+
+}
+
 
 
 pub fn initial_guess_from_vsap(mol: &Molecule, grids: &Option<Grids>) -> MatrixUpper<f64> {
@@ -240,7 +346,9 @@ pub fn initial_guess_from_vsap(mol: &Molecule, grids: &Option<Grids>) -> MatrixU
         panic!("Density grids should be prepared at first for SAP initial guess")
     };
 
-    h_sap.data.iter_mut().zip(tmp_v.iter_matrixupper().unwrap()).for_each(|(t,f)| *t += f);
+    //tmp_v.formated_output_e(5, "full");
+
+    h_sap.data.iter_mut().zip(tmp_v.iter_matrixupper().unwrap()).for_each(|(t,f)| if f.abs() > 1.0e-8 {*t += f});
 
     //time_mark.count("SAP");
 
