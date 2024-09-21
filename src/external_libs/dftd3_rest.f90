@@ -20,9 +20,7 @@ subroutine calc_dftd3_atm_rest(num, num_size, xyz, charge, uhf, method_c, method
     class(rational_damping_param), allocatable :: rational_param
     class(zero_damping_param), allocatable :: zero_param
     type(structure_type) :: mol
-    real(wp), allocatable :: gradient(:,:)
-    real(wp), allocatable :: sigma(:,:)
- 
+
     real(wp), allocatable :: xyz_m(:, :)
  
     real(wp), intent(out) :: energy
@@ -40,8 +38,6 @@ subroutine calc_dftd3_atm_rest(num, num_size, xyz, charge, uhf, method_c, method
  
     call new_d3_model(disp, mol)
  
-    allocate(gradient(3, num_size), sigma(3, num_size))
- 
     !change model by input
     select case (trim(corr))
     case ('d3bj')
@@ -49,21 +45,13 @@ subroutine calc_dftd3_atm_rest(num, num_size, xyz, charge, uhf, method_c, method
         if (allocated(error)) return
         allocate(rational_param)
         call new_rational_damping(rational_param, inp)
-        call get_dispersion(mol, disp, rational_param, realspace_cutoff(), energy, gradient, sigma)
+        call get_dispersion(mol, disp, rational_param, realspace_cutoff(), energy, final_gradient, final_sigma)
     case ('d3')
         call get_zero_damping(inp, method, error, s9=1.0_wp)
         if (allocated(error)) return
         allocate(zero_param)
         call new_zero_damping(zero_param, inp)
-        call get_dispersion(mol, disp, zero_param, realspace_cutoff(), energy, gradient, sigma)
+        call get_dispersion(mol, disp, zero_param, realspace_cutoff(), energy, final_gradient, final_sigma)
     end select
  
-    if (allocated(gradient)) then
-        final_gradient = gradient
-    endif
- 
-    if (allocated(sigma)) then
-        final_sigma = sigma
-    endif
-
 end subroutine calc_dftd3_atm_rest

@@ -70,7 +70,7 @@ pub fn dftd(scf_data: &SCF) -> (f64, Option<Vec<f64>>, Option<Vec<f64>>) {
             } else if tmp_emprical == "d4" {
                 return dftd4_atm(scf_data); 
             } else {
-                println!("Invalid input for empirical_dispersion: {}, No empirical dispersion will be done!", tmp_emprical);
+                println!("Invalid input for empirical_dispersion: {}.\nDo not invoke the empirical dispersion evaluation!", tmp_emprical);
                 return (0.0, None, None);
             }
         } else {
@@ -78,7 +78,7 @@ pub fn dftd(scf_data: &SCF) -> (f64, Option<Vec<f64>>, Option<Vec<f64>>) {
             return (0.0, None, None);
         }
     } else {
-        println!("Invalid input for xc: {}, No empirical dispersion will be done!", scf_data.mol.ctrl.xc);
+        println!("Invalid input for xc: {}.\nDo not invoke the empirical dispersion evaluation!", scf_data.mol.ctrl.xc);
         return (0.0, None, None);
     }
 }
@@ -91,35 +91,6 @@ pub fn dftd3_atm(scf_data: &SCF) -> (f64, Option<Vec<f64>>, Option<Vec<f64>>) {
     let mut energy = 0.0;
     let mut gradient = vec![0.0; num.len()*3];
     let mut sigma = vec![0.0; 20];
-
-    //println!("{:?}", num);
-    //println!("size/length of num: {}", num.len());
-    //let xyz = scf_data.mol.geom.position.iter().map(|x| *x as f64).collect::<Vec<f64>>();
-    //let method_cstring = CString::new(method).expect("CString::new failed");
-    //let empirical_dispersion: String = if let Some(tmp_d) = &scf_data.mol.ctrl.empirical_dispersion {
-    //    tmp_d.clone()
-    //} else {
-    //    "b3dj".to_string()
-    //};
-    //print xyz ptr data
-    //println!("{:?}", scf_data.mol.geom.position.data);
-    //println!("Size of xyz in Rust: {}", scf_data.mol.geom.position.data.len());
-    //println!("{:?}", scf_data.mol.ctrl.charge);
-    //println!("{:?}", empirical_dispersion);
-    //unsafe{test_input_(
-    //    num.as_ptr(),
-    //    &num_len,
-    //    scf_data.mol.geom.position.data.as_ptr(),
-    //    &scf_data.mol.ctrl.charge as *const f64,
-    //    &(scf_data.mol.ctrl.spin as i32 -1),
-    //    scf_data.mol.ctrl.xc.as_ptr() as *const c_char,
-    //    &(scf_data.mol.ctrl.xc.len() as i32),
-    //    &mut energy,
-    //    gradient.as_mut_ptr(),
-    //    sigma.as_mut_ptr(),
-    //    scf_data.mol.ctrl.empirical_dispersion.clone().unwrap().as_ptr() as *const c_char,
-    //    &(scf_data.mol.ctrl.empirical_dispersion.clone().unwrap().len() as i32),
-    // )}
 
     println!("Calculating DFTD3:");
     unsafe{calc_dftd3_atm_rest_(

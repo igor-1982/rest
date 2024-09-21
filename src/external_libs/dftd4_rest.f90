@@ -14,8 +14,6 @@ subroutine calc_dftd4_rest(num, num_size, xyz, charge, uhf, method_c, method_len
     character(len=100) :: method
  
     type(structure_type) :: mol
-    real(wp), allocatable :: gradient(:,:)
-    real(wp), allocatable :: sigma(:,:)
     type(d4_model) :: disp
     class(damping_param), allocatable :: param
  
@@ -33,16 +31,11 @@ subroutine calc_dftd4_rest(num, num_size, xyz, charge, uhf, method_c, method_len
  
     call new(mol, num, xyz_m, charge, uhf)
  
-    allocate(gradient(3, num_size), sigma(3, num_size))
- 
     call new_d4_model(disp, mol)
  
     call get_rational_damping(method, param, s9=1.0_wp)
  
-    call get_dispersion(mol, disp, param, realspace_cutoff(), energy, gradient, sigma)
- 
-    final_gradient = gradient
-    final_sigma = sigma
+    call get_dispersion(mol, disp, param, realspace_cutoff(), energy, final_gradient, final_sigma)
  
 end subroutine calc_dftd4_rest
 

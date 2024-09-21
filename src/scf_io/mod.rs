@@ -150,6 +150,8 @@ impl SCF {
 
         let print_level = self.mol.ctrl.print_level;
 
+        //========================================
+        // For nuclear energy, includin the interaction with the ghost atoms with point charges
         self.nuc_energy = calc_nuc_energy(&self.mol.geom, &self.mol.basis4elem);
 
         let nuc_energy_pc = calc_nuc_energy_with_point_charges(&self.mol.geom, &self.mol.basis4elem);
@@ -161,23 +163,26 @@ impl SCF {
                 println!("External potential due to point charges exists: {:16.8} Hartree", &nuc_energy_pc);
             }
         }
-
+        //========================================
         // For emperial dispersion correction
         if let Some(empirical_dispersion_name) = &self.mol.ctrl.empirical_dispersion {
-            //time_mark.new_item("Empirical Dispersion", "the empirical dispersion correction");
-            //time_mark.count_start("Empirical Dispersion");
             let (engy_disp, grad_disp, sigma_disp) = dftd(self);
             println!("The empirical dispersion energy of {} is {}.", self.mol.ctrl.empirical_dispersion.clone().unwrap().to_uppercase(), engy_disp);
             if self.mol.ctrl.print_level>3 { 
                 println!("{:?}, {:?}", &grad_disp, &sigma_disp);
             };
             self.empirical_dispersion_energy = engy_disp;
-            //time_mark.count("Empirical Dispersion");
+            
+            // empirical dispersion energy added to the nuc_energy
+            self.nuc_energy += engy_disp;
         } else {
             println!("no empirical dispersion correction");
         }
         //========================================
-
+        // For two-center integrals
+        self.ovlp = self.mol.int_ij_matrixupper(String::from("ovlp"));
+        self.h_core = self.mol.int_ij_matrixupper(String::from("hcore"));
+        //========================================
         // For ghost effective potential
         if self.mol.geom.ghost_ep_path.len() > 0 {
             let tmp_matr = ghost_effective_potential_matrix(
@@ -191,10 +196,6 @@ impl SCF {
         //========================================
 
 
-        // For two-center integrals
-        self.ovlp = self.mol.int_ij_matrixupper(String::from("ovlp"));
-        self.h_core = self.mol.int_ij_matrixupper(String::from("hcore"));
-        //========================================
 
         // For four-center integrals
         self.ijkl = if self.mol.ctrl.use_auxbas {
@@ -3819,9 +3820,9 @@ pub fn scf(mol:Molecule) -> anyhow::Result<SCF> {
         println!("the job spends {:16.2} seconds",(dt2.timestamp_millis()-dt0.timestamp_millis()) as f64 /1000.0)
     };
 
-    if scf_data.empirical_dispersion_energy != 0.0 {
-        scf_data.scf_energy += scf_data.empirical_dispersion_energy
-    }
+    //if scf_data.empirical_dispersion_energy != 0.0 {
+    //    scf_data.scf_energy += scf_data.empirical_dispersion_energy
+    //}
 
     Ok(scf_data)
 }
