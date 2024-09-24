@@ -140,7 +140,7 @@ Installation
      -> cmake -B build -G Ninja -DBUILD_SHARED_LIBS=1
      -> cmake --build build
      -> cp build/libs-dftd3.so.* $REST_EXT_DIR/
-     -> mkdir -f $REST_EXT_INC/dftd3
+     -> mkdir -p $REST_EXT_INC/dftd3
      -> find build -name *.mod | xargs -I {} cp {} $REST_EXT_INC/dftd3
       This step is rather important to finish building the system. 
       Wherever your $REST_EXT_INC is, you should always put your mods in the dftd3 directory.
@@ -153,7 +153,7 @@ Installation
        -> cd dftd4
        -> cmake -B build -G Ninja -DBUILD_SHARED_LIBS=1
        -> cmake --build build
-       -> mkdir -f $REST_EXT_INC/dftd4
+       -> mkdir -p $REST_EXT_INC/dftd4
        -> cp build/libdftd4.so.* $REST_EXT_DIR/
        -> find build -name *.mod | xargs -I {} cp {} $REST_EXT_INC/dftd4
          =========================================================

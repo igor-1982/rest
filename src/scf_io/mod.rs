@@ -194,9 +194,6 @@ impl SCF {
             println!("No ghost effective potential");
         }
         //========================================
-
-
-
         // For four-center integrals
         self.ijkl = if self.mol.ctrl.use_auxbas {
             None
@@ -204,7 +201,6 @@ impl SCF {
             Some(self.mol.int_ijkl_erifold4())
         };
         //========================================
-
         if self.mol.ctrl.print_level>3 {
             println!("The S matrix:");
             self.ovlp.formated_output(5, "lower");

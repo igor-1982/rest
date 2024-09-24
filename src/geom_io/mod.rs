@@ -521,6 +521,7 @@ impl GeomCell {
         // type = basis set:     consider the basis set of the element <elem> at the given position 
         // type = point charge:  consider a point charge of <charge> at the given position
         // type = potential:     consider an effective potential stored in <ecp_file> at the given position
+
         let re0 = Regex::new(r"(?x)\s*
                             basis\sset\s*,?            # the type 
                             \s+
@@ -532,14 +533,125 @@ impl GeomCell {
                             \s+
                             (?P<z>[\+-]?\d+.\d+)\s*,?            # the 'z' position
                             \s*").unwrap();
+        //let mut tmp_bs_ele: Vec<String> = vec![];
+        //let mut tmp_bs_pos: Vec<f64> = vec![];
+        //for cap in re0.captures_iter(&position) {
+        //    tmp_bs_ele.push(cap[1].to_string());
+        //    tmp_bs_pos.push(cap[2].parse().unwrap());
+        //    tmp_bs_pos.push(cap[3].parse().unwrap());
+        //    tmp_bs_pos.push(cap[4].parse().unwrap());
+        //};
+
+        //let bs_return = if tmp_bs_ele.len() ==0 {
+        //    None
+        //} else {
+        //    let tmp_size: [usize;2] = [3,tmp_bs_pos.len()/3];
+        //    let mut tmp_pos_tensor = MatrixFull::from_vec(tmp_size, tmp_bs_pos).unwrap();
+        //    if let GeomUnit::Angstrom = unit {
+        //        // To store the geometry position in "Bohr" according to the convention of quantum chemistry. 
+        //        tmp_pos_tensor.self_multiple(ANG.powf(-1.0));
+        //    };
+        //    Some((tmp_bs_ele, tmp_pos_tensor))
+        //};
+        let re1 = Regex::new(r"(?x)\s*
+                            point\scharge\s*,?                 # the type 
+                            \s+
+                            (?P<charge>[\+-]?\d+.\d+)\s*,?       # the point charge 
+                            \s+
+                            (?P<x>[\+-]?\d+.\d+)\s*,?            # the 'x' position
+                            \s+
+                            (?P<y>[\+-]?\d+.\d+)\s*,?            # the 'y' position
+                            \s+
+                            (?P<z>[\+-]?\d+.\d+)\s*,?            # the 'z' position
+                            \s*").unwrap();
+        //let mut tmp_pc_chg: Vec<f64> = vec![];
+        //let mut tmp_pc_pos: Vec<f64> = vec![];
+        //for cap in re1.captures_iter(&position) {
+        //    tmp_pc_chg.push(cap[1].parse().unwrap());
+        //    tmp_pc_pos.push(cap[2].parse().unwrap());
+        //    tmp_pc_pos.push(cap[3].parse().unwrap());
+        //    tmp_pc_pos.push(cap[4].parse().unwrap());
+        //};
+        //let pc_return = if tmp_pc_chg.len() ==0 {
+        //    None
+        //} else {
+        //    let tmp_size: [usize;2] = [3,tmp_pc_pos.len()/3];
+        //    let mut tmp_pos_tensor = MatrixFull::from_vec(tmp_size, tmp_pc_pos).unwrap();
+        //    if let GeomUnit::Angstrom = unit {
+        //        // To store the geometry position in "Bohr" according to the convention of quantum chemistry. 
+        //        tmp_pos_tensor.self_multiple(ANG.powf(-1.0));
+        //    };
+        //    Some((tmp_pc_chg, tmp_pos_tensor))
+        //};
+        let re2 = Regex::new(r"(?x)\s*
+                            \s*potential\s*,?                    # the type 
+                            \s+
+                            (?P<ecp_file>[\w\.\\]+)\s*,?               # the path to the potential file
+                            \s+
+                            (?P<x>[\+-]?\d+.\d+)\s*,?            # the 'x' position
+                            \s+
+                            (?P<y>[\+-]?\d+.\d+)\s*,?            # the 'y' position
+                            \s+
+                            (?P<z>[\+-]?\d+.\d+)\s*,?            # the 'z' position
+                            \s*").unwrap();
+        //let mut tmp_ep_pth: Vec<String> = vec![];
+        //let mut tmp_ep_pos: Vec<f64> = vec![];
+        //for cap in re2.captures_iter(&position) {
+        //    tmp_ep_pth.push(cap[1].to_string());
+        //    tmp_ep_pos.push(cap[2].parse().unwrap());
+        //    tmp_ep_pos.push(cap[3].parse().unwrap());
+        //    tmp_ep_pos.push(cap[4].parse().unwrap());
+        //};
+        //let ep_return = if tmp_ep_pth.len() ==0 {
+        //    None
+        //} else {
+        //    let tmp_size: [usize;2] = [3,tmp_ep_pos.len()/3];
+        //    let mut tmp_pos_tensor = MatrixFull::from_vec(tmp_size, tmp_ep_pos).unwrap();
+        //    if let GeomUnit::Angstrom = unit {
+        //        // To store the geometry position in "Bohr" according to the convention of quantum chemistry. 
+        //        tmp_pos_tensor.self_multiple(ANG.powf(-1.0));
+        //    };
+        //    Some((tmp_ep_pth, tmp_pos_tensor))
+        //};
+        
         let mut tmp_bs_ele: Vec<String> = vec![];
         let mut tmp_bs_pos: Vec<f64> = vec![];
-        for cap in re0.captures_iter(&position) {
-            tmp_bs_ele.push(cap[1].to_string());
-            tmp_bs_pos.push(cap[2].parse().unwrap());
-            tmp_bs_pos.push(cap[3].parse().unwrap());
-            tmp_bs_pos.push(cap[4].parse().unwrap());
-        };
+        let mut tmp_pc_chg: Vec<f64> = vec![];
+        let mut tmp_pc_pos: Vec<f64> = vec![];
+        let mut tmp_ep_pth: Vec<String> = vec![];
+        let mut tmp_ep_pos: Vec<f64> = vec![];
+
+        for xline in position.lines() {
+            let line = xline.trim().to_string();
+            if let Some(x) = line.chars().next() {
+                if x == '#' {
+                    //println!("debug {:?}", &line);
+                    continue;
+                } else {
+                    // ghost atoms with basis set 
+                    for cap in re0.captures_iter(&line) {
+                        tmp_bs_ele.push(cap[1].to_string());
+                        tmp_bs_pos.push(cap[2].parse().unwrap());
+                        tmp_bs_pos.push(cap[3].parse().unwrap());
+                        tmp_bs_pos.push(cap[4].parse().unwrap());
+                    };
+                    // ghost atoms with point charge
+                    for cap in re1.captures_iter(&line) {
+                        tmp_pc_chg.push(cap[1].parse().unwrap());
+                        tmp_pc_pos.push(cap[2].parse().unwrap());
+                        tmp_pc_pos.push(cap[3].parse().unwrap());
+                        tmp_pc_pos.push(cap[4].parse().unwrap());
+                    };
+                    // ghost atoms with potential
+                    for cap in re2.captures_iter(&line) {
+                        tmp_ep_pth.push(cap[1].to_string());
+                        tmp_ep_pos.push(cap[2].parse().unwrap());
+                        tmp_ep_pos.push(cap[3].parse().unwrap());
+                        tmp_ep_pos.push(cap[4].parse().unwrap());
+                    };
+                }
+            }
+        }
 
         let bs_return = if tmp_bs_ele.len() ==0 {
             None
@@ -552,26 +664,7 @@ impl GeomCell {
             };
             Some((tmp_bs_ele, tmp_pos_tensor))
         };
-        let re1 = Regex::new(r"(?x)\s*
-                            point\scharge\s*,?                 # the type 
-                            \s+
-                            (?P<charge>[\+-]?\d+.\d+)\s*,?       # the point charge 
-                            \s+
-                            (?P<x>[\+-]?\d+.\d+)\s*,?            # the 'x' position
-                            \s+
-                            (?P<y>[\+-]?\d+.\d+)\s*,?            # the 'y' position
-                            \s+
-                            (?P<z>[\+-]?\d+.\d+)\s*,?            # the 'z' position
-                            \s*").unwrap();
-        let mut tmp_pc_chg: Vec<f64> = vec![];
-        let mut tmp_pc_pos: Vec<f64> = vec![];
-        //println!("debug: {:?}", &position);
-        for cap in re1.captures_iter(&position) {
-            tmp_pc_chg.push(cap[1].parse().unwrap());
-            tmp_pc_pos.push(cap[2].parse().unwrap());
-            tmp_pc_pos.push(cap[3].parse().unwrap());
-            tmp_pc_pos.push(cap[4].parse().unwrap());
-        };
+
         let pc_return = if tmp_pc_chg.len() ==0 {
             None
         } else {
@@ -583,25 +676,7 @@ impl GeomCell {
             };
             Some((tmp_pc_chg, tmp_pos_tensor))
         };
-        let re2 = Regex::new(r"(?x)\s*
-                            \s*potential\s*,?                    # the type 
-                            \s+
-                            (?P<ecp_file>[\w\.\\]+)\s*,?               # the path to the potential file
-                            \s+
-                            (?P<x>[\+-]?\d+.\d+)\s*,?            # the 'x' position
-                            \s+
-                            (?P<y>[\+-]?\d+.\d+)\s*,?            # the 'y' position
-                            \s+
-                            (?P<z>[\+-]?\d+.\d+)\s*,?            # the 'z' position
-                            \s*").unwrap();
-        let mut tmp_ep_pth: Vec<String> = vec![];
-        let mut tmp_ep_pos: Vec<f64> = vec![];
-        for cap in re2.captures_iter(&position) {
-            tmp_ep_pth.push(cap[1].to_string());
-            tmp_ep_pos.push(cap[2].parse().unwrap());
-            tmp_ep_pos.push(cap[3].parse().unwrap());
-            tmp_ep_pos.push(cap[4].parse().unwrap());
-        };
+
         let ep_return = if tmp_ep_pth.len() ==0 {
             None
         } else {
@@ -882,7 +957,9 @@ pub fn test_parse() {
 
     let info = "RMSDs between (ECP, ENXC) and (ECP, GEP): (      0.00000000,       0.00000000)".to_string();
 
-    let re3 = Regex::new(r"RMSDs\sbetween\s\(ECP, ENXC\)\sand\s\(ECP, GEP\):\s\(\s*(?P<rmsd1>\d+.\d+),\s*(?P<rmsd2>\d+.\d+)\)").unwrap();
+    let re3 = Regex::new(
+        r"RMSDs\sbetween\s\(ECP, ENXC\)\sand\s\(ECP, GEP\):\s\(\s*(?P<rmsd1>\d+.\d+),\s*(?P<rmsd2>\d+.\d+)\)"
+    ).unwrap();
 
     for cap in re3.captures_iter(&info) {
         println!("debug: re3_cap: {:?}", &cap);

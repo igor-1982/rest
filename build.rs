@@ -66,11 +66,11 @@ fn build_dftd3and4() {
     let dftd3_rest_link = format!("-L{} -ls-dftd3",&external_dir.to_string());
     let dftd3_rest_include = format!("-I{}/{}",&external_inc.to_string(),"dftd3");
     
-    binding.arg("-shared").arg("-fPIC").arg("-O2")
+    let _ = binding.arg("-shared").arg("-fPIC").arg("-O2")
         .arg(&dftd3_rest_file)
         .arg("-o").arg(&dftd3_rest_libr)
         .arg(&dftd3_rest_link)
-        .arg(&dftd3_rest_include);
+        .arg(&dftd3_rest_include).spawn();
 
     // compile dftd4_rest
     let dftd4_rest_file = format!("{}/rest/src/external_libs/dftd4_rest.f90", &rest_dir.to_string());
@@ -78,10 +78,10 @@ fn build_dftd3and4() {
     let dftd4_rest_link = format!("-L{} -ldftd4",&external_dir.to_string());
     let dftd4_rest_include = format!("-I{}/{}",&external_inc.to_string(),"dftd4");
 
-    binding.arg("-shared").arg("-fPIC").arg("-O2")
+    let _ = binding.arg("-shared").arg("-fPIC").arg("-O2")
         .arg(&dftd4_rest_file)
         .arg("-o").arg(&dftd4_rest_libr)
         .arg(&dftd4_rest_link)
-        .arg(&dftd4_rest_include);
+        .arg(&dftd4_rest_include).spawn();
 
 }

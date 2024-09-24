@@ -284,8 +284,15 @@ fn main() -> anyhow::Result<()> {
     if scf_data.mol.ctrl.print_level > 0 {
         let mulliken = mulliken_pop(&scf_data);
         println!("Mulliken population analysis:");
-        for (i, (pop, atom)) in mulliken.iter().zip(scf_data.mol.geom.elem.iter()).enumerate() {
-            println!("{:3}-{:3}: {:10.6}", i, atom, pop);
+        let elem_tot = scf_data.mol.geom.elem.clone().into_iter().chain(scf_data.mol.geom.ghost_bs_elem.clone().into_iter()).collect::<Vec<_>>();
+        println!("Mulliken debug: {:?}", &elem_tot);
+        let ghost_atm_start = scf_data.mol.geom.elem.len();
+        for (i, (pop, atom)) in mulliken.iter().zip(elem_tot.iter()).enumerate() {
+            if i < ghost_atm_start {
+                println!("{:3}-{:3}: {:10.6}", i, atom, pop)
+            } else {
+                println!("{:3}-{:3}: {:10.6}, Ghost Atom", i, atom, pop)
+            };
         }
     }
 

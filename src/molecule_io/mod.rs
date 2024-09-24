@@ -426,12 +426,12 @@ impl Molecule {
                    ctrl.basis_type);
         };
 
-        //let (elem_name, elem_charge, elem_mass) = elements();
-        let mass_charge = get_mass_charge(&geom.elem);
 
+        // for standard atoms
+        let mass_charge = get_mass_charge(&geom.elem);
         geom.elem.iter().enumerate().zip(mass_charge.iter())
             .for_each(|((atm_index,atm_elem),(tmp_mass,tmp_charge))| {
-            aux_atm.push(vec![*tmp_charge as i32,geom_start,1,geom_start+3,0,0]);
+            aux_atm.push(vec![*tmp_charge as i32,geom_start,NUC_STAD_CHARGE,geom_start+3,0,0]);
             (0..3).into_iter().for_each(|i| {
                 if let Some(tmp_value) = geom.position.get(&[i,atm_index]) {
                     //for the coordinates
@@ -442,6 +442,23 @@ impl Molecule {
             aux_env.push(0.0);
             geom_start += 4;
         });
+        // for ghost atoms with basis sets
+        if geom.ghost_bs_elem.len() > 0 {
+            let ghost_mass_charge = get_mass_charge(&geom.ghost_bs_elem);
+            geom.ghost_bs_elem.iter().enumerate().zip(ghost_mass_charge.iter())
+                .for_each(|((atm_index, atm_elem), (tmp_mass, tmp_charge))| {
+                aux_atm.push(vec![0, geom_start, NUC_STAD_CHARGE, geom_start+3, 0, 0]);
+                (0..3).into_iter().for_each(|i| {
+                    if let Some(tmp_value) = geom.ghost_bs_pos.get(&[i, atm_index]) {
+                        //for the coordinates
+                        aux_env.push(*tmp_value);
+                    }
+                });
+                //for the nuclear charge distribution parameter
+                aux_env.push(0.0);
+                geom_start += 4;
+            });
+        }
 
         // Now for bas inf.
         let mut auxbas_total: Vec<Basis4Elem> = vec![];
@@ -450,18 +467,13 @@ impl Molecule {
         let mut auxbas_info: Vec<BasInfo> = vec![];
         let mut aux_cint_fdqc: Vec<Vec<usize>> = vec![];
 
-/*         let etb_basis_info = match etb {
-            Some(x) => x,
-            None => InfoV2::new(),
-        };
- */
-
         let ctrl_elem = ctrl_element_checker(geom);
         let local_elem = local_element_checker(&ctrl.auxbas_path);
-        if ctrl.print_level>0 {
-            println!("local elements are {:?}", local_elem);
-            println!("ctrl elements are {:?}", ctrl_elem);
-        }
+        //if ctrl.print_level>0 {
+        //    println!("Elements involved are {:?}", ctrl_elem);
+        //    println!("Elements with local basis set available are {:?}", local_elem);
+        //    println!("Start to gather the auxiliary basis sets of the rest elements online")
+        //}
         let etb_elem = get_etb_elem(geom, &ctrl.etb_start_atom_number);
 
         let elem_intersection = ctrl_elem.intersect(local_elem.clone());
@@ -494,7 +506,9 @@ impl Molecule {
 
         };
 
-        for (atm_index, atm_elem) in geom.elem.iter().enumerate() {
+        //import the basis set of atoms and ghost atoms one by one
+        let elem_tot = geom.elem.clone().into_iter().chain(geom.ghost_bs_elem.clone().into_iter()).collect::<Vec<_>>();
+        for (atm_index, atm_elem) in elem_tot.iter().enumerate() {
             let tmp_path = format!("{}/{}.json",&ctrl.auxbas_path, &atm_elem);
             let mut tmp_basis = match &etb {
                 None => Basis4Elem::parse_json_from_file(tmp_path,&cint_type).unwrap(),
