@@ -20,10 +20,13 @@ fn main() -> miette::Result<()> {
         hdf5_dir
     } else {"".to_string()};
 
+    //let rest_dir = if let Ok(rest_dir) = env::var("REST_HOME") {
+    //    rest_dir
+    //} else {"".to_string()};
+
     build_dftd3and4();
 
-    let library_names = ["restmatr","openblas","xc","hdf5","rest2fch","cgto","s-dftd3","dftd4","dftd3_rest","dftd4_rest"];
-    //let library_names = ["restmatr","openblas","xc","hdf5","rest2fch","cgto","dftd3_rest","dftd4_rest"];
+    let library_names = ["restmatr","openblas","xc","hdf5","rest2fch","cgto"];
     library_names.iter().for_each(|name| {
         println!("cargo:rustc-link-lib={}",*name);
     });
@@ -58,30 +61,42 @@ fn build_dftd3and4() {
     let fortran_compiler = if let Ok(fortran_compiler) = env::var("REST_FORTRAN_COMPILER") {
         fortran_compiler
     } else {"gfortran".to_string()};
-    let mut binding = Command::new(&fortran_compiler);
+    //let mut binding = Command::new(&fortran_compiler);
 
     // compile dftd3_rest
-    let dftd3_rest_file = format!("{}/rest/src/external_libs/dftd3_rest.f90", &rest_dir.to_string());
-    let dftd3_rest_libr = format!("{}/libdftd3_rest.so",&external_dir.to_string());
-    let dftd3_rest_link = format!("-L{} -ls-dftd3",&external_dir.to_string());
-    let dftd3_rest_include = format!("-I{}/{}",&external_inc.to_string(),"dftd3");
+    let dftd3_rest_file = format!("{}/rest/src/external_libs/dftd3_rest.f90", &rest_dir);
+    let dftd3_rest_libr = format!("{}/libdftd3_rest.so",&external_dir);
+    let dftd3_rest_link = format!("-L{}",&external_dir);
+    let dftd3_rest_include = format!("-I{}/{}",&external_inc,"dftd3");
     
-    let _ = binding.arg("-shared").arg("-fPIC").arg("-O2")
+    Command::new(&fortran_compiler).arg("-shared").arg("-fPIC").arg("-O2")
         .arg(&dftd3_rest_file)
         .arg("-o").arg(&dftd3_rest_libr)
-        .arg(&dftd3_rest_link)
-        .arg(&dftd3_rest_include).spawn();
+        .arg(&dftd3_rest_link).arg("-ls-dftd3")
+        .arg(&dftd3_rest_include).status().unwrap();
+
 
     // compile dftd4_rest
     let dftd4_rest_file = format!("{}/rest/src/external_libs/dftd4_rest.f90", &rest_dir.to_string());
     let dftd4_rest_libr = format!("{}/libdftd4_rest.so",&external_dir.to_string());
-    let dftd4_rest_link = format!("-L{} -ldftd4",&external_dir.to_string());
+    let dftd4_rest_link = format!("-L{}",&external_dir.to_string());
     let dftd4_rest_include = format!("-I{}/{}",&external_inc.to_string(),"dftd4");
 
-    let _ = binding.arg("-shared").arg("-fPIC").arg("-O2")
+    Command::new(&fortran_compiler).arg("-shared").arg("-fPIC").arg("-O2")
         .arg(&dftd4_rest_file)
         .arg("-o").arg(&dftd4_rest_libr)
-        .arg(&dftd4_rest_link)
-        .arg(&dftd4_rest_include).spawn();
+        .arg(&dftd4_rest_link).arg("-ldftd4")
+        .arg(&dftd4_rest_include).status().unwrap();
+
+    println!("cargo:rerun-if-changed={}", &dftd3_rest_libr);
+    println!("cargo:rerun-if-changed={}", &dftd4_rest_libr);
+    println!("cargo:rerun-if-changed={}", &dftd3_rest_file);
+    println!("cargo:rerun-if-changed={}", &dftd4_rest_file);
+
+    let library_names = ["s-dftd3","dftd4","dftd3_rest","dftd4_rest"];
+    library_names.iter().for_each(|name| {
+        println!("cargo:rustc-link-lib={}",*name);
+    });
+
 
 }

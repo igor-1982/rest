@@ -792,7 +792,6 @@ impl InputKeywords {
                 };
 
                 tmp_input.restart = ! tmp_input.chkfile.to_lowercase().eq(&"none");
-                //println!("debug: {:?}", &tmp_input.chkfile);
 
                 tmp_input.initial_guess = match tmp_ctrl.get("initial_guess").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase()},
@@ -1132,7 +1131,6 @@ impl InputKeywords {
                 match tmp_geom.get("ghost").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_str) => {
                         let tmp_unit = tmp_geomcell.unit.clone();
-                        //println!("debug Igor: {:?}", tmp_str);
                         let (bs, pc, ep) = GeomCell::parse_ghost_atoms_from_string(tmp_str, &tmp_unit)?;
                         if let Some((bs_elem, bs_pos)) = bs {
                             tmp_geomcell.ghost_bs_elem = bs_elem;

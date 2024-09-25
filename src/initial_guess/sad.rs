@@ -7,6 +7,7 @@ use crate::geom_io::{GeomCell, formated_element_name};
 use crate::scf_io::{initialize_scf, scf};
 use crate::utilities;
 use std::collections::HashMap;
+use std::num;
 
 
 pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
@@ -90,21 +91,36 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
 
     let (dms_alpha, dms_beta) = block_diag_specific(&atom_dms, &mol.geom.elem);
 
-    if mol.spin_channel == 1 {
-        vec![dms_alpha+dms_beta, MatrixFull::empty()]
-    } else if mol.spin_channel == 2 {
-        vec![dms_alpha, dms_beta]
+    if mol.geom.ghost_bs_elem.len() == 0 {
+        if mol.spin_channel == 1 {
+            vec![dms_alpha+dms_beta, MatrixFull::empty()]
+        } else if mol.spin_channel == 2 {
+            vec![dms_alpha, dms_beta]
+        } else {
+            vec![]
+        }
     } else {
-        vec![]
-    }
+        // for the calculations used extra basis sets from ghost atoms
+        let num_basis_tot = mol.num_basis;
+        let num_basis = dms_alpha.size()[0];
 
-    //if mol.spin_channel == 1{
-    //    vec![block_diag(&dms_alpha)+block_diag(&dms_beta), MatrixFull::empty()]
-    //} else {
-    //    vec![block_diag(&dms_alpha), block_diag(&dms_beta)]
-    //}
+        let mut dms_alpha_tot = MatrixFull::new([num_basis_tot,num_basis_tot], 0.0);
+        let mut dms_beta_tot = MatrixFull::new([num_basis_tot,num_basis_tot], 0.0);
 
+        //println!("debug: num_basis_tot: {}, num_basis: {}", num_basis_tot, num_basis);
+        dms_alpha_tot.iter_submatrix_mut(0..num_basis, 0..num_basis).zip(dms_alpha.iter())
+        .for_each(|(to, from)| {*to = *from});
+        dms_beta_tot.iter_submatrix_mut(0..num_basis, 0..num_basis).zip(dms_beta.iter())
+        .for_each(|(to, from)| {*to = *from});
 
+        if mol.spin_channel == 1 {
+            vec![dms_alpha_tot+dms_beta_tot, MatrixFull::empty()]
+        } else if mol.spin_channel == 2 {
+            vec![dms_alpha_tot, dms_beta_tot]
+        } else {
+            vec![]
+        }
+    }   
 }
 
 pub fn block_diag_specific(atom_dms: &HashMap<String,Vec<MatrixFull<f64>>>,elem: &Vec<String>) -> (MatrixFull<f64>, MatrixFull<f64>) {

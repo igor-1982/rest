@@ -482,27 +482,38 @@ impl GeomCell {
         let mut tmp_ele: Vec<String> = vec![];
         let mut tmp_fix: Vec<bool> = vec![];
         let mut tmp_pos: Vec<f64> = vec![];
-        for cap in re0.captures_iter(&position) {
-            tmp_ele.push(cap[1].to_string());
-            tmp_pos.push(cap[2].parse().unwrap());
-            tmp_pos.push(cap[3].parse().unwrap());
-            tmp_pos.push(cap[4].parse().unwrap());
-            tmp_fix.push(false);
-            tmp_nfree += 1;
-        };
-        for cap in re1.captures_iter(&position) {
-            tmp_ele.push(cap[1].to_string());
-            tmp_pos.push(cap[3].parse().unwrap());
-            tmp_pos.push(cap[4].parse().unwrap());
-            tmp_pos.push(cap[5].parse().unwrap());
-            let tmp_num: i32 = cap[2].parse().unwrap();
-            if tmp_num==0 {
-                tmp_fix.push(true);
-            } else {
-                tmp_fix.push(false);
-                tmp_nfree += 1;
+        for xline in position.lines() {
+            let line = xline.trim().to_string();
+            if let Some(x) = line.chars().next() {
+                if x == '#' {
+                    continue;
+                } else {
+                    // for standard input
+                    for cap in re0.captures_iter(&line) {
+                        tmp_ele.push(cap[1].to_string());
+                        tmp_pos.push(cap[2].parse().unwrap());
+                        tmp_pos.push(cap[3].parse().unwrap());
+                        tmp_pos.push(cap[4].parse().unwrap());
+                        tmp_fix.push(false);
+                        tmp_nfree += 1;
+                    };
+                    // for the input with fix atms
+                    for cap in re1.captures_iter(&line) {
+                        tmp_ele.push(cap[1].to_string());
+                        tmp_pos.push(cap[3].parse().unwrap());
+                        tmp_pos.push(cap[4].parse().unwrap());
+                        tmp_pos.push(cap[5].parse().unwrap());
+                        let tmp_num: i32 = cap[2].parse().unwrap();
+                        if tmp_num==0 {
+                            tmp_fix.push(true);
+                        } else {
+                            tmp_fix.push(false);
+                            tmp_nfree += 1;
+                        }
+                    };
+                }
             }
-        };
+        }
         let tmp_size: [usize;2] = [3,tmp_pos.len()/3];
         let mut tmp_pos_tensor = MatrixFull::from_vec(tmp_size, tmp_pos).unwrap();
         if let GeomUnit::Angstrom = unit {
@@ -533,26 +544,6 @@ impl GeomCell {
                             \s+
                             (?P<z>[\+-]?\d+.\d+)\s*,?            # the 'z' position
                             \s*").unwrap();
-        //let mut tmp_bs_ele: Vec<String> = vec![];
-        //let mut tmp_bs_pos: Vec<f64> = vec![];
-        //for cap in re0.captures_iter(&position) {
-        //    tmp_bs_ele.push(cap[1].to_string());
-        //    tmp_bs_pos.push(cap[2].parse().unwrap());
-        //    tmp_bs_pos.push(cap[3].parse().unwrap());
-        //    tmp_bs_pos.push(cap[4].parse().unwrap());
-        //};
-
-        //let bs_return = if tmp_bs_ele.len() ==0 {
-        //    None
-        //} else {
-        //    let tmp_size: [usize;2] = [3,tmp_bs_pos.len()/3];
-        //    let mut tmp_pos_tensor = MatrixFull::from_vec(tmp_size, tmp_bs_pos).unwrap();
-        //    if let GeomUnit::Angstrom = unit {
-        //        // To store the geometry position in "Bohr" according to the convention of quantum chemistry. 
-        //        tmp_pos_tensor.self_multiple(ANG.powf(-1.0));
-        //    };
-        //    Some((tmp_bs_ele, tmp_pos_tensor))
-        //};
         let re1 = Regex::new(r"(?x)\s*
                             point\scharge\s*,?                 # the type 
                             \s+
@@ -564,25 +555,6 @@ impl GeomCell {
                             \s+
                             (?P<z>[\+-]?\d+.\d+)\s*,?            # the 'z' position
                             \s*").unwrap();
-        //let mut tmp_pc_chg: Vec<f64> = vec![];
-        //let mut tmp_pc_pos: Vec<f64> = vec![];
-        //for cap in re1.captures_iter(&position) {
-        //    tmp_pc_chg.push(cap[1].parse().unwrap());
-        //    tmp_pc_pos.push(cap[2].parse().unwrap());
-        //    tmp_pc_pos.push(cap[3].parse().unwrap());
-        //    tmp_pc_pos.push(cap[4].parse().unwrap());
-        //};
-        //let pc_return = if tmp_pc_chg.len() ==0 {
-        //    None
-        //} else {
-        //    let tmp_size: [usize;2] = [3,tmp_pc_pos.len()/3];
-        //    let mut tmp_pos_tensor = MatrixFull::from_vec(tmp_size, tmp_pc_pos).unwrap();
-        //    if let GeomUnit::Angstrom = unit {
-        //        // To store the geometry position in "Bohr" according to the convention of quantum chemistry. 
-        //        tmp_pos_tensor.self_multiple(ANG.powf(-1.0));
-        //    };
-        //    Some((tmp_pc_chg, tmp_pos_tensor))
-        //};
         let re2 = Regex::new(r"(?x)\s*
                             \s*potential\s*,?                    # the type 
                             \s+
@@ -594,26 +566,6 @@ impl GeomCell {
                             \s+
                             (?P<z>[\+-]?\d+.\d+)\s*,?            # the 'z' position
                             \s*").unwrap();
-        //let mut tmp_ep_pth: Vec<String> = vec![];
-        //let mut tmp_ep_pos: Vec<f64> = vec![];
-        //for cap in re2.captures_iter(&position) {
-        //    tmp_ep_pth.push(cap[1].to_string());
-        //    tmp_ep_pos.push(cap[2].parse().unwrap());
-        //    tmp_ep_pos.push(cap[3].parse().unwrap());
-        //    tmp_ep_pos.push(cap[4].parse().unwrap());
-        //};
-        //let ep_return = if tmp_ep_pth.len() ==0 {
-        //    None
-        //} else {
-        //    let tmp_size: [usize;2] = [3,tmp_ep_pos.len()/3];
-        //    let mut tmp_pos_tensor = MatrixFull::from_vec(tmp_size, tmp_ep_pos).unwrap();
-        //    if let GeomUnit::Angstrom = unit {
-        //        // To store the geometry position in "Bohr" according to the convention of quantum chemistry. 
-        //        tmp_pos_tensor.self_multiple(ANG.powf(-1.0));
-        //    };
-        //    Some((tmp_ep_pth, tmp_pos_tensor))
-        //};
-        
         let mut tmp_bs_ele: Vec<String> = vec![];
         let mut tmp_bs_pos: Vec<f64> = vec![];
         let mut tmp_pc_chg: Vec<f64> = vec![];
@@ -797,7 +749,11 @@ pub fn calc_nuc_energy_with_point_charges(geom: &GeomCell, basis4elem: &Vec<Basi
                 };
                 let dd = ri.iter().zip(rj.iter())
                     .fold(0.0, |acc, (ri, rj)| acc + (ri-rj).powf(2.0)).sqrt();
-                nuc_energy += *chg*j_charge/dd;
+
+                // MARK: do not count the interaction with the charge at the same position
+                if dd.abs() > 1.0E-8 {
+                    nuc_energy += *chg*j_charge/dd;
+                }
             });
             //// calculate the nuclear energy between the ghost atoms
             //geom.ghost_pc_chrg[0..i].iter().zip(geom.ghost_pc_pos.iter_columns(0..i)).enumerate()
@@ -939,7 +895,6 @@ pub fn test_parse() {
                             \s*"
                             */
                             ).unwrap();
-    println!("debug");
     for x in re2.capture_names() {
         match x {
             Some(v) => println!("{}", v),

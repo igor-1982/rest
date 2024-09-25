@@ -80,7 +80,18 @@ pub fn tabulated_ao_fig (mol: &Molecule, points: &Vec<[f64; 3]>) -> MatrixFull<f
     let num_p = points.len();
     let mut tab_den = MatrixFull::new([num_p,mol.num_basis], 0.0);
     let mut start:usize = 0;
-    mol.basis4elem.iter().zip(mol.geom.position.iter_columns_full()).for_each(|(elem,geom)| {
+
+    // for the calculations with extra basis sets in ghost atoms
+    let mut position_full = if mol.geom.ghost_bs_elem.len()== 0 {
+        mol.geom.position.clone()
+    } else {
+        let mut tmp_pos = mol.geom.position.clone();
+        tmp_pos.append_column(&mol.geom.ghost_bs_pos);
+        tmp_pos
+    };
+    println!("debug num_basis: {:?},tmp_pos: {:?}", mol.num_basis, &position_full);
+    
+    mol.basis4elem.iter().zip(position_full.iter_columns_full()).for_each(|(elem,geom)| {
         let mut tmp_geom = [0.0;3];
         tmp_geom.iter_mut().zip(geom.iter()).for_each(|value| {*value.0 = *value.1});
         let tmp_spheric = basis_io::spheric_gto_value_matrixfull(points, &tmp_geom, elem);
