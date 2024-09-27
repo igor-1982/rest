@@ -7,22 +7,6 @@ fn main() -> miette::Result<()> {
     let external_dir = if let Ok(external_dir) = env::var("REST_EXT_DIR") {
         external_dir
     } else {"".to_string()};
-    let blas_dir = if let Ok(blas_dir) = env::var("REST_BLAS_DIR") {
-        blas_dir
-    } else {"".to_string()};
-    let cint_dir = if let Ok(cint_dir) = env::var("REST_CINT_DIR") {
-        cint_dir
-    } else {"".to_string()};
-    let xc_dir = if let Ok(xc_dir) = env::var("REST_XC_DIR") {
-        xc_dir
-    } else {"".to_string()};
-    let hdf5_dir = if let Ok(hdf5_dir) = env::var("REST_HDF5_DIR") {
-        hdf5_dir
-    } else {"".to_string()};
-
-    //let rest_dir = if let Ok(rest_dir) = env::var("REST_HOME") {
-    //    rest_dir
-    //} else {"".to_string()};
 
     build_dftd3and4();
 
@@ -32,15 +16,10 @@ fn main() -> miette::Result<()> {
     });
     let library_path = [
         dunce::canonicalize(&external_dir).unwrap(),
-        dunce::canonicalize(&blas_dir).unwrap(),
-        dunce::canonicalize(&cint_dir).unwrap(),
-        dunce::canonicalize(&hdf5_dir).unwrap(),
-        dunce::canonicalize(&xc_dir).unwrap(),
     ];
     library_path.iter().for_each(|path| {
-        println!("cargo:rustc-link-search=native={}",env::join_paths(&[path]).unwrap().to_str().unwrap())
+        println!("cargo:rustc-link-search={}",env::join_paths(&[path]).unwrap().to_str().unwrap())
     });
-
 
     Ok(())
 
@@ -61,7 +40,6 @@ fn build_dftd3and4() {
     let fortran_compiler = if let Ok(fortran_compiler) = env::var("REST_FORTRAN_COMPILER") {
         fortran_compiler
     } else {"gfortran".to_string()};
-    //let mut binding = Command::new(&fortran_compiler);
 
     // compile dftd3_rest
     let dftd3_rest_file = format!("{}/rest/src/external_libs/dftd3_rest.f90", &rest_dir);
