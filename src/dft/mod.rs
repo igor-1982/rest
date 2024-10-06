@@ -2184,16 +2184,21 @@ impl Grids {
             for i_spin in 0..spin_channel {
                 let mo_s = mo.get(i_spin).unwrap();
                 //==================================
-                // WRONG:: assume that the molecular obitals have been orderd: occupation first, then virtual.
+                // WRONG:: assume that the molecular obitals have been orderd: occupation first, then virtual,
+                //         which is wrong for the dSCF calculation with forced occupation.
                 //let mut occ_s = occ.get(i_spin).unwrap()
                 //    .iter().filter(|occ| **occ>0.0).map(|occ| occ.sqrt()).collect_vec();
-                //==================================
-                // now locate the highest obital that has electron with occupation largger than 1.0e-4
                 //let homo_s = occ[i_spin].iter().enumerate().fold(0_usize,|x, (ob, occ)| {if *occ>1.0e-4 {ob} else {x}});
+                //==================================
+                // now locate the highest orbital that has electron with occupation larger than 1.0e-4
                 let homo_s  = occ[i_spin].iter().enumerate()
                     .filter(|(i,occ)| **occ >=1.0e-6)
-                    .map(|(i,occ)| i).max().unwrap();
-                let mut occ_s = occ.get(i_spin).unwrap()[0..homo_s+1].iter().map(|occ| occ.sqrt()).collect::<Vec<f64>>();
+                    .map(|(i,occ)| i).max();
+                let mut occ_s = if let Some(homo_s) = homo_s {
+                    occ.get(i_spin).unwrap()[0..homo_s+1].iter().map(|occ| occ.sqrt()).collect::<Vec<f64>>()
+                } else {
+                    vec![]
+                };
                 //==================================
                 let num_occ = occ_s.len();
                 let mut wmo = _einsum_01_serial(&mo_s.to_matrixfullslice(),&occ_s);

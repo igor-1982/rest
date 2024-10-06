@@ -753,7 +753,7 @@ pub struct func_reference_type {
     pub doi: *const ::std::os::raw::c_char,
     pub bibtex: *const ::std::os::raw::c_char,
 }
-#[link(name="xc",kind="static")]
+#[link(name="xc")]
 extern "C" {
     pub fn xc_func_reference_get_ref(
         reference: *const func_reference_type,
