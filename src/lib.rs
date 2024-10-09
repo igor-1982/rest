@@ -48,6 +48,7 @@
 //! 
 #![allow(unused)]
 extern crate rest_tensors as tensors;
+extern crate hdf5_metno as hdf5;
 extern crate chrono as time;
 extern crate anyhow;
 extern crate lazy_static;

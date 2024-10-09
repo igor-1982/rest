@@ -50,6 +50,7 @@
 extern crate rest_tensors as tensors;
 //extern crate rest_libxc as libxc;
 extern crate chrono as time;
+extern crate hdf5_metno as hdf5;
 #[macro_use]
 extern crate lazy_static;
 use std::{f64, fs::File, io::Write};
