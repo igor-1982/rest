@@ -2064,8 +2064,12 @@ impl Grids {
                 //let homo_s = occ[i_spin].iter().enumerate().fold(0_usize,|x, (ob, occ)| {if *occ>1.0e-4 {ob} else {x}});
                 let homo_s  = occ[i_spin].iter().enumerate()
                     .filter(|(i,occ)| **occ >=1.0e-6)
-                    .map(|(i,occ)| i).max().unwrap();
-                let mut occ_s = occ.get(i_spin).unwrap()[0..homo_s+1].iter().map(|occ| occ.sqrt()).collect::<Vec<f64>>();
+                    .map(|(i,occ)| i).max();
+                let mut occ_s = if let Some(homo_s) = homo_s {
+                    occ.get(i_spin).unwrap()[0..homo_s+1].iter().map(|occ| occ.sqrt()).collect::<Vec<f64>>()
+                } else {
+                    vec![]
+                };
                 //==================================
                 let num_occ = occ_s.len();
                 // wmo = weigthed mo ('ij,j->ij'): mo_s(ij), occ_s(j) -> wmo(ij)
