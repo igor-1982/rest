@@ -11,7 +11,7 @@ mod fchk;
 mod pyrest_scf_io;
 
 use pyo3::{pyclass, pymethods, pyfunction};
-use tensors::matrix_blas_lapack::{_dgemm, _dgemm_full, _dgemv, _dinverse, _dspgvx, _dsymm, _dsyrk, _power, _power_rayon};
+use tensors::matrix_blas_lapack::{_dgemm, _dgemm_full, _dgemm_nn, _dgemv, _dinverse, _dspgvx, _dsymm, _dsyrk, _power, _power_rayon};
 use tensors::{map_full_to_upper, map_upper_to_full, ri, BasicMatrix, ERIFold4, ERIFull, MathMatrix, MatrixFull, MatrixFullSlice, MatrixFullSliceMut, MatrixUpper, MatrixUpperSlice, ParMathMatrix, RIFull, TensorSliceMut};
 use itertools::{Itertools, iproduct, izip};
 use rayon::prelude::*;
@@ -193,6 +193,17 @@ impl SCF {
         } else {
             println!("No ghost effective potential");
         }
+
+        if self.mol.geom.ghost_pc_chrg.len() > 0 {
+            println!("There are {} point charges specified", self.mol.geom.ghost_pc_chrg.len());
+            let tmp_matr = self.mol.int_ij_matrixupper(String::from("point charge"));
+            println!("The point charge matrix:");
+            tmp_matr.formated_output(5, "full");
+            self.h_core.iter_mut().zip(tmp_matr.iter()).for_each(|(a,b)| *a += *b);
+        } else {
+            println!("No ghost point charges");
+        }
+
         //========================================
         // For four-center integrals
         self.ijkl = if self.mol.ctrl.use_auxbas {
@@ -4165,12 +4176,18 @@ pub fn scf_without_build(scf_data: &mut SCF) {
         let dt2 = time::Local::now();
         let timecost = (dt2.timestamp_millis()-dt1.timestamp_millis()) as f64 /1000.0;
         if scf_data.mol.ctrl.print_level>0 {
-            let [square_spin, spin_z] = evaluate_spin_angular_momentum(&scf_data.density_matrix, &scf_data.ovlp, scf_data.mol.spin_channel);
-            println!("Energy: {:18.10} Ha with <S^2> = {:6.3} and <Sz> = {:6.3} after {:4} iterations (in {:10.2} seconds).",
-                 scf_records.scf_energy,
-                 square_spin, spin_z,
-                 scf_records.num_iter-1,
-                 timecost)
+            if scf_data.mol.spin_channel == 2 {
+                let [square_spin, spin_z] = evaluate_spin_angular_momentum(&scf_data.density_matrix, &scf_data.ovlp, scf_data.mol.spin_channel, &scf_data.mol.num_elec);
+                println!("Energy: {:18.10} Ha with <S^2> = {:6.3} and <2S+1> = {:6.3} after {:4} iterations (in {:10.2} seconds).",
+                     scf_records.scf_energy,
+                     square_spin, spin_z,
+                     scf_records.num_iter-1,
+                     timecost)
+            } else {
+                println!("Energy: {:18.10} Ha after {:4} iterations (in {:10.2} seconds).",
+                     scf_records.scf_energy,
+                     scf_records.num_iter-1,
+                     timecost)
             };
         if scf_data.mol.ctrl.print_level>1 {
             println!("Detailed timing info in this SCF step:");
@@ -4498,7 +4515,7 @@ pub fn vj_on_the_fly_par_batch_by_batch(mol: &Molecule, dm: &Vec<MatrixFull<f64>
 // the expectation value of S^2 is given by 3/4*Tr[(scf_data.density_matrix[0]] + scf_data.density_matrix[1])\dot scf_data.ovlp.to_matrixfull().unwrap()]
 // the expectation value of S_z^2  is given by 1/2*Tr[(scf_data.density_matrix[0] -scf_data.density_matrix[1])\dot scf_data.ovlp.to_matrixfull().unwrap()]
 // use MatrixFull::iter_diagonal() to get the diagonal elements of a matrix for the `Tr` evaluation
-pub fn evaluate_spin_angular_momentum(dm: &Vec<MatrixFull<f64>>, ovlp: &MatrixUpper<f64>,spin_channel: usize) -> [f64;2] {
+pub fn evaluate_spin_angular_momentum_wrong(dm: &Vec<MatrixFull<f64>>, ovlp: &MatrixUpper<f64>,spin_channel: usize) -> [f64;2] {
     let mut tr_spin_angular_momentum = [0.0;2];
     let ovlp_full = ovlp.to_matrixfull().unwrap();
 
@@ -4522,6 +4539,37 @@ pub fn evaluate_spin_angular_momentum(dm: &Vec<MatrixFull<f64>>, ovlp: &MatrixUp
          0.50*(tr_spin_angular_momentum[0]-tr_spin_angular_momentum[1])]
     }
 } 
+
+
+pub fn evaluate_spin_angular_momentum(dm: &Vec<MatrixFull<f64>>, ovlp: &MatrixUpper<f64>, spin_channel: usize, num_elec: &[f64;3]) -> [f64;2] {
+
+    let n_a = num_elec[1];
+    let n_b = num_elec[2];
+    let ms = (n_a-n_b)*0.5;
+    let mut s2 = ms*(ms+1.0);
+    let mut mlpy = 2.0*ms + 1.0;
+
+    if spin_channel == 2 {
+        let ovlp_full = ovlp.to_matrixfull().unwrap();
+
+        s2 += n_b;
+
+        let mut tmp_matr_a = dm[0].clone();
+        let mut tmp_matr_b = dm[0].clone();
+
+        _dgemm_full(&ovlp_full, 'N', &dm[0], 'N', &mut tmp_matr_a, 1.0, 0.0);
+        _dgemm_full(&dm[1], 'N', &tmp_matr_a, 'N', &mut tmp_matr_b, 1.0, 0.0);
+        _dgemm_full(&ovlp_full, 'N', &tmp_matr_b, 'N', &mut tmp_matr_a, 1.0, 0.0);
+
+        s2 -= tmp_matr_a.iter_diagonal().unwrap().fold(0.0, |acc, x| acc+x);
+
+        mlpy = (1.0 + 4.0* s2).powf(0.5);
+
+    }
+
+    [s2, mlpy]
+
+}
 
 
 
