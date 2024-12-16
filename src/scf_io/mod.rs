@@ -4188,7 +4188,8 @@ pub fn scf_without_build(scf_data: &mut SCF) {
                      scf_records.scf_energy,
                      scf_records.num_iter-1,
                      timecost)
-            };
+            }
+        };
         if scf_data.mol.ctrl.print_level>1 {
             println!("Detailed timing info in this SCF step:");
             let timecost = (dt1_1.timestamp_millis()-dt1.timestamp_millis()) as f64 /1000.0;
