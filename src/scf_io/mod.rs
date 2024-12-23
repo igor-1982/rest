@@ -176,7 +176,7 @@ impl SCF {
             // empirical dispersion energy added to the nuc_energy
             self.nuc_energy += engy_disp;
         } else {
-            println!("no empirical dispersion correction");
+            println!("no empirical dispersion correction is employed");
         }
         //========================================
         // For two-center integrals
@@ -194,11 +194,10 @@ impl SCF {
             println!("No ghost effective potential");
         }
 
+        // For the ghost point charge term
         if self.mol.geom.ghost_pc_chrg.len() > 0 {
             println!("There are {} point charges specified", self.mol.geom.ghost_pc_chrg.len());
             let tmp_matr = self.mol.int_ij_matrixupper(String::from("point charge"));
-            println!("The point charge matrix:");
-            tmp_matr.formated_output(5, "full");
             self.h_core.iter_mut().zip(tmp_matr.iter()).for_each(|(a,b)| *a += *b);
         } else {
             println!("No ghost point charges");

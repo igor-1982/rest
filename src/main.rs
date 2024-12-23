@@ -64,6 +64,7 @@ use constants::ANG;
 use scf_io::{SCF,scf_without_build};
 use tensors::{MathMatrix, MatrixFull};
 
+mod mpi_io;
 mod geom_io;
 mod basis_io;
 mod ctrl_io;
@@ -104,29 +105,8 @@ use crate::molecule_io::Molecule;
 use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa, save_chkfile, rand_wf_real_space, cube_build, molden_build, post_ai_correction};
 use liblbfgs::{lbfgs,Progress};
 
-//use autocxx::prelude::*;
-//
-//include_cpp! {
-//    #include "libecpint/api.hpp"
-//    #include "run.h"
-//    safety!(unsafe)
-//    generate!("ECPIntWrapper")
-//    generate!("rest_ecpint")
-//}
+//use crate::mpi_io::initialization;
 
-//#[test]
-//pub fn test_ecp() -> anyhow::Result<()> {
-//    let mut ecpint = ffi::ECPIntWrapper::new("/usr/share/libecpint").within_box();
-//    let ints = ecpint.as_mut().get_integrals();
-//    println!("length: {}", ints.len());
-//    println!("{:?}", ints);
-//
-//    //let basis_list = 
-//    Ok(())
-//}
-
-//pub use crate::initial_guess::sap::*;
-//use crate::{post_scf_analysis::{rand_wf_real_space, cube_build, molden_build}, isdf::error_isdf, molecule_io::Molecule};
 
 fn main() -> anyhow::Result<()> {
 

@@ -1187,14 +1187,19 @@ impl Molecule {
             // <a|-Za/|Ra-r||b> -> -Za*<a|1/|r||b> by setting PTR_RINV_ORIG as Ra
             let orig_orig = cint_data.get_rinv_origin();
             self.geom.ghost_pc_chrg.iter().zip(self.geom.ghost_pc_pos.iter_columns_full()).for_each(|(charge, pos)| {
-                cint_data.set_rinv_origin(pos);
                 let mut tmp_out = vec![];
                 let mut tmp_out_shape = vec![];
+                cint_data.set_rinv_origin(pos);
                 (tmp_out, tmp_out_shape) = cint_data.integral_s2ij::<int1e_rinv>(None);
+                println!("debug pos: {:?}, charge: {}", pos, charge);
+                if out.len() == 0 {
+                    out = vec![0.0;tmp_out.len()];
+                }
                 out.iter_mut().zip(tmp_out.iter()).for_each(|(o, t)| {
-                    *o += charge * *t
+                    *o -= *t * charge
                 });
             });
+
             cint_data.set_rinv_origin(&orig_orig);
         } else if op_name.eq("hcore") {
             // for the kinetic term
@@ -1214,22 +1219,6 @@ impl Molecule {
                 out.iter_mut().zip(tmp_ecp.iter_matrixupper().unwrap()).for_each(|(o,f)| {
                     *o += *f
                 });
-            }
-            // for the ghost point charge term
-            // <a|-Za/|Ra-r||b> -> -Za*<a|1/|r||b> by setting PTR_RINV_ORIG as Ra
-            if self.geom.ghost_pc_chrg.len() > 0 {
-                let orig_orig = cint_data.get_rinv_origin();
-                self.geom.ghost_pc_chrg.iter().zip(self.geom.ghost_pc_pos.iter_columns_full()).for_each(|(charge, pos)| {
-                    //println!("debug pc_pos: {:?}, charg: {}", pos, charge);
-                    cint_data.set_rinv_origin(pos);
-                    let mut tmp_out = vec![];
-                    let mut tmp_out_shape = vec![];
-                    (tmp_out, tmp_out_shape) = cint_data.integral_s2ij::<int1e_rinv>(None);
-                    out.iter_mut().zip(tmp_out.iter()).for_each(|(o, t)| {
-                        *o -= charge * *t
-                    });
-                });
-                cint_data.set_rinv_origin(&orig_orig);
             }
 
         } else {
