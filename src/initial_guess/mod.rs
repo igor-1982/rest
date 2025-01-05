@@ -2,6 +2,7 @@ use tensors::{MatrixFull, MatrixUpper, BasicMatrix};
 
 use crate::constants::E;
 use crate::initial_guess::enxc::effective_nxc_matrix;
+use crate::mpi_io::{mpi_broadcast_matrixfull, MPIOperator};
 use crate::scf_io::{scf, SCFType};
 use crate::{molecule_io::Molecule, scf_io::SCF, dft::Grids};
 
@@ -20,7 +21,7 @@ enum RESTART {
     Inherit
 }
 
-pub fn initial_guess(scf_data: &mut SCF) {
+pub fn initial_guess(scf_data: &mut SCF, mpi_operator: &Option<MPIOperator>) {
     // inherit the initial guess from the previous SCF procedure
     if scf_data.mol.ctrl.initial_guess.eq(&"inherit") {
         scf_data.generate_occupation();
@@ -32,7 +33,7 @@ pub fn initial_guess(scf_data: &mut SCF) {
         scf_data.generate_hf_hamiltonian_for_guess();
         //scf_data.generate_hf_hamiltonian();
         if scf_data.mol.ctrl.print_level>0 {println!("Initial guess energy: {:16.8}", scf_data.evaluate_hf_total_energy())};
-        scf_data.diagonalize_hamiltonian();
+        scf_data.diagonalize_hamiltonian(mpi_operator);
         scf_data.generate_occupation();
         scf_data.generate_density_matrix();
     // import the eigenvalues and eigen vectors from a hdf5 file directly
@@ -112,10 +113,10 @@ pub fn initial_guess(scf_data: &mut SCF) {
         } else {
             panic!("Error: at present the 'deep_enxc' initial guess is only available for close-shell calculations");
         };
-        scf_data.diagonalize_hamiltonian();
+        scf_data.diagonalize_hamiltonian(mpi_operator);
         scf_data.generate_occupation();
         scf_data.generate_density_matrix();
-        scf_data.generate_hf_hamiltonian();
+        scf_data.generate_hf_hamiltonian(mpi_operator);
         let homo_id = scf_data.homo[0];
         let lumo_id = scf_data.lumo[0];
         println!("homo: {}, lumo: {}", &scf_data.eigenvalues[0][homo_id], &scf_data.eigenvalues[0][lumo_id]);
@@ -130,23 +131,38 @@ pub fn initial_guess(scf_data: &mut SCF) {
             let init_fock_beta = init_fock.clone();
             scf_data.hamiltonian = [init_fock,init_fock_beta];
         };
-        scf_data.diagonalize_hamiltonian();
+        scf_data.diagonalize_hamiltonian(mpi_operator);
         scf_data.generate_occupation();
         scf_data.generate_density_matrix();
         //scf_data.generate_hf_hamiltonian();
     } else if scf_data.mol.ctrl.initial_guess.eq(&"sad") {
-        scf_data.density_matrix = initial_guess_from_sad(&scf_data.mol);
+        scf_data.density_matrix = initial_guess_from_sad(&scf_data.mol, mpi_operator);
         //for DFT methods, it needs the eigenvectors to generate the hamiltoniam. In consequence, we use the hf method to prepare the eigenvectors from the guess dm
         //scf_data.generate_hf_hamiltonian_for_guess();
         //if scf_data.mol.ctrl.print_level>0 {println!("Initial guess HF energy: {:16.8}", scf_data.evaluate_hf_total_energy())};
+        if let Some(mpi_op) = mpi_operator {
+            mpi_broadcast_matrixfull(&mpi_op.world, &mut scf_data.density_matrix[0], 0);
+            mpi_broadcast_matrixfull(&mpi_op.world, &mut scf_data.density_matrix[1], 0);
+        }
         let original_flag = scf_data.mol.ctrl.use_dm_only;
         scf_data.mol.ctrl.use_dm_only = true;
-        scf_data.generate_hf_hamiltonian();
+
+        //// ==== DEBUG IGOR ====
+        //if let Some(mpi_op) = &mpi_operator {
+        //    if mpi_op.rank == 0 {
+        //        scf_data.density_matrix[0].formated_output(5, "full");
+        //    }
+        //} else {
+        //    scf_data.density_matrix[0].formated_output(5, "full");
+        //}
+        //// ==== DEBUG IGOR ====
+
+        scf_data.generate_hf_hamiltonian(mpi_operator);
         scf_data.mol.ctrl.use_dm_only = original_flag;
         //println!("{:?}",scf_data.);
         if scf_data.mol.ctrl.print_level>0 {println!("Initial guess HF energy: {:24.16}", scf_data.scf_energy)};
 
-        scf_data.diagonalize_hamiltonian();
+        scf_data.diagonalize_hamiltonian(mpi_operator);
         scf_data.generate_occupation();
         scf_data.generate_density_matrix();
         //scf_data.generate_hf_hamiltonian();
@@ -161,10 +177,10 @@ pub fn initial_guess(scf_data: &mut SCF) {
             let init_fock_beta = init_fock.clone();
             scf_data.hamiltonian = [init_fock,init_fock_beta];
         };
-        scf_data.diagonalize_hamiltonian();
+        scf_data.diagonalize_hamiltonian(mpi_operator);
         scf_data.generate_occupation();
         scf_data.generate_density_matrix();
-        scf_data.generate_hf_hamiltonian();
+        scf_data.generate_hf_hamiltonian(mpi_operator);
         let homo_id = scf_data.homo[0];
         let lumo_id = scf_data.lumo[0];
         println!("homo: {}, lumo: {}", &scf_data.eigenvalues[0][homo_id], &scf_data.eigenvalues[0][lumo_id]);
@@ -178,15 +194,14 @@ pub fn initial_guess(scf_data: &mut SCF) {
             let init_fock_beta = init_fock.clone();
             scf_data.hamiltonian = [init_fock,init_fock_beta];
         };
-        scf_data.diagonalize_hamiltonian();
+        scf_data.diagonalize_hamiltonian(mpi_operator);
         scf_data.generate_occupation();
         scf_data.generate_density_matrix();
-        scf_data.generate_hf_hamiltonian();
+        scf_data.generate_hf_hamiltonian(mpi_operator);
         let homo_id = scf_data.homo[0];
         let lumo_id = scf_data.lumo[0];
         println!("homo: {}, lumo: {}", &scf_data.eigenvalues[0][homo_id], &scf_data.eigenvalues[0][lumo_id]);
         println!("initial_energy: {}", scf_data.scf_energy);
-
     };
 }
 

@@ -1,6 +1,8 @@
 mod libxc;
 pub mod gen_grids;
 
+use mpi::collective::SystemOperation;
+use mpi::ffi::MPI_T_SCOPE_GROUP_EQ;
 use rest_tensors::{MatrixFull, MatrixFullSliceMut, TensorSliceMut, RIFull, MatrixFullSlice};
 use rest_tensors::matrix_blas_lapack::{_dgemm_nn,_dgemm_tn, _einsum_01_serial, _einsum_02_serial, _einsum_01_rayon, _einsum_02_rayon};
 use itertools::{Itertools, izip};
@@ -15,6 +17,7 @@ use regex::Regex;
 use crate::basis_io::{Basis4Elem, cartesian_gto_cint, cartesian_gto_std, gto_value, BasCell, gto_value_debug, cint_norm_factor, gto_1st_value, spheric_gto_value_matrixfull, spheric_gto_1st_value_batch, spheric_gto_value_matrixfull_serial, spheric_gto_1st_value_batch_serial, spheric_gto_value_serial, spheric_gto_1st_value_serial};
 use crate::molecule_io::Molecule;
 use crate::geom_io::get_mass_charge;
+use crate::mpi_io::{mpi_broadcast, mpi_broadcast_vector, mpi_reduce, MPIData, MPIOperator};
 use crate::scf_io::SCF;
 use crate::utilities::{self, balancing};
 use core::num;
@@ -1318,7 +1321,7 @@ impl DFA4REST {
 
     }
 
-    pub fn xc_exc(&self, grids: &mut Grids, spin_channel: usize, dm: &mut Vec<MatrixFull<f64>>, mo: &mut [MatrixFull<f64>;2], occ: &mut [Vec<f64>;2],iop: usize) -> Vec<f64> {
+    pub fn xc_exc(&self, grids: &mut Grids, spin_channel: usize, dm: &mut Vec<MatrixFull<f64>>, mo: &mut [MatrixFull<f64>;2], occ: &mut [Vec<f64>;2],iop: usize, mpi_operator: &Option<MPIOperator>) -> Vec<f64> {
         let num_grids = grids.coordinates.len();
         let num_basis = dm[0].size[0];
         let mut exc = MatrixFull::new([num_grids,1],0.0);
@@ -1411,7 +1414,18 @@ impl DFA4REST {
         //    println!("electron number in alpha-channel: {:12.8}", total_elec[0]);
         //    println!("electron number in beta-channel:  {:12.8}", total_elec[1]);
         //}
-        exc_total
+        let global_exc_total = if let Some(mpi_op) = &mpi_operator {
+            let my_rank = mpi_op.rank;
+            let mut global_exc_total = mpi_reduce(&mpi_op.world, &exc_total , 0, &SystemOperation::sum());
+            mpi_broadcast(&mpi_op.world, &mut global_exc_total, 0);
+            
+            global_exc_total
+        } else {
+            exc_total
+        };
+
+        global_exc_total
+
     }
     pub fn xc_exc_code(&self, xc_code: &usize, rho: &MatrixFull<f64>, sigma:&MatrixFull<f64>, spin_channel: usize) -> MatrixFull<f64> {
         let xc_func = self.init_libxc(xc_code);
@@ -1586,15 +1600,15 @@ pub struct Grids {
 }
 
 impl Grids {
-    pub fn build(mol: &Molecule) -> Grids {
-        // set some system-independent parameters
-        //let radial_precision = 1.0e-12;
-        //let min_num_angular_points: usize = 590;
-        //let max_num_angular_points: usize = 590;
-        //let hardness: usize = 3;
+    pub fn build(mol: &mut Molecule) -> Grids {
 
-        //let mut time_record = utilities::TimeRecords::new();
-        //time_record.new_item("Overall", "the overall grid generation");
+        let mut global_grid = Grids {
+            coordinates: Vec::new(),
+            weights: Vec::new(),
+            ao: None,
+            aop: None,
+            parallel_balancing: Vec::new(),
+        };
 
         if ! &mol.ctrl.external_grids.to_lowercase().eq("none") &&
             std::path::Path::new(&mol.ctrl.external_grids).is_file() {
@@ -1637,13 +1651,15 @@ impl Grids {
 
             let parallel_balancing = balancing(coordinates.len(), rayon::current_num_threads());
 
-            return Grids {
+            global_grid = Grids {
                 weights,
                 coordinates,
                 ao: None,
                 aop: None, 
                 parallel_balancing,
-            }
+            };
+
+
         }
 
         let dt0 = utilities::init_timing();
@@ -1696,33 +1712,25 @@ impl Grids {
             weights.extend(ws_atom);
         });
 
-       /*  let ngrids = weights.len();
-        let mut x = vec![0.0; ngrids];
-        let mut y = vec![0.0; ngrids];
-        let mut z = vec![0.0; ngrids];
-        x.iter_mut().zip(y.iter_mut()).zip(z.iter_mut()).zip(coordinates.iter()).for_each(|(((x,y),z), p)|{
-            *x = p[0];
-            *y = p[1];
-            *z = p[2];
-        });
-        println!("x_is: {:?}", &x);
-        println!("y_is: {:?}", &y);
-        println!("z_is: {:?}", &z);
-        println!("w_is: {:?}", &weights); */
-
-
         utilities::timing(&dt0, Some("Generating the grids"));
         let parallel_balancing = balancing(coordinates.len(), rayon::current_num_threads());
-        Grids {
+        global_grid = Grids {
             weights,
             coordinates,
             ao: None,
             aop: None, 
             parallel_balancing
+        };
+
+        if let Some(mpi_data) = &mut mol.mpi_data {
+            return mpi_data.distribute_grids_tasks(&global_grid);
+
+        } else {
+            return global_grid
         }
 
     }
-    pub fn build_nonstd(center_coordinates_bohr:Vec<(f64,f64,f64)>, proton_charges:Vec<i32>, alpha_min: Vec<HashMap<usize,f64>>, alpha_max:Vec<f64>) -> Grids {
+    pub fn build_nonstd(center_coordinates_bohr:Vec<(f64,f64,f64)>, proton_charges:Vec<i32>, alpha_min: Vec<HashMap<usize,f64>>, alpha_max:Vec<f64>, mpi_data: &mut Option<MPIData>) -> Grids {
         let radial_precision = 1.0e-12;
         let min_num_angular_points: usize = 50;
         let max_num_angular_points: usize = 50;
@@ -1760,12 +1768,18 @@ impl Grids {
         });
 
 
-        Grids {
+        let global_grid = Grids {
             weights,
             coordinates,
             ao: None,
             aop: None,
             parallel_balancing: vec![],
+        };
+        if let Some(local_mpi_data) = mpi_data {
+            return local_mpi_data.distribute_grids_tasks(&global_grid);
+
+        } else {
+            return global_grid
         }
     }
 
@@ -1800,7 +1814,6 @@ impl Grids {
         let par_tasks = utilities::balancing(num_grids, rayon::current_num_threads());
         let (sender, receiver) = channel();
         par_tasks.par_iter().for_each_with(sender, |s, range_grids| {
-
 
             let loc_num_grids = range_grids.len();
 
@@ -2298,32 +2311,60 @@ impl Grids {
         };
         cur_rhop
     }
-    pub fn evaluate_density(&self, dm: &mut Vec<MatrixFull<f64>>) -> [f64;2] {
-        let mut total_density = [0.0f64;2];
-        if let Some(ao) = &self.ao {
-            ao.iter_columns(0..self.weights.len())
-                .zip(self.weights.iter()).for_each(|(ao_r, w)| {
-                let mut density_r_sum = [0.0;2];
-                let ao_rv = ao_r.to_vec();
-                let tmp_len = ao_rv.len();
-                let mut ao_rr = MatrixFull::from_vec([tmp_len,1], ao_rv).unwrap();
-                dm.iter_mut().zip(density_r_sum.iter_mut()).for_each(|(dm_s, density_r_sum)| {
-                    let mut tmp_mat = MatrixFull::new([tmp_len,1],0.0);
-                    tmp_mat.lapack_dgemm(&mut ao_rr, dm_s, 'T', 'N', 1.0, 0.0);
-                    *density_r_sum += tmp_mat.data.iter().zip(ao_rr.data.iter()).fold(0.0, |acc,(a,b)| {acc + a*b});
-                });
-                total_density.iter_mut().zip(density_r_sum.iter()).for_each(|(to,from)| *to += from*w);
-            });
-        }
-        total_density
-    }
+
+    //pub fn evaluate_density(&self, dm: &Vec<MatrixFull<f64>>, mpi_operator: &Option<MPIOperator>) -> [f64;2] {
+    //    if let Some(mpi_op) = mpi_operator {
+    //        let mut total_density = [0.0f64;2];
+    //        let mut tmp_density = self.evaluate_density_rayon(dm);
+    //        //println!("debug rank {} with tmp_density: {:?} before reduce", mpi_op.rank, &tmp_density);
+    //        let mut tmp_density = mpi_reduce(&mpi_op.world, &tmp_density, 0, &SystemOperation::sum());
+    //        //println!("debug rank {} with tmp_density: {:?} after reduce", mpi_op.rank, &tmp_density);
+    //        mpi_broadcast_vector(&mpi_op.world, &mut tmp_density, 0);
+    //        total_density.iter_mut().zip(tmp_density.iter()).for_each(|(to, from)| *to += *from);
+    //        total_density
+    //    } else {
+    //        self.evaluate_density_rayon(dm)
+    //    }
+
+    //}
+    
+    //pub fn evaluate_density_rayon(&self, dm: &Vec<MatrixFull<f64>>) -> [f64;2] {
+    //    let mut total_density = [0.0f64;2];
+    //    if let Some(ao) = &self.ao {
+    //        ao.iter_columns(0..self.weights.len())
+    //            .zip(self.weights.iter()).for_each(|(ao_r, w)| {
+    //            let mut density_r_sum = [0.0;2];
+    //            //let ao_rv = ao_r.to_vec();
+    //            //let tmp_len = ao_rv.len();
+    //            //let ao_rr = MatrixFull::from_vec([tmp_len,1], ao_rv).unwrap();
+    //            let tmp_len = ao_r.len();
+    //            let ao_rr = MatrixFullSlice {
+    //                size: &[1,tmp_len], 
+    //                indicing: &[tmp_len,1],
+    //                data: ao_r
+    //            };
+    //            dm.iter().zip(density_r_sum.iter_mut()).for_each(|(dm_s, density_r_sum)| {
+    //                if dm_s.size().iter().fold(0, |acc, x| acc * x) != 0 {
+    //                    let mut tmp_mat = MatrixFull::new([1,tmp_len],0.0);
+    //                    _dgemm_full(&ao_rr, 'N', dm_s, 'N', &mut tmp_mat, 1.0, 0.0);
+    //                    //tmp_mat.lapack_dgemm(&mut ao_rr, dm_s, 'T', 'N', 1.0, 0.0);
+    //                    *density_r_sum += tmp_mat.data.iter().zip(ao_rr.data.iter()).fold(0.0, |acc,(a,b)| {acc + a*b});
+    //                }
+    //            });
+    //            total_density.iter_mut().zip(density_r_sum.iter()).for_each(|(to,from)| *to += from*w);
+    //        });
+    //    }
+    //    total_density
+    //}
     //pub fn evalute_xc(&self, dm: &mut [MatrixFull<f64>;2], xc: XcFuncType) -> MatrixFull<>{
 
     //}
 }
 
+//pub fn numerical_density_
 
-pub fn numerical_density(grid: &Grids, mol: &Molecule, dm: &mut [MatrixFull<f64>;2]) -> [f64;2] {
+
+pub fn numerical_density_v01(grid: &Grids, mol: &Molecule, dm: &mut [MatrixFull<f64>;2]) -> [f64;2] {
     let mut total_density = [0.0f64;2];
     //let mut count:usize = 0;
     grid.coordinates.iter().zip(grid.weights.iter()).for_each(|(r,w)| {
@@ -2346,7 +2387,20 @@ pub fn numerical_density(grid: &Grids, mol: &Molecule, dm: &mut [MatrixFull<f64>
     total_density
 }
 
-pub fn par_numerical_density(grid: &Grids, mol: &Molecule, dm: &mut [MatrixFull<f64>;2]) -> [f64;2] {
+pub fn numerical_density(grid: &Grids, mol: &Molecule, dm: &Vec<MatrixFull<f64>>, mpi_operator: &Option<MPIOperator>) -> [f64;2] {
+    if let Some(mpi_op) = mpi_operator {
+        let mut total_density = [0.0f64;2];
+        let mut tmp_density = numerical_density_rayon(grid, mol, dm);
+        let mut tmp_density = mpi_reduce(&mpi_op.world, &tmp_density, 0, &SystemOperation::sum());
+        mpi_broadcast(&mpi_op.world, &mut tmp_density, 0);
+        total_density.iter_mut().zip(tmp_density.iter()).for_each(|(to, from)| *to += *from);
+        total_density
+    } else {
+        numerical_density_rayon(grid, mol, dm)
+    }
+}
+
+pub fn numerical_density_rayon(grid: &Grids, mol: &Molecule, dm: &Vec<MatrixFull<f64>>) -> [f64;2] {
     let mut total_density = [0.0f64;2];
     //let mut count:usize = 0;
     // In this subroutine, we call the lapack dgemm in a rayon parallel environment.
@@ -2398,6 +2452,7 @@ pub fn par_numerical_density(grid: &Grids, mol: &Molecule, dm: &mut [MatrixFull<
     
     total_density
 }
+
 
 
 
@@ -2455,7 +2510,7 @@ fn debug_num_density_for_atom() {
         center_coordinates_bohr.clone(), 
         proton_charges.clone(), 
         vec![alpha_min_h], 
-        vec![alpha_max_h]);
+        vec![alpha_max_h], &mut None);
     let mut total_density = 0.0;
     let mut count:usize =0;
     grids.coordinates.iter().zip(grids.weights.iter()).for_each(|(r,w)| {

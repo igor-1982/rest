@@ -64,6 +64,7 @@ pub mod molecule_io;
 pub mod scf_io;
 pub mod utilities;
 pub mod external_libs;
+pub mod mpi_io;
 
 //extern crate rest;
 
@@ -78,11 +79,11 @@ use crate::ctrl_io::InputKeywords;
 
 #[pyfunction]
 fn read_ctrl(ctrlfile: String) -> PyResult<Molecule> {
-    Ok(Molecule::build(ctrlfile).unwrap())
+    Ok(Molecule::build(ctrlfile, None).unwrap())
 }
 #[pyfunction]
 fn do_scf(mol: Molecule) -> PyResult<SCF> {
-    Ok(scf(mol).unwrap())
+    Ok(scf(mol, &None).unwrap())
 }
 
 

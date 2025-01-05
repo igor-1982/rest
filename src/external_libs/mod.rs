@@ -92,7 +92,7 @@ pub fn dftd3_atm(scf_data: &SCF) -> (f64, Option<Vec<f64>>, Option<Vec<f64>>) {
     let mut gradient = vec![0.0; num.len()*3];
     let mut sigma = vec![0.0; 20];
 
-    println!("Calculating DFTD3:");
+    //if scf_data.mol.ctrl.print_level>0 {println!("Calculating DFTD3")};
     unsafe{calc_dftd3_atm_rest_(
         num.as_ptr(),
         &(num.len() as c_int),
@@ -119,7 +119,7 @@ pub fn dftd4_atm(scf_data: &SCF) -> (f64, Option<Vec<f64>>, Option<Vec<f64>>) {
     let mut sigma = vec![0.0; 20];
 
 
-    println!("Calculating DFTD4:");
+    //println!("Calculating DFTD4:");
     unsafe{calc_dftd4_rest_(
         num.as_ptr(),
         &(num.len() as c_int),

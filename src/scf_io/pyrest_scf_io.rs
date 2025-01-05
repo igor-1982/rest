@@ -8,7 +8,7 @@ use super::SCF;
 impl SCF {
     #[new]
     pub fn new(mol: Molecule) -> PyResult<SCF> {
-        Ok(SCF::build(mol))
+        Ok(SCF::build(mol, &None))
     }
     pub fn py_get_dm(&mut self) -> PyResult<([Vec<f64>;2], [usize;2])> {
         Ok((
@@ -17,7 +17,7 @@ impl SCF {
         ))
     }
     pub fn py_get_hamiltonian(&mut self) -> PyResult<([Vec<f64>;2], [usize;2])> {
-        self.generate_hf_hamiltonian();
+        self.generate_hf_hamiltonian(&None);
         Ok((
             [
                 self.hamiltonian[0].to_matrixfull().unwrap().data.clone(), 

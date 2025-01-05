@@ -294,3 +294,6 @@ pub const PLANCK: f64 = 6.626070040e-34;        // J*s http://physics.nist.gov/c
 pub const E_CHARGE: f64 = 1.6021766208e-19;
 pub const DEBYE:f64 = 3.335641e-30;            // C*m = 1e-18/LIGHT_SPEED_SI https://cccbdb.nist.gov/debye.asp
 pub const AU2DEBYE:f64 = E_CHARGE * BOHR*1e-10 / DEBYE; // 2.541746
+
+
+pub const MPI_CHUNK:usize = 1048576;

@@ -1,13 +1,17 @@
 use tensors::MatrixFull;
 
 use crate::constants::{E, EV};
+use crate::mpi_io::MPIOperator;
 use crate::scf_io::SCF;
 use crate::ri_rpa::scsrpa::{evaluate_special_radius_only, evaluate_osrpa_correlation_rayon}; 
 use crate::ri_pt2::sbge2::{close_shell_sbge2_detailed_rayon, open_shell_sbge2_detailed_rayon};
 
 use libm::{erf,erfc,pow};
 
-pub fn scc15_for_rxdh7(scf_data: &mut SCF) -> f64 {
+pub fn scc15_for_rxdh7(scf_data: &mut SCF, mpi_operator: &Option<MPIOperator>) -> f64 {
+    if let (Some(mpi_op), Some(mpi_ix)) = (mpi_operator, &scf_data.mol.mpi_data) {
+        panic!("The MPI implementation for SCC15 is not yet available");
+    };
     let spin_channel = scf_data.mol.spin_channel;
     let xc_method = &scf_data.mol.ctrl.xc;
     let num_elec = &scf_data.mol.num_elec;
@@ -49,7 +53,7 @@ pub fn scc15_for_rxdh7(scf_data: &mut SCF) -> f64 {
     let x_hf = if let Some(x_hf) =scf_data.energies.get("x_hf") {
         x_hf[0]
     } else {
-        scf_data.evaluate_exact_exchange_ri_v()
+        scf_data.evaluate_exact_exchange_ri_v(mpi_operator)
     };
     // collect the pbe exchange
     let dfa = crate::dft::DFA4REST::new_xc(scf_data.mol.spin_channel, scf_data.mol.ctrl.print_level);

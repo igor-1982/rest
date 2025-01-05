@@ -104,6 +104,7 @@ use crate::molecule_io::Molecule;
 //use crate::dft::DFA4REST;
 use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa, save_chkfile, rand_wf_real_space, cube_build, molden_build, post_ai_correction};
 use liblbfgs::{lbfgs,Progress};
+use crate::mpi_io::{MPIOperator,MPIData};
 
 //use crate::mpi_io::initialization;
 
@@ -116,11 +117,14 @@ fn main() -> anyhow::Result<()> {
     time_mark.count_start("Overall");
 
 
+    // VERY IMPORTANCE: introduce mpi_operator:
+    let (mpi_operator , mut mpi_data)= MPIData::initialization();
+
     let ctrl_file = utilities::parse_input().value_of("input_file").unwrap_or("ctrl.in").to_string();
     if ! PathBuf::from(ctrl_file.clone()).is_file() {
         panic!("Input file ({:}) does not exist", ctrl_file);
     }
-    let mut mol = Molecule::build(ctrl_file)?;
+    let mut mol = Molecule::build(ctrl_file, mpi_data)?;
     if mol.ctrl.print_level>0 {println!("Molecule_name: {}", &mol.geom.name)};
     if mol.ctrl.print_level>=2 {
         println!("{}", mol.ctrl.formated_output_in_toml());
@@ -167,17 +171,19 @@ fn main() -> anyhow::Result<()> {
     // initialize the SCF procedure
     time_mark.new_item("SCF", "the scf procedure");
     time_mark.count_start("SCF");
-    let mut scf_data = scf_io::SCF::build(mol);
+    let mut scf_data = scf_io::SCF::build(mol,&mpi_operator);
     time_mark.count("SCF");
     // perform the SCF and post SCF evaluation for the specified xc method
-    performance_essential_calculations(&mut scf_data, &mut time_mark);
+    performance_essential_calculations(&mut scf_data, &mut time_mark, &mpi_operator);
 
     let jobtype = scf_data.mol.ctrl.job_type.clone();
     match jobtype {
         JobType::GeomOpt => {
-            let mut geom_time_mark = utilities::TimeRecords::new();
-            geom_time_mark.new_item("geom_opt", "geometry optimization");
-            geom_time_mark.count_start("geom_opt");
+            //let mut geom_time_mark = utilities::TimeRecords::new();
+            //geom_time_mark.new_item("geom_opt", "geometry optimization");
+            //geom_time_mark.count_start("geom_opt");
+            time_mark.new_item("geom_opt", "geometry optimization");
+            time_mark.count_start("geom_opt");
             if scf_data.mol.ctrl.print_level>0 {
                 println!("Geometry optimization invoked");
             }
@@ -201,9 +207,9 @@ fn main() -> anyhow::Result<()> {
                         println!("{}", scf_data.mol.geom.formated_geometry());
                     }
                     scf_data.mol.ctrl.initial_guess = String::from("inherit");
-                    initialize_scf(&mut scf_data);
-                    performance_essential_calculations(&mut scf_data, &mut geom_time_mark);
-                    let (energy, nforce) = numerical_force(&scf_data, displace);
+                    initialize_scf(&mut scf_data, &mpi_operator);
+                    performance_essential_calculations(&mut scf_data, &mut time_mark, &mpi_operator);
+                    let (energy, nforce) = numerical_force(&scf_data, displace, &mpi_operator);
                     gx.iter_mut().zip(nforce.iter()).for_each(|(to, from)| {*to = *from});
 
                     if scf_data.mol.ctrl.print_level>0 {
@@ -223,9 +229,9 @@ fn main() -> anyhow::Result<()> {
             );
             println!("Geometry after relaxation [Ang]:");
             println!("{}", scf_data.mol.geom.formated_geometry());
-            geom_time_mark.count("geom_opt");
+            time_mark.count("geom_opt");
 
-            geom_time_mark.report("geom_opt");
+            time_mark.report("geom_opt");
 
         },
         _ => {}
@@ -239,8 +245,15 @@ fn main() -> anyhow::Result<()> {
     //time_mark.count("SCF");
 
     if scf_data.mol.ctrl.restart {
-        println!("now save the converged SCF results");
-        save_chkfile(&scf_data)
+        if let Some(mp_op) = &mpi_operator {
+            if mp_op.rank == 0 {
+                println!("Rank 0: now save the converged SCF results");
+                save_chkfile(&scf_data)
+            }
+        } else {
+            println!("now save the converged SCF results");
+            save_chkfile(&scf_data)
+        }
     };
 
     if scf_data.mol.ctrl.check_stab {
@@ -276,7 +289,7 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    post_scf_analysis::post_scf_output(&scf_data);
+    post_scf_analysis::post_scf_output(&scf_data, &mpi_operator);
 
     //====================================
     // Now for post-correlation calculations
@@ -287,15 +300,19 @@ fn main() -> anyhow::Result<()> {
 
     time_mark.count("Overall");
 
-    println!("");
-    println!("====================================================");
-    println!("              REST: Mission accomplished");
-    println!("====================================================");
+    if scf_data.mol.ctrl.print_level > 0 {
+        println!("");
+        println!("====================================================");
+        println!("              REST: Mission accomplished");
+        println!("====================================================");
+        output_result(&scf_data);
+        time_mark.report_all();
+    }
 
-    output_result(&scf_data);
+    //if let Some(mpi_op) = &mpi_operator {
+    //    // I would like to finish the mpi world
+    //}
 
-
-    time_mark.report_all();
 
     Ok(())
 }
@@ -334,7 +351,7 @@ pub fn output_result(scf_data: &scf_io::SCF) {
 /// Perform key SCF and post-SCF calculations
 /// Return the total energy of the specfied xc method
 /// Assume the initialization of SCF is ready
-pub fn performance_essential_calculations(scf_data: &mut SCF, time_mark: &mut utilities::TimeRecords) -> f64 {
+pub fn performance_essential_calculations(scf_data: &mut SCF, time_mark: &mut utilities::TimeRecords, mpi_operator: &Option<MPIOperator>) -> f64 {
 
     let mut total_energy = 0.0;
 
@@ -342,7 +359,8 @@ pub fn performance_essential_calculations(scf_data: &mut SCF, time_mark: &mut ut
     // Now evaluate the SCF energy for the given method
     //=================================================================
     time_mark.count_start("SCF");
-    scf_without_build(scf_data);
+    scf_without_build(scf_data, mpi_operator);
+    //println!("debug time mark SCF turn off");
     time_mark.count("SCF");
 
     //==================================================================
@@ -354,19 +372,19 @@ pub fn performance_essential_calculations(scf_data: &mut SCF, time_mark: &mut ut
             dft::DFAFamily::PT2 | dft::DFAFamily::SBGE2 => {
                 time_mark.new_item("PT2", "the PT2 evaluation");
                 time_mark.count_start("PT2");
-                ri_pt2::xdh_calculations(scf_data);
+                ri_pt2::xdh_calculations(scf_data, mpi_operator);
                 time_mark.count("PT2");
             },
             dft::DFAFamily::RPA => {
                 time_mark.new_item("RPA", "the RPA evaluation");
                 time_mark.count_start("RPA");
-                ri_rpa::rpa_calculations(scf_data);
+                ri_rpa::rpa_calculations(scf_data, mpi_operator);
                 time_mark.count("RPA");
             }
             dft::DFAFamily::SCSRPA => {
                 time_mark.new_item("SCS-RPA", "the SCS-RPA evaluation");
                 time_mark.count_start("SCS-RPA");
-                ri_pt2::xdh_calculations(scf_data);
+                ri_pt2::xdh_calculations(scf_data, mpi_operator);
                 time_mark.count("SCS-RPA");
             }
             _ => {}
@@ -375,7 +393,7 @@ pub fn performance_essential_calculations(scf_data: &mut SCF, time_mark: &mut ut
     //====================================
     // Now for post ai correction
     //====================================
-    if let Some(scc) = post_ai_correction(scf_data) {
+    if let Some(scc) = post_ai_correction(scf_data, mpi_operator) {
         scf_data.energies.insert("ai_correction".to_string(), scc);
     }
 

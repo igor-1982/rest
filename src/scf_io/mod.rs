@@ -2,17 +2,19 @@ use crate::basis_io::ecp::ghost_effective_potential_matrix;
 use crate::check_norm::force_state_occupation::adapt_occupation_with_force_projection;
 use crate::check_norm::{self, generate_occupation_frac_occ, generate_occupation_integer, generate_occupation_sad, OCCType};
 use crate::dft::gen_grids::prune::prune_by_rho;
-use crate::dft::Grids;
+use crate::dft::{numerical_density, Grids};
 use crate::geom_io::{calc_nuc_energy, calc_nuc_energy_with_point_charges};
+use crate::mpi_io::{mpi_broadcast, mpi_broadcast_matrixfull, mpi_broadcast_vector, mpi_reduce, MPIOperator};
 use crate::utilities::{create_pool, TimeRecords};
 ////use blas_src::openblas::dgemm;
 mod addons;
 mod fchk;
 mod pyrest_scf_io;
 
+use mpi::collective::SystemOperation;
 use pyo3::{pyclass, pymethods, pyfunction};
 use tensors::matrix_blas_lapack::{_dgemm, _dgemm_full, _dgemm_nn, _dgemv, _dinverse, _dspgvx, _dsymm, _dsyrk, _power, _power_rayon};
-use tensors::{map_full_to_upper, map_upper_to_full, ri, BasicMatrix, ERIFold4, ERIFull, MathMatrix, MatrixFull, MatrixFullSlice, MatrixFullSliceMut, MatrixUpper, MatrixUpperSlice, ParMathMatrix, RIFull, TensorSliceMut};
+use tensors::{map_full_to_upper, map_upper_to_full, ri, BasicMatUp, BasicMatrix, ERIFold4, ERIFull, MathMatrix, MatrixFull, MatrixFullSlice, MatrixFullSliceMut, MatrixUpper, MatrixUpperSlice, ParMathMatrix, RIFull, TensorSliceMut};
 use itertools::{Itertools, iproduct, izip};
 use rayon::prelude::*;
 use std::collections::HashMap;
@@ -144,7 +146,7 @@ impl SCF {
     }
 
 
-    pub fn prepare_necessary_integrals(&mut self) {
+    pub fn prepare_necessary_integrals(&mut self, mpi_operator: &Option<MPIOperator>) {
         // prepare standard two, three, and four-center integrals.
         // for ISDF integrals, they needs density grids, and thus should be prepared after the grid initialization
 
@@ -167,7 +169,9 @@ impl SCF {
         // For emperial dispersion correction
         if let Some(empirical_dispersion_name) = &self.mol.ctrl.empirical_dispersion {
             let (engy_disp, grad_disp, sigma_disp) = dftd(self);
-            println!("The empirical dispersion energy of {} is {}.", self.mol.ctrl.empirical_dispersion.clone().unwrap().to_uppercase(), engy_disp);
+            if self.mol.ctrl.print_level>1 { 
+                println!("The empirical dispersion energy of {} is {}.", self.mol.ctrl.empirical_dispersion.clone().unwrap().to_uppercase(), engy_disp)
+            };
             if self.mol.ctrl.print_level>3 { 
                 println!("{:?}, {:?}", &grad_disp, &sigma_disp);
             };
@@ -176,7 +180,9 @@ impl SCF {
             // empirical dispersion energy added to the nuc_energy
             self.nuc_energy += engy_disp;
         } else {
-            println!("no empirical dispersion correction is employed");
+            if self.mol.ctrl.print_level>1 { 
+                println!("no empirical dispersion correction is employed");
+            }
         }
         //========================================
         // For two-center integrals
@@ -191,16 +197,22 @@ impl SCF {
             );
             self.h_core.iter_mut().zip(tmp_matr.iter()).for_each(|(a,b)| *a += *b);
         } else {
-            println!("No ghost effective potential");
+            if self.mol.ctrl.print_level > 0 {
+                println!("No ghost effective potential");
+            }
         }
 
         // For the ghost point charge term
         if self.mol.geom.ghost_pc_chrg.len() > 0 {
-            println!("There are {} point charges specified", self.mol.geom.ghost_pc_chrg.len());
+            if self.mol.ctrl.print_level > 0 {
+                println!("There are {} point charges specified", self.mol.geom.ghost_pc_chrg.len());
+            }
             let tmp_matr = self.mol.int_ij_matrixupper(String::from("point charge"));
             self.h_core.iter_mut().zip(tmp_matr.iter()).for_each(|(a,b)| *a += *b);
         } else {
-            println!("No ghost point charges");
+            if self.mol.ctrl.print_level > 0 {
+                println!("No ghost point charges");
+            }
         }
 
         //========================================
@@ -265,7 +277,17 @@ impl SCF {
 
         // preparing the three-center integrals using the symmetry
         self.rimatr = if ri3fn_symm  && ! isdf {
-            let (rimatr, basbas2baspar, baspar2basbas) = self.mol.prepare_rimatr_for_ri_v_rayon();
+
+            // initialize the mpi distribution information for num_auxbas and num_baspar
+            if let Some(local_mpi) = &mut self.mol.mpi_data {
+                let num_auxbas = self.mol.num_auxbas;
+                let num_basis = self.mol.num_basis;
+                let cint_bas = self.mol.cint_fdqc.clone();
+                local_mpi.distribute_rimatr_tasks(num_auxbas, num_basis, cint_bas);
+            }
+
+            let (rimatr, basbas2baspar, baspar2basbas) = 
+                self.mol.prepare_rimatr_for_ri_v_mpi_rayon(mpi_operator);
             Some((rimatr, basbas2baspar, baspar2basbas))
         } else if ri3fn_symm  && isdf {
             None
@@ -278,9 +300,11 @@ impl SCF {
         let (eigenvectors, eigenvalues,n_found)=self.ovlp.to_matrixupperslicemut().lapack_dspevx().unwrap();
 
         if (n_found as usize) < self.mol.fdqc_bas.len() {
-            println!("Overlap matrix is singular:");
-            println!("  Using {} out of a possible {} specified basis functions",n_found, self.mol.fdqc_bas.len());
-            println!("  Lowest remaining eigenvalue: {:16.8}",eigenvalues[0]);
+            if self.mol.ctrl.print_level>0 {
+                println!("Overlap matrix is singular:");
+                println!("  Using {} out of a possible {} specified basis functions",n_found, self.mol.fdqc_bas.len());
+                println!("  Lowest remaining eigenvalue: {:16.8}",eigenvalues[0]);
+            }
             self.mol.num_state = n_found as usize;
         } else {
             if self.mol.ctrl.print_level>0 {
@@ -294,7 +318,7 @@ impl SCF {
     pub fn prepare_density_grids(&mut self) {
 
         self.grids = if self.mol.xc_data.is_dfa_scf() || self.mol.ctrl.use_isdf || self.mol.ctrl.initial_guess == "vsap" {
-            let grids = Grids::build(&self.mol);
+            let grids = Grids::build(&mut self.mol);
             if self.mol.ctrl.print_level>0 {
                 println!("Grid size: {:}", grids.coordinates.len());
             }
@@ -307,7 +331,7 @@ impl SCF {
 
     }
 
-    pub fn prepare_isdf(&mut self) {
+    pub fn prepare_isdf(&mut self, mpi_operator: &Option<MPIOperator>) {
 
         let use_eri = self.mol.use_eri;
         let isdf = if use_eri {self.mol.ctrl.eri_type.eq("ri_v") && self.mol.ctrl.use_isdf} else {false};
@@ -324,7 +348,7 @@ impl SCF {
                     let init_fock_beta = init_fock.clone();
                     self.hamiltonian = [init_fock,init_fock_beta];
                 };
-                (self.eigenvectors,self.eigenvalues) = diagonalize_hamiltonian_outside(&self);
+                (self.eigenvectors,self.eigenvalues) = diagonalize_hamiltonian_outside(&self, mpi_operator);
                 (self.occupation, self.homo, self.lumo) = generate_occupation_outside(&self);
                 self.density_matrix = generate_density_matrix_outside(&self);
 
@@ -361,12 +385,12 @@ impl SCF {
 
 
 
-    pub fn build(mol: Molecule) -> SCF {
+    pub fn build(mol: Molecule, mpi_operator: &Option<MPIOperator>) -> SCF {
 
         let mut new_scf = SCF::init_scf(&mol);
         //new_scf.generate_occupation();
 
-        initialize_scf(&mut new_scf);
+        initialize_scf(&mut new_scf, mpi_operator);
 
         new_scf
 
@@ -428,7 +452,6 @@ impl SCF {
             }
         };
 
-        //debug 
         //let i_spin:usize = 0;
         //for j in (0..num_basis) {
         //    for i in (0..j+1) {
@@ -1185,10 +1208,10 @@ impl SCF {
         } else {
             (num_basis/num_para+1,num_basis-(num_basis/num_para+1)*(num_para-1))
         };
-        println!("num_threads: ({},{}),num_chunck: ({},{})",
-                num_para,num_basis,
-                num_chunck.0,
-                num_chunck.1);
+        //println!("num_threads: ({},{}),num_chunck: ({},{})",
+        //        num_para,num_basis,
+        //        num_chunck.0,
+        //        num_chunck.1);
         if let Some(ijkl) = &self.ijkl {
             for i_spin in (0..spin_channel) {
                 vk[i_spin] = MatrixUpper::new(npair,0.0f64);
@@ -1522,7 +1545,7 @@ impl SCF {
                             });
         };
     }
-    pub fn generate_hf_hamiltonian_ri_v(&mut self) {
+    pub fn generate_hf_hamiltonian_ri_v(&mut self, mpi_operator: &Option<MPIOperator>) {
         let num_basis = self.mol.num_basis;
         let num_state = self.mol.num_state;
         let spin_channel = self.mol.spin_channel;
@@ -1530,8 +1553,9 @@ impl SCF {
         let vj = if self.mol.ctrl.isdf_new || self.mol.ctrl.ri_k_only {
             self.generate_vj_on_the_fly_par()
         }else{
-            self.generate_vj_with_ri_v_sync(1.0)
+            self.generate_vj_with_ri_v_sync(1.0, mpi_operator)
         };
+
 
         let dt2 = time::Local::now();
         let scaling_factor = match self.scftype {
@@ -1545,7 +1569,7 @@ impl SCF {
         }else if self.mol.ctrl.isdf_new{
             self.generate_vk_with_isdf_new(scaling_factor)
         }else{
-            self.generate_vk_with_ri_v(scaling_factor, use_dm_only)
+            self.generate_vk_with_ri_v(scaling_factor, use_dm_only, mpi_operator)
         };
 
 
@@ -1578,7 +1602,7 @@ impl SCF {
                             });
         };
     }
-    pub fn generate_hf_hamiltonian_ri_v_dm_only(&mut self) {
+    pub fn generate_hf_hamiltonian_ri_v_dm_only(&mut self, mpi_operator: &Option<MPIOperator>) {
         let num_basis = self.mol.num_basis;
         let num_state = self.mol.num_state;
         let spin_channel = self.mol.spin_channel;
@@ -1587,14 +1611,14 @@ impl SCF {
         let vj = if self.mol.ctrl.isdf_new || self.mol.ctrl.ri_k_only {
             self.generate_vj_on_the_fly_par()
         } else {
-            self.generate_vj_with_ri_v_sync(1.0)
+            self.generate_vj_with_ri_v_sync(1.0, mpi_operator)
         };
         let dt2 = time::Local::now();
         let scaling_factor = match self.scftype {
             SCFType::RHF => -0.5,
             _ => -1.0,
         };
-        let vk = self.generate_vk_with_ri_v(scaling_factor, true);
+        let vk = self.generate_vk_with_ri_v(scaling_factor, true, mpi_operator);
         let dt3 = time::Local::now();
         let timecost1 = (dt2.timestamp_millis()-dt1.timestamp_millis()) as f64 /1000.0;
         let timecost2 = (dt3.timestamp_millis()-dt2.timestamp_millis()) as f64 /1000.0;
@@ -1652,7 +1676,6 @@ impl SCF {
                     *h_ij += vj_ij
                 });
         }
-        //println!("debug ecoul: {:16.8}", ecoul);
         let dt2 = time::Local::now();
         let scaling_factor = match self.scftype {
             SCFType::RHF => -0.5,
@@ -1702,7 +1725,7 @@ impl SCF {
         (exc_total, vxc_total)
 
     }
-    pub fn generate_ks_hamiltonian_ri_v(&mut self) -> (f64,f64) {
+    pub fn generate_ks_hamiltonian_ri_v(&mut self, mpi_operator: &Option<MPIOperator>) -> (f64,f64) {
         let num_basis = self.mol.num_basis;
         let num_state = self.mol.num_state;
         let spin_channel = self.mol.spin_channel;
@@ -1717,10 +1740,19 @@ impl SCF {
         //let use_eri = self.mol.xc_data.use_eri() || self.mol.xc_dat;
         //let use_eri = true;
         let vj = if self.mol.ctrl.use_ri_vj {
-            self.generate_vj_with_ri_v_sync(1.0)
+            self.generate_vj_with_ri_v_sync(1.0, mpi_operator)
         } else {
             self.generate_vj_on_the_fly_par()
         };
+        //// ==== DEBUG IGOR ====
+        //if let Some(mpi_op) = &mpi_operator {
+        //    if mpi_op.rank == 0 {
+        //        vj[0].formated_output(5, "full");
+        //    }
+        //} else {
+        //    vj[0].formated_output(5, "full");
+        //}
+        //// ==== DEBUG IGOR ====
         for i_spin in (0..spin_channel) {
             self.hamiltonian[i_spin].data
                 .par_iter_mut()
@@ -1741,10 +1773,9 @@ impl SCF {
             _ => -1.0,
         }*self.mol.xc_data.dfa_hybrid_scf ;
         if ! scaling_factor.eq(&0.0) {
-            // DEBUG IGOR 1
             let use_dm_only = self.mol.ctrl.use_dm_only;
             //self.mol.ctrl.use_dm_only
-            let vk = self.generate_vk_with_ri_v(scaling_factor, use_dm_only);
+            let vk = self.generate_vk_with_ri_v(scaling_factor, use_dm_only, mpi_operator);
             for i_spin in (0..spin_channel) {
                 self.hamiltonian[i_spin].data
                     .par_iter_mut()
@@ -1753,14 +1784,23 @@ impl SCF {
                         *h_ij += vk_ij
                     });
             };
+            //// ==== DEBUG IGOR ====
+            //if let Some(mpi_op) = &mpi_operator {
+            //    if mpi_op.rank == 0 {
+            //        vk[0].formated_output(5, "full");
+            //    }
+            //} else {
+            //    vk[0].formated_output(5, "full");
+            //}
+            //// ==== DEBUG IGOR ====
         }
         let dt3 = time::Local::now();
         if self.mol.xc_data.dfa_compnt_scf.len()!=0 {
             //let (exc,vxc) = self.generate_vxc_rayon_dm_only(1.0);
-            let (exc,vxc) = if self.mol.ctrl.use_dm_only {
-                self.generate_vxc_rayon_dm_only(1.0)
+            let (_, exc,vxc) = if self.mol.ctrl.use_dm_only {
+                self.generate_vxc_mpi_rayon_dm_only(1.0, mpi_operator)
             } else {
-                self.generate_vxc_rayon(1.0)
+                self.generate_vxc_mpi_rayon(1.0, mpi_operator)
             };
             //let (exc,vxc) = self.generate_vxc(1.0);
             let _ = utilities::timing(&dt3, Some("evaluate vxc total"));
@@ -1793,100 +1833,103 @@ impl SCF {
 
     }
 
-    pub fn generate_ks_hamiltonian_ri_v_dm_only(&mut self) -> (f64,f64) {
-        let num_basis = self.mol.num_basis;
-        let num_state = self.mol.num_state;
-        let spin_channel = self.mol.spin_channel;
-        let mut exc_total = 0.0;
-        let mut vxc_total = 0.0;
-        let mut vk_total = 0.0;
-        //let homo = &self.homo;
-        for i_spin in (0..spin_channel) {
-            self.hamiltonian[i_spin] = self.h_core.clone();
-        }
-        let dt1 = time::Local::now();
-        let vj = self.generate_vj_with_ri_v_sync(1.0);
-        for i_spin in (0..spin_channel) {
-            self.hamiltonian[i_spin].data
-                .par_iter_mut()
-                .zip(vj[0].data.par_iter())
-                .for_each(|(h_ij,vj_ij)| {
-                    *h_ij += vj_ij
-                });
-            self.hamiltonian[i_spin].data
-                .par_iter_mut()
-                .zip(vj[1].data.par_iter())
-                .for_each(|(h_ij,vj_ij)| {
-                    *h_ij += vj_ij
-                });
-        }
-        let dt2 = time::Local::now();
-        let scaling_factor = match self.scftype {
-            SCFType::RHF => -0.5,
-            _ => -1.0,
-        }*self.mol.xc_data.dfa_hybrid_scf ;
-        if ! scaling_factor.eq(&0.0) {
-            let use_dm_only = self.mol.ctrl.use_dm_only;
-            let vk = if self.mol.ctrl.use_isdf{
-                self.generate_vk_with_isdf(scaling_factor, use_dm_only)
-            }else{
-                self.generate_vk_with_ri_v(scaling_factor, use_dm_only)
-            };
-            for i_spin in (0..spin_channel) {
-                self.hamiltonian[i_spin].data
-                    .par_iter_mut()
-                    .zip(vk[i_spin].data.par_iter())
-                    .for_each(|(h_ij,vk_ij)| {
-                        *h_ij += vk_ij
-                    });
-            };
-        }
-        let dt3 = time::Local::now();
-        if self.mol.xc_data.dfa_compnt_scf.len()!=0 {
-            let (exc,vxc) = self.generate_vxc_rayon_dm_only(1.0);
-            //let (exc,vxc) = self.generate_vxc(1.0);
-            let _ = utilities::timing(&dt3, Some("evaluate vxc total"));
-            for i_spin in (0..spin_channel) {
-                self.hamiltonian[i_spin].data
-                                .par_iter_mut()
-                                .zip(vxc[i_spin].data.par_iter())
-                                .for_each(|(h_ij,vk_ij)| {
-                                    *h_ij += vk_ij
-                                });
-            };
-            exc_total = exc;
-            for i_spin in (0..spin_channel) {
-                let dm_s = &self.density_matrix[i_spin];
-                let dm_upper = dm_s.to_matrixupper();
-                vxc_total += SCF::par_energy_contraction(&dm_upper, &vxc[i_spin]);
-            }
-        }
-
-        let dt4 = time::Local::now();
-        
-        let timecost1 = (dt2.timestamp_millis()-dt1.timestamp_millis()) as f64 /1000.0;
-        let timecost2 = (dt3.timestamp_millis()-dt2.timestamp_millis()) as f64 /1000.0;
-        let timecost3 = (dt4.timestamp_millis()-dt3.timestamp_millis()) as f64 /1000.0;
-        if self.mol.ctrl.print_level>2 {
-            println!("The evaluation of Vj, Vk and Vxc matrices cost {:10.2}, {:10.2} and {:10.2} seconds, respectively",
-                      timecost1,timecost2, timecost3);
-        };
-        (exc_total, vxc_total)
-
-    }
+//    pub fn generate_ks_hamiltonian_ri_v_dm_only(&mut self, mpi_operator: &Option<MPIOperator>) -> (f64,f64) {
+//        let num_basis = self.mol.num_basis;
+//        let num_state = self.mol.num_state;
+//        let spin_channel = self.mol.spin_channel;
+//        let mut exc_total = 0.0;
+//        let mut vxc_total = 0.0;
+//        let mut vk_total = 0.0;
+//        //let homo = &self.homo;
+//        for i_spin in (0..spin_channel) {
+//            self.hamiltonian[i_spin] = self.h_core.clone();
+//        }
+//        let dt1 = time::Local::now();
+//        let vj = self.generate_vj_with_ri_v_sync(1.0);
+//        for i_spin in (0..spin_channel) {
+//            self.hamiltonian[i_spin].data
+//                .par_iter_mut()
+//                .zip(vj[0].data.par_iter())
+//                .for_each(|(h_ij,vj_ij)| {
+//                    *h_ij += vj_ij
+//                });
+//            self.hamiltonian[i_spin].data
+//                .par_iter_mut()
+//                .zip(vj[1].data.par_iter())
+//                .for_each(|(h_ij,vj_ij)| {
+//                    *h_ij += vj_ij
+//                });
+//        }
+//        let dt2 = time::Local::now();
+//        let scaling_factor = match self.scftype {
+//            SCFType::RHF => -0.5,
+//            _ => -1.0,
+//        }*self.mol.xc_data.dfa_hybrid_scf ;
+//        if ! scaling_factor.eq(&0.0) {
+//            let use_dm_only = self.mol.ctrl.use_dm_only;
+//            let vk = if self.mol.ctrl.use_isdf{
+//                self.generate_vk_with_isdf(scaling_factor, use_dm_only)
+//            }else{
+//                self.generate_vk_with_ri_v(scaling_factor, use_dm_only)
+//            };
+//            for i_spin in (0..spin_channel) {
+//                self.hamiltonian[i_spin].data
+//                    .par_iter_mut()
+//                    .zip(vk[i_spin].data.par_iter())
+//                    .for_each(|(h_ij,vk_ij)| {
+//                        *h_ij += vk_ij
+//                    });
+//            };
+//        }
+//        let dt3 = time::Local::now();
+//        if self.mol.xc_data.dfa_compnt_scf.len()!=0 {
+//            let (_, exc,vxc) = self.generate_vxc_mpi_rayon_dm_only(1.0, mpi_operator);
+//            //let (exc,vxc) = self.generate_vxc(1.0);
+//            let _ = utilities::timing(&dt3, Some("evaluate vxc total"));
+//            for i_spin in (0..spin_channel) {
+//                self.hamiltonian[i_spin].data
+//                                .par_iter_mut()
+//                                .zip(vxc[i_spin].data.par_iter())
+//                                .for_each(|(h_ij,vk_ij)| {
+//                                    *h_ij += vk_ij
+//                                });
+//            };
+//            exc_total = exc;
+//            for i_spin in (0..spin_channel) {
+//                let dm_s = &self.density_matrix[i_spin];
+//                let dm_upper = dm_s.to_matrixupper();
+//                vxc_total += SCF::par_energy_contraction(&dm_upper, &vxc[i_spin]);
+//            }
+//        }
+//
+//        let dt4 = time::Local::now();
+//        
+//        let timecost1 = (dt2.timestamp_millis()-dt1.timestamp_millis()) as f64 /1000.0;
+//        let timecost2 = (dt3.timestamp_millis()-dt2.timestamp_millis()) as f64 /1000.0;
+//        let timecost3 = (dt4.timestamp_millis()-dt3.timestamp_millis()) as f64 /1000.0;
+//        if self.mol.ctrl.print_level>2 {
+//            println!("The evaluation of Vj, Vk and Vxc matrices cost {:10.2}, {:10.2} and {:10.2} seconds, respectively",
+//                      timecost1,timecost2, timecost3);
+//        };
+//        (exc_total, vxc_total)
+//
+//    }
 
     pub fn generate_hf_hamiltonian_for_guess(&mut self) {
         if self.mol.xc_data.dfa_compnt_scf.len() == 0 {
             if self.mol.ctrl.eri_type.eq("analytic") {
                 self.generate_hf_hamiltonian_erifold4();
             } else if  self.mol.ctrl.eri_type.eq("ri_v") {
-                self.generate_hf_hamiltonian_ri_v_dm_only();
+                self.generate_hf_hamiltonian_ri_v_dm_only(&None);
             }
         } else {
             if self.mol.ctrl.eri_type.eq("analytic") {
                 self.generate_ks_hamiltonian_erifold4();
             } else if  self.mol.ctrl.eri_type.eq("ri_v") {
-                self.generate_ks_hamiltonian_ri_v_dm_only();
+                let origin_dm_only = self.mol.ctrl.use_dm_only;
+                self.mol.ctrl.use_dm_only = true;
+                self.generate_ks_hamiltonian_ri_v(&None);
+                self.mol.ctrl.use_dm_only = origin_dm_only;
             }
         }
     }
@@ -1920,20 +1963,17 @@ impl SCF {
 
                 // Now for D^{tot}*H^{core} term
                 total_energy += SCF::par_energy_contraction(&dm_t_upper, &self.h_core);
-                //println!("debug: {}", total_energy);
                 // Now for D^{alpha}*F^{alpha} term
                 total_energy += SCF::par_energy_contraction(&dm_a_upper, &self.hamiltonian[0]);
-                //println!("debug: {}", total_energy);
                 // Now for D^{beta}*F^{beta} term
                 total_energy += SCF::par_energy_contraction(&dm_b_upper, &self.hamiltonian[1]);
-                //println!("debug: {}", self.scf_energy);
 
             },
         }
         total_energy
     }
 
-    pub fn generate_hf_hamiltonian(&mut self) {
+    pub fn generate_hf_hamiltonian(&mut self, mpi_operator: &Option<MPIOperator>) {
         let num_basis = self.mol.num_basis;
         let num_state = self.mol.num_state;
         let spin_channel = self.mol.spin_channel;
@@ -1943,7 +1983,7 @@ impl SCF {
             if self.mol.ctrl.eri_type.eq("analytic") {
                 self.generate_hf_hamiltonian_erifold4();
             } else if  self.mol.ctrl.eri_type.eq("ri_v") {
-                self.generate_hf_hamiltonian_ri_v();
+                self.generate_hf_hamiltonian_ri_v(mpi_operator);
             }
         } else {
             if self.mol.ctrl.eri_type.eq("analytic") {
@@ -1952,7 +1992,7 @@ impl SCF {
                 exc_total = tmp_exc_total;
                 vxc_total = tmp_vxc_total;
             } else {
-                let (tmp_exc_total,tmp_vxc_total) = self.generate_ks_hamiltonian_ri_v();
+                let (tmp_exc_total,tmp_vxc_total) = self.generate_ks_hamiltonian_ri_v(mpi_operator);
                 exc_total = tmp_exc_total;
                 vxc_total = tmp_vxc_total;
             }
@@ -1963,10 +2003,23 @@ impl SCF {
         // The following scf energy evaluation follow the formula presented in
         // the quantum chemistry book of Szabo A. and Ostlund N.S. P 150, Formula (3.184)
         self.scf_energy = self.nuc_energy;
-        //println!("debug: {}", self.scf_energy);
         // for DFT calculations, we should replace the exchange-correlation (xc) potential by the xc energy
+        //if self.mol.ctrl.print_level>1 {println!("Exc: {:?}, Vxc: {:?}", exc_total, vxc_total)};
         self.scf_energy = self.scf_energy - vxc_total + exc_total;
-        if self.mol.ctrl.print_level>1 {println!("Exc: {:?}, Vxc: {:?}", exc_total, vxc_total)};
+        //if let Some(local_grids) = &self.grids {
+        //    let total_elec = numerical_density(&local_grids, &self.mol, dm, mpi_operator);
+        //    if self.mol.ctrl.print_level>1 {
+        //        if self.mol.spin_channel==1 {
+        //            println!("total electron number: {:16.8}", total_elec[0])
+        //        } else {
+        //            println!("electron number in alpha-channel: {:12.8}", total_elec[0]);
+        //            println!("electron number in beta-channel:  {:12.8}", total_elec[1]);
+        //        }
+        //    };
+        //}
+        if self.mol.ctrl.print_level>1 {
+            println!("Exc: {:16.8}, Vxc: {:16.8}", exc_total, vxc_total)
+        };
         match self.scftype {
             SCFType::RHF => {
                 // D*(H^{core}+F)
@@ -1990,13 +2043,10 @@ impl SCF {
 
                 // Now for D^{tot}*H^{core} term
                 self.scf_energy += SCF::par_energy_contraction(&dm_t_upper, &self.h_core);
-                //println!("debug: {}", self.scf_energy);
                 // Now for D^{alpha}*F^{alpha} term
                 self.scf_energy += SCF::par_energy_contraction(&dm_a_upper, &self.hamiltonian[0]);
-                //println!("debug: {}", self.scf_energy);
                 // Now for D^{beta}*F^{beta} term
                 self.scf_energy += SCF::par_energy_contraction(&dm_b_upper, &self.hamiltonian[1]);
-                //println!("debug: {}", self.scf_energy);
 
             },
         }
@@ -2022,14 +2072,14 @@ impl SCF {
         (tmp_energy - double_count) * 0.5
     }
 
-    pub fn evaluate_exact_exchange_ri_v(&mut self) -> f64 {
+    pub fn evaluate_exact_exchange_ri_v(&mut self, mpi_operator: &Option<MPIOperator>) -> f64 {
         let mut x_energy = 0.0;
         let use_dm_only = self.mol.ctrl.use_dm_only;
         //let mut vk = self.generate_vk_with_ri_v(1.0, use_dm_only);
         let mut vk = if self.mol.ctrl.use_isdf{
             self.generate_vk_with_isdf(1.0, use_dm_only)
         }else{
-            self.generate_vk_with_ri_v(1.0, use_dm_only)
+            self.generate_vk_with_ri_v(1.0, use_dm_only, mpi_operator)
         };
         let spin_channel = self.mol.spin_channel;
         for i_spin in 0..spin_channel {
@@ -2045,7 +2095,7 @@ impl SCF {
         }
     }
 
-    pub fn evaluate_xc_energy(&mut self, iop: usize) -> f64 {
+    pub fn evaluate_xc_energy(&mut self, iop: usize, mpi_operator: &Option<MPIOperator>) -> f64 {
         let num_basis = self.mol.num_basis;
         let num_state = self.mol.num_state;
         let num_auxbas = self.mol.num_auxbas;
@@ -2057,7 +2107,7 @@ impl SCF {
         let mo = &mut self.eigenvectors;
         let occ = &mut self.occupation;
         if let Some(grids) = &mut self.grids {
-            exc_spin = self.mol.xc_data.xc_exc(grids, spin_channel,dm, mo, occ,iop);
+            exc_spin = self.mol.xc_data.xc_exc(grids, spin_channel,dm, mo, occ,iop, mpi_operator);
         }
         let exc:f64 = exc_spin.iter().sum();
         exc
@@ -2066,16 +2116,11 @@ impl SCF {
     //pub fn evaluate_xc_energy
        
 
-    pub fn diagonalize_hamiltonian(&mut self) {
-        (self.eigenvectors, self.eigenvalues) = diagonalize_hamiltonian_outside(&self);
-        for i_spin in (0..self.mol.spin_channel) {
-            //println!("debug the number of eigenvalues in {} spin channel is {}", i_spin, self.eigenvalues[i_spin].len());
-            //println!("debug the number of occ in {} spin channel is {}", i_spin, self.occupation[i_spin].len());
-        }
+    pub fn diagonalize_hamiltonian(&mut self, mpi_operator: &Option<MPIOperator>) {
+        (self.eigenvectors, self.eigenvalues) = diagonalize_hamiltonian_outside(&self, mpi_operator);
     }
 
     pub fn check_scf_convergence(&self, scftracerecode: &ScfTraceRecord) -> [bool;2] {
-        //println!("debug spin_channel: {}", self.mol.spin_channel);
         if scftracerecode.num_iter<2 {
             return [false,false]
         }
@@ -2220,13 +2265,13 @@ impl SCF {
         vj_upper_with_ri_v(&self.ri3fn, dm, spin_channel, scaling_factor)
     }
 
-    pub fn generate_vj_with_ri_v_sync(&mut self, scaling_factor: f64) -> Vec<MatrixUpper<f64>> {
+    pub fn generate_vj_with_ri_v_sync(&mut self, scaling_factor: f64, mpi_operator: &Option<MPIOperator>) -> Vec<MatrixUpper<f64>> {
 
         let spin_channel = self.mol.spin_channel;
         let dm = &self.density_matrix;
 
         if self.mol.ctrl.use_ri_symm {
-            vj_upper_with_rimatr_sync(&self.rimatr, dm, spin_channel, scaling_factor)
+            vj_upper_with_rimatr_sync_mpi(&self.rimatr, dm, spin_channel, scaling_factor, mpi_operator)
         } else {
             //vj_upper_with_ri_v_sync(&self.ri3fn, dm, spin_channel, scaling_factor)
             if self.mol.ctrl.use_isdf && !self.mol.ctrl.isdf_k_only && !self.mol.ctrl.isdf_new{
@@ -2245,7 +2290,7 @@ impl SCF {
         vj_upper_with_ri_v(&self.ri3fn_isdf, dm, spin_channel, scaling_factor)
     }
 
-    pub fn generate_vk_with_ri_v(&mut self, scaling_factor: f64, use_dm_only: bool) -> Vec<MatrixUpper<f64>> {
+    pub fn generate_vk_with_ri_v(&mut self, scaling_factor: f64, use_dm_only: bool, mpi_operator: &Option<MPIOperator>) -> Vec<MatrixUpper<f64>> {
         //let num_basis = self.mol.num_basis;
         //let num_state = self.mol.num_state;
         //let num_auxbas = self.mol.num_auxbas;
@@ -2255,12 +2300,13 @@ impl SCF {
         if self.mol.ctrl.use_ri_symm {
             if use_dm_only {
                 let dm = &self.density_matrix;
-                vk_upper_with_rimatr_use_dm_only_sync(&mut self.rimatr, dm, spin_channel, scaling_factor)
+                vk_upper_with_rimatr_use_dm_only_sync_mpi(&mut self.rimatr, dm, spin_channel, scaling_factor, mpi_operator)
             } else {
                 let eigv = &self.eigenvectors;
                 let occupation = &self.occupation;
                 let num_elec = &self.mol.num_elec;
-                vk_upper_with_rimatr_sync(&mut self.rimatr, eigv, num_elec, occupation, spin_channel, scaling_factor)
+                //vk_upper_with_rimatr_sync(&mut self.rimatr, eigv, num_elec, occupation, spin_channel, scaling_factor)
+                vk_upper_with_rimatr_sync_mpi(&mut self.rimatr, eigv, num_elec, occupation, spin_channel, scaling_factor,mpi_operator)
             }
         } else if self.mol.ctrl.isdf_new{
             self.generate_vk_with_isdf_new(scaling_factor)
@@ -2341,7 +2387,6 @@ impl SCF {
             let dt2 = utilities::timing(&dt1, Some("From vxc_ao to vxc"));
         }
 
-        //println!("debug {:?}", exc_spin);
 
         let dt0 = utilities::init_timing();
         for i_spin in (0..spin_channel) {
@@ -2350,7 +2395,6 @@ impl SCF {
 
             vxc_mf_s.self_add(&vxc_mf_s.transpose());
             vxc_mf_s.self_multiple(0.5);
-            //println!("debug vxc{}",i_spin);
             //vxc_mf_s.formated_output(10, "full");
             *vxc_s = vxc_mf_s.to_matrixupper();
         }
@@ -2371,11 +2415,10 @@ impl SCF {
 
     }
 
-    pub fn generate_vxc_rayon_dm_only(&self, scaling_factor: f64) -> (f64, Vec<MatrixUpper<f64>>) {
+    pub fn generate_vxc_rayon_dm_only(&self, scaling_factor: f64) -> ([f64;2], f64, Vec<MatrixUpper<f64>>) {
         //In this subroutine, we call the lapack dgemm in a rayon parallel environment.
         //In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
         let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
-        //println!("debug: default_omp_num_threads: {}", default_omp_num_threads);
         utilities::omp_set_num_threads_wrapper(1);
 
         let num_basis = self.mol.num_basis;
@@ -2392,39 +2435,29 @@ impl SCF {
         let dm = &self.density_matrix;
         let mo = &self.eigenvectors;
         let occ = &self.occupation;
-        //println!("debug: {:?}", &self.occupation);
         if let Some(grids) = &self.grids {
-            //println!("debug: {:?}",grids.parallel_balancing);
             let (sender, receiver) = channel();
             grids.parallel_balancing.par_iter().for_each_with(sender,|s,range_grids| {
-                //println!("debug 0: {}", rayon::current_thread_index().unwrap());
                 let (exc,vxc_ao,total_elec) = self.mol.xc_data.xc_exc_vxc_slots_dm_only(range_grids.clone(), grids, spin_channel,dm, mo, occ);
-                //println!("debug: {:?}", vxc_ao[0].size());
-                //println!("debug loc_exc: {:?}, {:?}, {:?}", exc, vxc_ao[0].size(), vxc_ao[0].data.iter().sum::<f64>());
                 //exc_spin = exc;
                 let mut vxc_mf: Vec<MatrixFull<f64>> = vec![MatrixFull::new([num_basis,num_basis],0.0f64);spin_channel];;
-                //println!("debug 1: {}", rayon::current_thread_index().unwrap());
                 if let Some(ao) = &grids.ao {
                     for i_spin in 0..spin_channel {
-                        //println!("debug 1-1: {} with spin {}", rayon::current_thread_index().unwrap(), i_spin);
 
                         let vxc_mf_s = vxc_mf.get_mut(i_spin).unwrap();
                         let vxc_ao_s = vxc_ao.get(i_spin).unwrap();
-                        //println!("debug 1-2: {} with spin {}", rayon::current_thread_index().unwrap(), i_spin);
                         rest_tensors::matrix::matrix_blas_lapack::_dgemm(
                             ao,(0..num_basis, range_grids.clone()),'N',
                             vxc_ao_s,(0..num_basis,0..range_grids.len()),'T',
                             vxc_mf_s, (0..num_basis,0..num_basis),
                             1.0,0.0);
 
-                        //println!("debug 1-3: {} with spin {}", rayon::current_thread_index().unwrap(), i_spin);
                         //vxc_mf_s.to_matrixfullslicemut().lapack_dgemm(
                         //    &ao.to_matrixfullslice(), 
                         //    &vxc_ao_s.to_matrixfullslice(),
                         //    'N', 'T', 1.0, 0.0);
                     }
                 }
-                //println!("debug 2: {}", rayon::current_thread_index().unwrap());
                 s.send((vxc_mf,exc,total_elec)).unwrap()
             });
             receiver.into_iter().for_each(|(vxc_mf_local,exc_local,loc_total_elec)| {
@@ -2440,16 +2473,15 @@ impl SCF {
                 })
             })
         }
-        //println!("debug total_exc: {:?}, {:?}, {:?}", exc_spin, vxc_mf[0].size(),vxc_mf[0].data.iter().sum::<f64>());
 
-        if self.mol.ctrl.print_level>1 {
-            if spin_channel==1 {
-                println!("total electron number: {:16.8}", total_elec[0]);
-            } else {
-                println!("electron number in alpha-channel: {:12.8}", total_elec[0]);
-                println!("electron number in beta-channel:  {:12.8}", total_elec[1]);
-            }
-        }
+        //if self.mol.ctrl.print_level>1 {
+        //    if spin_channel==1 {
+        //        println!("total electron number: {:16.8}", total_elec[0]);
+        //    } else {
+        //        println!("electron number in alpha-channel: {:12.8}", total_elec[0]);
+        //        println!("electron number in beta-channel:  {:12.8}", total_elec[1]);
+        //    }
+        //}
 
 
         for i_spin in (0..spin_channel) {
@@ -2473,15 +2505,103 @@ impl SCF {
 
         utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
 
-        (exc_total, vxc)
+        (total_elec, exc_total, vxc)
 
     }
 
-    pub fn generate_vxc_rayon(&self, scaling_factor: f64) -> (f64, Vec<MatrixUpper<f64>>) {
+    pub fn generate_vxc_mpi_rayon_dm_only(&self, scaling_factor: f64, mpi_operator: &Option<MPIOperator>) -> ([f64;2], f64, Vec<MatrixUpper<f64>>) {
+        let (total_elec, tot_exc, tot_xc) = if let Some(mpi_world) = mpi_operator {
+
+            let world = &mpi_world.world;
+            let my_rank = mpi_world.rank;
+
+            let (mut total_elec, exc, tmp_mat) = self.generate_vxc_rayon_dm_only(scaling_factor);
+
+            let mut tot_exc = mpi_reduce(world, &[exc], 0, &SystemOperation::sum())[0];
+            mpi_broadcast(&world, &mut tot_exc, 0);
+
+            let mut tot_elec = mpi_reduce(world, &total_elec, 0, &SystemOperation::sum());
+            total_elec.iter_mut().zip(tot_elec.iter()).for_each(|(to, from)| *to = *from);
+            mpi_broadcast(&world, &mut total_elec, 0);
+
+            let mut tot_xc: Vec<MatrixUpper<f64>> = vec![MatrixUpper::empty(), MatrixUpper::empty()];
+            for i_spin in 0..self.mol.spin_channel {
+                let mut xc_spin = tot_xc.get_mut(i_spin).unwrap();
+                let mut result= mpi_reduce(world, tmp_mat[i_spin].data_ref().unwrap(), 0, &SystemOperation::sum());
+                mpi_broadcast_vector(&world, &mut result, 0);
+                *xc_spin = MatrixUpper::from_vec(result.len(), result).unwrap();
+            } 
+
+            (total_elec, tot_exc, tot_xc)
+
+        } else {
+            self.generate_vxc_rayon_dm_only(scaling_factor)
+        };
+
+        if self.mol.ctrl.print_level>1 {
+            if self.mol.spin_channel==1 {
+                println!("total electron number: {:16.8}", total_elec[0]);
+            } else {
+                println!("electron number in alpha-channel: {:12.8}", total_elec[0]);
+                println!("electron number in beta-channel:  {:12.8}", total_elec[1]);
+            }
+        }
+
+        (total_elec, tot_exc, tot_xc)
+
+
+    }
+
+    pub fn generate_vxc_mpi_rayon(&self, scaling_factor: f64, mpi_operator: &Option<MPIOperator>) -> ([f64;2], f64, Vec<MatrixUpper<f64>>) {
+
+        let (total_elec, tot_exc, tot_xc) = if let Some(mpi_world) = mpi_operator {
+
+            let world = &mpi_world.world;
+            let my_rank = mpi_world.rank;
+
+            let (mut total_elec, exc, tmp_mat) = self.generate_vxc_rayon(scaling_factor);
+
+            let mut tot_exc = mpi_reduce(world, &[exc], 0, &SystemOperation::sum())[0];
+            mpi_broadcast(&world, &mut tot_exc, 0);
+
+            let mut tot_elec = mpi_reduce(world, &total_elec, 0, &SystemOperation::sum());
+            total_elec.iter_mut().zip(tot_elec.iter()).for_each(|(to, from)| *to = *from);
+            mpi_broadcast(&world, &mut total_elec, 0);
+
+            let mut tot_xc: Vec<MatrixUpper<f64>> = vec![MatrixUpper::empty(), MatrixUpper::empty()];
+            for i_spin in 0..self.mol.spin_channel {
+                let mut xc_spin = tot_xc.get_mut(i_spin).unwrap();
+                let mut result= mpi_reduce(world, tmp_mat[i_spin].data_ref().unwrap(), 0, &SystemOperation::sum());
+                mpi_broadcast_vector(&world, &mut result, 0);
+                *xc_spin = MatrixUpper::from_vec(result.len(), result).unwrap();
+            } 
+
+
+
+            (total_elec, tot_exc, tot_xc)
+
+        } else {
+            self.generate_vxc_rayon(scaling_factor)
+        };
+
+        if self.mol.ctrl.print_level>1 {
+            if self.mol.spin_channel==1 {
+                println!("total electron number: {:16.8}", total_elec[0]);
+            } else {
+                println!("electron number in alpha-channel: {:12.8}", total_elec[0]);
+                println!("electron number in beta-channel:  {:12.8}", total_elec[1]);
+            }
+        }
+
+        (total_elec, tot_exc, tot_xc)
+
+    }
+
+
+    pub fn generate_vxc_rayon(&self, scaling_factor: f64) -> ([f64;2], f64, Vec<MatrixUpper<f64>>) {
         //In this subroutine, we call the lapack dgemm in a rayon parallel environment.
         //In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
         let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
-        //println!("debug: default_omp_num_threads: {}", default_omp_num_threads);
         utilities::omp_set_num_threads_wrapper(1);
 
         let num_basis = self.mol.num_basis;
@@ -2498,38 +2618,29 @@ impl SCF {
         let dm = &self.density_matrix;
         let mo = &self.eigenvectors;
         let occ = &self.occupation;
-        //println!("debug: {:?}", &self.occupation);
         if let Some(grids) = &self.grids {
-            //println!("debug: {:?}",grids.parallel_balancing);
             let (sender, receiver) = channel();
             grids.parallel_balancing.par_iter().for_each_with(sender,|s,range_grids| {
-                //println!("debug 0: {}", rayon::current_thread_index().unwrap());
                 let (exc,vxc_ao,total_elec) = self.mol.xc_data.xc_exc_vxc_slots(range_grids.clone(), grids, spin_channel,dm, mo, occ);
-                //println!("debug loc_exc: {:?}, {:?}, {:?}", exc, vxc_ao[0].size(), vxc_ao[0].data.iter().sum::<f64>());
                 //exc_spin = exc;
                 let mut vxc_mf: Vec<MatrixFull<f64>> = vec![MatrixFull::new([num_basis,num_basis],0.0f64);spin_channel];;
-                //println!("debug 1: {}", rayon::current_thread_index().unwrap());
                 if let Some(ao) = &grids.ao {
                     for i_spin in 0..spin_channel {
-                        //println!("debug 1-1: {} with spin {}", rayon::current_thread_index().unwrap(), i_spin);
 
                         let vxc_mf_s = vxc_mf.get_mut(i_spin).unwrap();
                         let vxc_ao_s = vxc_ao.get(i_spin).unwrap();
-                        //println!("debug 1-2: {} with spin {}", rayon::current_thread_index().unwrap(), i_spin);
                         rest_tensors::matrix::matrix_blas_lapack::_dgemm(
                             ao,(0..num_basis, range_grids.clone()),'N',
                             vxc_ao_s,(0..num_basis,0..range_grids.len()),'T',
                             vxc_mf_s, (0..num_basis,0..num_basis),
                             1.0,0.0);
 
-                        //println!("debug 1-3: {} with spin {}", rayon::current_thread_index().unwrap(), i_spin);
                         //vxc_mf_s.to_matrixfullslicemut().lapack_dgemm(
                         //    &ao.to_matrixfullslice(), 
                         //    &vxc_ao_s.to_matrixfullslice(),
                         //    'N', 'T', 1.0, 0.0);
                     }
                 }
-                //println!("debug 2: {}", rayon::current_thread_index().unwrap());
                 s.send((vxc_mf,exc,total_elec)).unwrap()
             });
             receiver.into_iter().for_each(|(vxc_mf_local,exc_local,loc_total_elec)| {
@@ -2545,16 +2656,15 @@ impl SCF {
                 })
             })
         }
-        //println!("debug total_exc: {:?}, {:?}, {:?}", exc_spin, vxc_mf[0].size(),vxc_mf[0].data.iter().sum::<f64>());
 
-        if self.mol.ctrl.print_level>1 {
-            if spin_channel==1 {
-                println!("total electron number: {:16.8}", total_elec[0]);
-            } else {
-                println!("electron number in alpha-channel: {:12.8}", total_elec[0]);
-                println!("electron number in beta-channel:  {:12.8}", total_elec[1]);
-            }
-        }
+        //if self.mol.ctrl.print_level>1 {
+        //    if spin_channel==1 {
+        //        println!("total electron number: {:16.8}", total_elec[0]);
+        //    } else {
+        //        println!("electron number in alpha-channel: {:12.8}", total_elec[0]);
+        //        println!("electron number in beta-channel:  {:12.8}", total_elec[1]);
+        //    }
+        //}
 
 
         for i_spin in (0..spin_channel) {
@@ -2578,7 +2688,7 @@ impl SCF {
 
         utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
 
-        (exc_total, vxc)
+        (total_elec,exc_total, vxc)
 
     }
 
@@ -2599,6 +2709,24 @@ impl SCF {
                 ).unwrap()
             )
         }
+
+        //if let Some(my_data)=&self.mol.mpi_data {
+        //    //if my_data.rank == 0 {self.eigenvectors[0].formated_output(5, "full")};
+        //    let (dd, col, row) = &ri3mo[0];
+        //    let ff = dd.get_reducing_matrix(0).unwrap();
+        //    ff.iter_columns_full().enumerate().for_each(|(i,x)| {
+        //        println!("i: {}", i);
+        //        println!("x: {:?}", &x);
+        //    })
+        //} else {
+        //    //self.eigenvectors[0].formated_output(5, "full");
+        //    let (dd, col, row) = &ri3mo[0];
+        //    let ff = dd.get_reducing_matrix(0).unwrap();
+        //    ff.iter_columns_full().enumerate().for_each(|(i,x)| {
+        //        println!("i: {}", i);
+        //        println!("x: {:?}", &x);
+        //    })
+        //};
 
         // deallocate the rimatr to save the memory
         self.rimatr = None;
@@ -2682,10 +2810,8 @@ pub fn vj_upper_with_ri_v_sync(
     //// In this subroutine, we call the lapack dgemm in a rayon parallel environment.
     //// In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
     //let default_omp_num_threads = unsafe {openblas_get_num_threads()};
-    ////println!("debug: default omp_num_threads: {}", default_omp_num_threads);
     //unsafe{openblas_set_num_threads(1)};
     
-    //println!("debug rayon local thread number: {}", rayon::current_num_threads());
 
     if let Some(ri3fn) = ri3fn {
     let num_basis = ri3fn.size[0];
@@ -2736,6 +2862,25 @@ pub fn vj_upper_with_ri_v_sync(
     vj
 }
 
+pub fn vj_upper_with_rimatr_sync_mpi(
+                ri3fn: &Option<(MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>)>,
+                dm: &Vec<MatrixFull<f64>>, 
+                spin_channel: usize, scaling_factor: f64,
+                mpi_operator: &Option<MPIOperator>)  -> Vec<MatrixUpper<f64>> {
+    if let Some(mpi_op) = &mpi_operator {
+        let mut vj_vec = vj_upper_with_rimatr_sync(ri3fn, dm, spin_channel, scaling_factor);
+        for i_spin in 0..spin_channel {
+            let vj = &mut vj_vec[i_spin];
+            let mut tot_vj = mpi_reduce(&mpi_op.world, vj.data_ref().unwrap(), 0, &SystemOperation::sum());
+            mpi_broadcast_vector(&mpi_op.world, &mut tot_vj, 0);
+            vj.data = tot_vj;
+        }
+        vj_vec
+    } else {
+        vj_upper_with_rimatr_sync(ri3fn, dm, spin_channel, scaling_factor)
+    }
+}
+
 pub fn vj_upper_with_rimatr_sync(
                 ri3fn: &Option<(MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>)>,
                 dm: &Vec<MatrixFull<f64>>, 
@@ -2751,7 +2896,6 @@ pub fn vj_upper_with_rimatr_sync_v01(
     //// In this subroutine, we call the lapack dgemm in a rayon parallel environment.
     //// In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
     //let default_omp_num_threads = unsafe {openblas_get_num_threads()};
-    ////println!("debug: default omp_num_threads: {}", default_omp_num_threads);
     //unsafe{openblas_set_num_threads(1)};
     
     if let Some((ri3fn,basbas2baspar,baspar2basbas)) = ri3fn {
@@ -2759,7 +2903,6 @@ pub fn vj_upper_with_rimatr_sync_v01(
         let num_baspar = ri3fn.size[0];
         let num_auxbas = ri3fn.size[1];
         //let npair = num_basis*(num_basis+1)/2;
-        //println!("debug npair:{}, num_baspar:{}", npair, num_baspar);
         for i_spin in (0..spin_channel) {
             //let mut tmp_mu = vec![0.0f64;num_auxbas];
             let mut vj_spin = &mut vj[i_spin];
@@ -2812,7 +2955,6 @@ pub fn vj_upper_with_rimatr_sync_v01(
     //// reuse the default omp_num_threads setting
     //unsafe{openblas_set_num_threads(default_omp_num_threads)};
     //vj[0].formated_output(5, "full");
-    //println!("debug: {:?}", vj[0]);
 
     vj
 }
@@ -2933,14 +3075,10 @@ pub fn vk_upper_with_ri_v_use_dm_only_sync(
     // In this subroutine, we call the lapack dgemm in a rayon parallel environment.
     // In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
     let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
-    //println!("debug: default omp_num_threads: {}", default_omp_num_threads);
     utilities::omp_set_num_threads_wrapper(1);
     //let mut bm = RIFull::new([num_state,num_basis,num_auxbas], 0.0f64);
     let mut vk: Vec<MatrixUpper<f64>> = vec![MatrixUpper::new(1,0.0f64),MatrixUpper::new(1,0.0f64)];
 
-    //============================debug===================================
-    //&dm[0].formated_output_e(5, "full");
-    //====================================================================
 
     if let Some(ri3fn) = ri3fn {
         let num_basis = dm[0].size()[0];
@@ -2993,17 +3131,11 @@ pub fn vk_upper_with_ri_v_use_dm_only_sync(
     // reuse the default omp_num_threads setting
     utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
 
-    //============================debug==================================
-
-    /* let mut data = vec![0.0; vk[0].data.len()];
-    for i in 0..vk[0].data.len(){
-        data[i] = vk[0].data[i] * 2.0;
-    }
-    let final_vk = MatrixUpper{size: vk[0].size, data: data};
-    &final_vk.formated_output(5, "upper"); */
-    //===================================================================
     vk
 }
+
+
+
 pub fn vk_upper_with_rimatr_use_dm_only_sync(
                 ri3fn: &Option<(MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>)>,
                 dm: &Vec<MatrixFull<f64>>,
@@ -3019,7 +3151,6 @@ pub fn vk_upper_with_rimatr_use_dm_only_sync_v01(
     // In this subroutine, we call the lapack dgemm in a rayon parallel environment.
     // In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
     let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
-    //println!("debug: default omp_num_threads: {}", default_omp_num_threads);
     utilities::omp_set_num_threads_wrapper(1);
     //let mut bm = RIFull::new([num_state,num_basis,num_auxbas], 0.0f64);
     let mut vk: Vec<MatrixUpper<f64>> = vec![MatrixUpper::new(1,0.0f64),MatrixUpper::new(1,0.0f64)];
@@ -3126,6 +3257,44 @@ pub fn vk_upper_with_rimatr_use_dm_only_sync_v02(
 
     vk
 }
+
+pub fn vk_upper_with_rimatr_use_dm_only_sync_mpi(
+                ri3fn: &Option<(MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>)>,
+                dm: &Vec<MatrixFull<f64>>,
+                spin_channel: usize, scaling_factor: f64, mpi_operator: &Option<MPIOperator>)  -> Vec<MatrixUpper<f64>> {
+    if let Some(mpi_op) = &mpi_operator {
+        let mut vk_vec = vk_upper_with_rimatr_use_dm_only_sync_v02(ri3fn, dm, spin_channel, scaling_factor);
+        for i_spin in 0..spin_channel {
+            let vk = &mut vk_vec[i_spin];
+            let mut tot_vk = mpi_reduce(&mpi_op.world, vk.data_ref().unwrap(), 0, &SystemOperation::sum());
+            mpi_broadcast(&mpi_op.world, &mut tot_vk, 0);
+            vk.data = tot_vk;
+        };
+        vk_vec
+    } else {
+        vk_upper_with_rimatr_use_dm_only_sync_v02(ri3fn, dm, spin_channel, scaling_factor)
+    }
+}
+
+pub fn vk_upper_with_rimatr_sync_mpi(
+                ri3fn: &Option<(MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>)>,
+                eigv: &[MatrixFull<f64>;2], 
+                num_elec: &[f64;3], occupation: &[Vec<f64>;2],
+                spin_channel: usize, scaling_factor: f64,
+                mpi_operator: &Option<MPIOperator>)  -> Vec<MatrixUpper<f64>> {
+    if let Some(mpi_op) = &mpi_operator {
+        let mut vk_vec = vk_upper_with_rimatr_sync_v03(ri3fn,eigv,num_elec,occupation,spin_channel,scaling_factor);
+        for i_spin in 0..spin_channel {
+            let vk = &mut vk_vec[i_spin];
+            let mut tot_vk = mpi_reduce(&mpi_op.world, vk.data_ref().unwrap(), 0, &SystemOperation::sum());
+            mpi_broadcast(&mpi_op.world, &mut tot_vk, 0);
+            vk.data = tot_vk;
+        };
+        vk_vec
+    } else {
+        vk_upper_with_rimatr_sync_v03(ri3fn,eigv,num_elec,occupation,spin_channel,scaling_factor)
+    }
+}
 pub fn vk_upper_with_rimatr_sync(
                 ri3fn: &Option<(MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>)>,
                 eigv: &[MatrixFull<f64>;2], 
@@ -3144,7 +3313,6 @@ pub fn vk_upper_with_rimatr_sync_v01(
     // In this subroutine, we call the lapack dgemm in a rayon parallel environment.
     // In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
     let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
-    //println!("debug: default omp_num_threads: {}", default_omp_num_threads);
     utilities::omp_set_num_threads_wrapper(1);
     //let mut bm = RIFull::new([num_state,num_basis,num_auxbas], 0.0f64);
     let mut vk: Vec<MatrixUpper<f64>> = vec![MatrixUpper::new(1,0.0f64),MatrixUpper::new(1,0.0f64)];
@@ -3291,10 +3459,10 @@ pub fn vk_upper_with_rimatr_sync_v03(
     // In this subroutine, we call the lapack dgemm in a rayon parallel environment.
     // In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
     let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
-    //println!("debug: default omp_num_threads: {}", default_omp_num_threads);
     utilities::omp_set_num_threads_wrapper(1);
     //let mut bm = RIFull::new([num_state,num_basis,num_auxbas], 0.0f64);
-    let mut vk: Vec<MatrixUpper<f64>> = vec![MatrixUpper::new(1,0.0f64),MatrixUpper::new(1,0.0f64)];
+    //let mut vk: Vec<MatrixUpper<f64>> = vec![MatrixUpper::new(1,0.0f64),MatrixUpper::new(1,0.0f64)];
+    let mut vk: Vec<MatrixUpper<f64>> = vec![MatrixUpper::empty(),MatrixUpper::empty()];
 
     if let Some((ri3fn,basbas2baspar,baspar2basbas)) = ri3fn {
         let num_basis = eigv[0].size()[0];
@@ -3308,7 +3476,8 @@ pub fn vk_upper_with_rimatr_sync_v03(
             // now locate the highest obital that has electron with occupation largger than 1.0e-4
             let homo_s = occupation[i_spin].iter().enumerate()
                 .fold(0_usize,|x, (ob, occ)| {if *occ>1.0e-4 {ob} else {x}});
-            let nw = homo_s + 1;
+            let elec_spin = num_elec[i_spin+1].ceil() as usize;
+            let nw = if elec_spin == 0 {0} else {homo_s + 1} ;
             if nw>0 {
                 let mut tmp_mat = MatrixFull::new([num_basis,nw],0.0_f64);
                 tmp_mat.data.iter_mut().zip(eigv_s.iter_submatrix(0..num_basis,0..nw))
@@ -3366,7 +3535,6 @@ pub fn vk_upper_with_ri_v_sync(
     // In this subroutine, we call the lapack dgemm in a rayon parallel environment.
     // In order to ensure the efficiency, we disable the openmp ability and re-open it in the end of subroutien
     let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
-    //println!("debug: default omp_num_threads: {}", default_omp_num_threads);
     utilities::omp_set_num_threads_wrapper(1);
 
     //let mut bm = RIFull::new([num_state,num_basis,num_auxbas], 0.0f64);
@@ -3441,15 +3609,6 @@ pub fn vk_upper_with_ri_v_sync(
     // reuse the default omp_num_threads setting
     utilities::omp_set_num_threads_wrapper(default_omp_num_threads);
 
-    //============================debug==================================
-
-    /* let mut data = vec![0.0; vk[0].data.len()];
-    for i in 0..vk[0].data.len(){
-        data[i] = vk[0].data[i] * 2.0;
-    }
-    let final_vk = MatrixUpper{size: vk[0].size, data: data};
-    &final_vk.formated_output(5, "upper"); */
-    //===================================================================
 
     vk
 }
@@ -3565,14 +3724,14 @@ impl ScfTraceRecord {
     ///            - `s` is the overlap matrix  
     /// * **Ref**: P. Pulay, Improved SCF Convergence Acceleration, JCC, 1982, 3:556-560.
     ///
-    pub fn prepare_next_input(&mut self, scf: &mut SCF) {
+    pub fn prepare_next_input(&mut self, scf: &mut SCF, mpi_operator: &Option<MPIOperator>) {
         let spin_channel = scf.mol.spin_channel;
         let start_pulay = self.start_diis_cycle;
         //if self.residual_density.len()>=2 {
         let alpha = self.mix_param;
         let beta = 1.0-self.mix_param;
         if self.mixer.eq(&"direct") {
-            scf.generate_hf_hamiltonian();
+            scf.generate_hf_hamiltonian(mpi_operator);
         }
         else if self.mixer.eq(&"linear") 
             || (self.mixer.eq(&"ddiis") && self.num_iter<start_pulay) 
@@ -3589,7 +3748,7 @@ impl ScfTraceRecord {
                     .scaled_add(&residual_dm, alpha)
                     .unwrap();
             }
-            scf.generate_hf_hamiltonian();
+            scf.generate_hf_hamiltonian(mpi_operator);
         } else if self.mixer.eq(&"diis") && self.num_iter>=start_pulay {
             // 
             // Reference: P. Pulay, Improved SCF Convergence Acceleration, JCC, 1982, 3:556-560.
@@ -3601,7 +3760,7 @@ impl ScfTraceRecord {
             //
             let dt1 = time::Local::now();
 
-            scf.generate_hf_hamiltonian();
+            scf.generate_hf_hamiltonian(mpi_operator);
 
 
             // update the energy records and check the oscillation
@@ -3678,7 +3837,7 @@ impl ScfTraceRecord {
                         .scaled_add(&residual_dm, alpha)
                         .unwrap();
                 }
-                scf.generate_hf_hamiltonian();
+                scf.generate_hf_hamiltonian(mpi_operator);
                 //let index = self.target_vector.len()-1;
                 //self.target_vector.remove(index);
                 //self.error_vector.remove(index);
@@ -3786,7 +3945,6 @@ pub fn diis_solver(em: &Vec<Vec<f64>>,
             //sum_inv_norm_rdm += inv_norm_rdm;
         })
     });
-    //println!("debug");
     let inv_opta = if let Some(inv_opta) = _dinverse(&mut opta) {
         //println!("diis_solver: _dinverse");
         inv_opta
@@ -3814,12 +3972,12 @@ pub fn diis_solver(em: &Vec<Vec<f64>>,
 
 }
 
-pub fn scf(mol:Molecule) -> anyhow::Result<SCF> {
+pub fn scf(mol:Molecule, mpi_operator: &Option<MPIOperator>) -> anyhow::Result<SCF> {
     let dt0 = time::Local::now();
 
-    let mut scf_data = SCF::build(mol);
+    let mut scf_data = SCF::build(mol, mpi_operator);
 
-    scf_without_build(&mut scf_data);
+    scf_without_build(&mut scf_data, mpi_operator);
 
     let dt2 = time::Local::now();
     if scf_data.mol.ctrl.print_level>0 {
@@ -3945,13 +4103,38 @@ pub fn level_shift_fock(fock: &mut MatrixUpper<f64>, ovlp: &MatrixUpper<f64>, le
     fock.data.iter_mut().zip(tmp_s3.iter_matrixupper().unwrap()).for_each(|(to, from)| {*to += *from*level_shift});
 }
 
-pub fn diagonalize_hamiltonian_outside(scf_data: &SCF) -> ([MatrixFull<f64>;2], [Vec<f64>;2]) {
+pub fn diagonalize_hamiltonian_outside(scf_data: &SCF, mpi_operator: &Option<MPIOperator>) -> ([MatrixFull<f64>;2], [Vec<f64>;2]) {
+    let mut eigenvectors = [MatrixFull::empty(),MatrixFull::empty()];
+    let mut eigenvalues = [Vec::new(),Vec::new()];
+
+    // perform diagonalization within the first mpi task at present.
+    // NOTE:: to fully utilize all CPU resources, a scalapack memory distribution is necessary.
+    if let Some(mpi_io) = mpi_operator {
+        if mpi_io.rank == 0 {
+            (eigenvectors, eigenvalues) = diagonalize_hamiltonian_outside_rayon(scf_data);
+        }
+        for i_spin in 0..scf_data.mol.spin_channel {
+            mpi_broadcast_vector(&mpi_io.world, &mut eigenvalues[i_spin], 0);
+            mpi_broadcast_matrixfull(&mpi_io.world, &mut eigenvectors[i_spin], 0);
+        }
+
+
+    } else {
+        (eigenvectors, eigenvalues) = diagonalize_hamiltonian_outside_rayon(scf_data);
+    }
+
+
+    (eigenvectors, eigenvalues)
+}
+
+pub fn diagonalize_hamiltonian_outside_rayon(scf_data: &SCF) -> ([MatrixFull<f64>;2], [Vec<f64>;2]) {
     let spin_channel = scf_data.mol.spin_channel;
     let num_state = scf_data.mol.num_state;
     let dt1 = time::Local::now();
 
     let mut eigenvectors = [MatrixFull::empty(),MatrixFull::empty()];
     let mut eigenvalues = [Vec::new(),Vec::new()];
+
     match scf_data.scftype {
         SCFType::ROHF => {
             let (eigenvector_spin, eigenvalue_spin)=
@@ -4055,7 +4238,6 @@ pub fn generate_density_matrix_outside(scf_data: &SCF) -> Vec<MatrixFull<f64>>{
         MatrixFull::empty()
         ];
     (0..spin_channel).into_iter().for_each(|i_spin| {
-        //println!("debug density_matrix spin: {}",i_spin);
         let mut dm_s = &mut dm[i_spin];
         *dm_s = MatrixFull::new([num_basis,num_basis],0.0);
         let eigv_s = &scf_data.eigenvectors[i_spin];
@@ -4073,8 +4255,6 @@ pub fn generate_density_matrix_outside(scf_data: &SCF) -> Vec<MatrixFull<f64>>{
                 })
             });
         // prepare weighted eigenvalue matrix wC
-        //println!("debug: {:?}", nw);
-        //println!("debug: {:?}", &occ_s);
         weight_eigv.par_iter_columns_mut(0..nw).unwrap().zip(occ_s[0..nw].par_iter()).for_each(|(we,occ)| {
         //weight_eigv.data.chunks_exact_mut(weight_eigv.size[0]).zip(occ_s.iter()).for_each(|(we,occ)| {
             we.iter_mut().for_each(|c| *c = *c*occ);
@@ -4092,7 +4272,7 @@ pub fn generate_density_matrix_outside(scf_data: &SCF) -> Vec<MatrixFull<f64>>{
 
 }
 
-pub fn initialize_scf(scf_data: &mut SCF) {
+pub fn initialize_scf(scf_data: &mut SCF, mpi_operator: &Option<MPIOperator>) {
 
     // update the corresponding geometry information, which is crucial 
     // for preparing the following integrals accurately
@@ -4105,7 +4285,7 @@ pub fn initialize_scf(scf_data: &mut SCF) {
 
     time_mark.new_item("CInt", "Two, Three, and Four-center integrals");
     time_mark.count_start("CInt");
-    scf_data.prepare_necessary_integrals();
+    scf_data.prepare_necessary_integrals(mpi_operator);
     time_mark.count("CInt");
 
 
@@ -4116,12 +4296,12 @@ pub fn initialize_scf(scf_data: &mut SCF) {
 
     time_mark.new_item("ISDF", "ISDF initialization");
     time_mark.count_start("ISDF");
-    scf_data.prepare_isdf();
+    scf_data.prepare_isdf(mpi_operator);
     time_mark.count("ISDF");
 
     time_mark.new_item("InitGuess", "Prepare initial guess");
     time_mark.count_start("InitGuess");
-    initial_guess(scf_data);
+    initial_guess(scf_data, mpi_operator);
     if ! scf_data.mol.ctrl.atom_sad && scf_data.mol.ctrl.print_level>2 {
         println!("Initial density matrix by Atom SAD:");
         scf_data.density_matrix[0].formated_output(5, "full");
@@ -4135,8 +4315,8 @@ pub fn initialize_scf(scf_data: &mut SCF) {
 
 }
 
-pub fn scf_without_build(scf_data: &mut SCF) {
-    scf_data.generate_hf_hamiltonian();
+pub fn scf_without_build(scf_data: &mut SCF, mpi_operator: &Option<MPIOperator>) {
+    scf_data.generate_hf_hamiltonian(mpi_operator);
 
     let mut scf_records=ScfTraceRecord::initialize(&scf_data);
 
@@ -4148,7 +4328,7 @@ pub fn scf_without_build(scf_data: &mut SCF) {
     }
 
     // now prepare the input density matrix for the first iteration and initialize the records
-    scf_data.diagonalize_hamiltonian();
+    scf_data.diagonalize_hamiltonian(mpi_operator);
     scf_data.generate_occupation();
     scf_data.generate_density_matrix();
     scf_records.update(&scf_data);
@@ -4157,11 +4337,11 @@ pub fn scf_without_build(scf_data: &mut SCF) {
     while ! (scf_converge[0] || scf_converge[1]) {
         let dt1 = time::Local::now();
 
-        scf_records.prepare_next_input(scf_data);
+        scf_records.prepare_next_input(scf_data, mpi_operator);
 
         let dt1_1 = time::Local::now();
 
-        scf_data.diagonalize_hamiltonian();
+        scf_data.diagonalize_hamiltonian(mpi_operator);
         let dt1_2 = time::Local::now();
         scf_data.generate_occupation();
         scf_data.generate_density_matrix();
@@ -4213,13 +4393,12 @@ pub fn scf_without_build(scf_data: &mut SCF) {
         }
         match scf_data.mol.ctrl.occupation_type {
             OCCType::FRAC => {
-                //println!("debug: final energy evaluation after occupation_type = frac");
                 let (occupation, homo, lumo) = check_norm::generate_occupation_integer(&scf_data.mol, &scf_data.scftype);
                 scf_data.occupation = occupation;
                 scf_data.homo = homo;
                 scf_data.lumo = lumo;
                 scf_data.generate_density_matrix();
-                scf_data.generate_hf_hamiltonian();
+                scf_data.generate_hf_hamiltonian(mpi_operator);
 
             }
             _ => {}
@@ -4289,7 +4468,6 @@ pub fn vj_on_the_fly_par(mol: &Molecule, dm: &Vec<MatrixFull<f64>>) -> Vec<Matri
 
     let par_tasks = utilities::balancing(index_new.len(), rayon::current_num_threads());
     let (sender, receiver) = channel();
-    //println!("debug {:?}", &par_tasks);
 
     par_tasks.par_iter().for_each_with(sender, |s,task_range| {
         //rayon::current_thread_index();
@@ -4391,7 +4569,6 @@ pub fn vj_on_the_fly_par_batch_by_batch(mol: &Molecule, dm: &Vec<MatrixFull<f64>
         }
     }
 
-    //// debug 514
     //println!("{:?}", &batches);
 
     let num_shell = mol.cint_bas.len();
@@ -4422,10 +4599,8 @@ pub fn vj_on_the_fly_par_batch_by_batch(mol: &Molecule, dm: &Vec<MatrixFull<f64>
             let bas_len_l = mol.cint_fdqc[*l][1];
 
             let mut out = MatrixFull::new([bas_len_k, bas_len_l],0.0);
-            // debug 514
             let mut output = String::new();
             for [start, batch_length] in &batches {
-                //// debug 514
                 //if *k==0 && *l == 0 {
                 //    println!("batch: ({},{})",start, batch_length);
                 //}
@@ -4434,7 +4609,6 @@ pub fn vj_on_the_fly_par_batch_by_batch(mol: &Molecule, dm: &Vec<MatrixFull<f64>
                 let [end_row,end_col] = matrixupper_index[batch.end-1];
                 let diag_list = if end_row < end_col {str_col..end_col} else {str_col..(end_col+1)};
                 let klij = mol.int_ijkl_given_kl_batch(*k, *l, batch.clone(), &matrixupper_index);
-                //// debug 514
                 //if *k==0 && *l == 0 && (batch.start == 60|| batch.start==75) {
                 //    println!("{:?}", &klij[(0,0)].data);
                 //}
@@ -4446,7 +4620,6 @@ pub fn vj_on_the_fly_par_batch_by_batch(mol: &Molecule, dm: &Vec<MatrixFull<f64>
                         let eri_cd = &klij[(loc_k, loc_l)];
                         let mut sum = dm_s_upper.data[batch.clone()].iter().zip(eri_cd.iter())
                             .fold(0.0,|sum, (p,eri)| {
-                        //// debug 514
                         //let mut sum = dm_s_upper.data[batch.clone()].iter().enumerate().zip(eri_cd.iter())
                         //    .fold(0.0,|sum, ((i,p),eri)| {
                             //if ao_k == 0 && ao_l ==0 {
@@ -4467,7 +4640,6 @@ pub fn vj_on_the_fly_par_batch_by_batch(mol: &Molecule, dm: &Vec<MatrixFull<f64>
 
                             diagonal += p*eri;
 
-                            //// debug 514
                             //if ao_k == 0 && ao_l ==0 {
                             //    output = format!("{}, ({},{:8.4},{:8.4})", output, i, p, eri);
                             //}
@@ -4481,7 +4653,6 @@ pub fn vj_on_the_fly_par_batch_by_batch(mol: &Molecule, dm: &Vec<MatrixFull<f64>
                 });
 
             }
-            //// debug 514
             //if *k==0 && *l == 0 {
             //    println!("{}",output);
             //}
@@ -4513,7 +4684,7 @@ pub fn vj_on_the_fly_par_batch_by_batch(mol: &Molecule, dm: &Vec<MatrixFull<f64>
 
 // evaluate the expectation value of squre spin angular momentum operator (S^2) as well as the expectation value of spin angular momentum operator along z axis
 // the expectation value of S^2 is given by 3/4*Tr[(scf_data.density_matrix[0]] + scf_data.density_matrix[1])\dot scf_data.ovlp.to_matrixfull().unwrap()]
-// the expectation value of S_z^2  is given by 1/2*Tr[(scf_data.density_matrix[0] -scf_data.density_matrix[1])\dot scf_data.ovlp.to_matrixfull().unwrap()]
+// the expectation value of S_z^2  is given by 1/2*Tr[(scf_data.density_matrix[0] -scf_data.[1])\dot scf_data.ovlp.to_matrixfull().unwrap()]
 // use MatrixFull::iter_diagonal() to get the diagonal elements of a matrix for the `Tr` evaluation
 pub fn evaluate_spin_angular_momentum_wrong(dm: &Vec<MatrixFull<f64>>, ovlp: &MatrixUpper<f64>,spin_channel: usize) -> [f64;2] {
     let mut tr_spin_angular_momentum = [0.0;2];
@@ -4534,7 +4705,6 @@ pub fn evaluate_spin_angular_momentum_wrong(dm: &Vec<MatrixFull<f64>>, ovlp: &Ma
             tr_spin_angular_momentum[i_spin] = tmp_matrix.iter_diagonal().unwrap().fold(0.0, |acc, val| acc + val);
         }
 
-        println!("debug Tr[P.O]: {:16.8}, {:16.8}", tr_spin_angular_momentum[0], tr_spin_angular_momentum[1]);
         [0.75*(tr_spin_angular_momentum[0]+tr_spin_angular_momentum[1]),
          0.50*(tr_spin_angular_momentum[0]-tr_spin_angular_momentum[1])]
     }

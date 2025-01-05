@@ -12,6 +12,7 @@ use crate::constants::{ANG, AU2DEBYE, SPECIES_INFO};
 use crate::dft::DFAFamily;
 use crate::geom_io::get_mass_charge;
 use crate::grad::{formated_force, formated_force_ev, numerical_force};
+use crate::mpi_io::MPIOperator;
 use crate::ri_pt2::sbge2::{close_shell_sbge2_rayon, open_shell_sbge2_rayon, close_shell_sbge2_detailed_rayon, open_shell_sbge2_detailed_rayon};
 use crate::ri_rpa::scsrpa::{evaluate_osrpa_correlation_rayon, evaluate_spin_response_rayon, evaluate_special_radius_only};
 use crate::ri_rpa::{evaluate_rpa_correlation, evaluate_rpa_correlation_rayon};
@@ -22,54 +23,112 @@ use crate::utilities::TimeRecords;
 use self::molden_build::{gen_header, gen_molden};
 use self::strong_correlation_correction::scc15_for_rxdh7;
 
-pub fn post_scf_output(scf_data: &SCF) {
+pub fn post_scf_output(scf_data: &SCF, mpi_operator: &Option<MPIOperator>) {
     scf_data.mol.ctrl.outputs.iter().for_each(|output_type| {
         if output_type.eq("fchk") {
-            scf_data.save_fchk_of_gaussian();
+            if let Some(mpi_op) = &mpi_operator {
+                if mpi_op.rank == 0 {scf_data.save_fchk_of_gaussian();}
+            } else {
+                scf_data.save_fchk_of_gaussian();
+            }
         } else if output_type.eq("fciqmc_dump") {
-            fciqmc_dump(&scf_data);
+            if let Some(mpi_op) = &mpi_operator {
+                if mpi_op.rank == 0 {fciqmc_dump(&scf_data)}
+            } else {
+                fciqmc_dump(&scf_data);
+            }
         } else if output_type.eq("wfn_in_real_space") {
-            let np = 100;
-            let slater_determinant = rand_wf_real_space::slater_determinant(&scf_data, np);
-            let output = serde_json::to_string(&slater_determinant).unwrap();
-            let mut file = std::fs::File::create("./wf_in_real_space.txt").unwrap();
-            std::io::Write::write(&mut file, output.as_bytes());
+            if let Some(mpi_op) = &mpi_operator {
+                panic!("The MPI version is not yet implemented for generating the wavefunction in real space");
+            } else {
+                let np = 100;
+                let slater_determinant = rand_wf_real_space::slater_determinant(&scf_data, np);
+                let output = serde_json::to_string(&slater_determinant).unwrap();
+                let mut file = std::fs::File::create("./wf_in_real_space.txt").unwrap();
+                std::io::Write::write(&mut file, output.as_bytes());
+            }
         } else if output_type.eq("cube_orb") {
             println!("Now generating the cube files for given orbitals");
-            //let grids = scf_data.mol.ctrl.cube_orb_setting[1] as usize;
-            //cube_build::get_cube_orb(&scf_data,grids);
-            cube_build::get_cube_orb(&scf_data);
+            if let Some(mpi_op) = &mpi_operator {
+                panic!("The MPI version is not yet implemented for generating orbital cube files");
+            } else {
+                cube_build::get_cube_orb(&scf_data);
+            }
         } else if output_type.eq("molden") {
-            molden_build::gen_molden(&scf_data);
+            if let Some(mpi_op) = &mpi_operator {
+                panic!("The MPI version is not yet implemented for generating molden file");
+            } else {
+                molden_build::gen_molden(&scf_data);
+            }
         } else if output_type.eq("hamiltonian") {
-           save_hamiltonian(&scf_data);
+            if let Some(mpi_op) = &mpi_operator {
+                if mpi_op.rank == 0 {save_hamiltonian(&scf_data);}
+            } else {
+                save_hamiltonian(&scf_data);
+            }
         } else if output_type.eq("geometry") {
-           save_geometry(&scf_data);
-           scf_data.mol.geom.to_xyz("geometry.xyz".to_string());
+            if let Some(mpi_op) = &mpi_operator {
+                if mpi_op.rank == 0 {
+                    save_geometry(&scf_data);
+                    scf_data.mol.geom.to_xyz("geometry.xyz".to_string());
+                }
+            } else {
+                save_geometry(&scf_data);
+                scf_data.mol.geom.to_xyz("geometry.xyz".to_string());
+            }
         } else if output_type.eq("overlap") {
-           save_overlap(&scf_data);
+            if let Some(mpi_op) = &mpi_operator {
+                if mpi_op.rank == 0 {save_overlap(&scf_data);}
+            } else {
+               save_overlap(&scf_data);
+            }
         } else if output_type.eq("multiwfn") {
-            gen_molden(&scf_data);
+            if let Some(mpi_op) = &mpi_operator {
+                panic!("The MPI version is not yet implemented for generating multiwfn file");
+            } else {
+                gen_molden(&scf_data);
+            }
         } else if output_type.eq("deeph") {
-           save_hamiltonian(&scf_data);
-           save_geometry(&scf_data);
-           scf_data.mol.geom.to_xyz("geometry.xyz".to_string());
+            if let Some(mpi_op) = &mpi_operator {
+                if mpi_op.rank == 0 {
+                    save_hamiltonian(&scf_data);
+                    save_geometry(&scf_data);
+                    scf_data.mol.geom.to_xyz("geometry.xyz".to_string());
+                }
+            } else {
+                save_hamiltonian(&scf_data);
+                save_geometry(&scf_data);
+                scf_data.mol.geom.to_xyz("geometry.xyz".to_string());
+            }
         } else if output_type.eq("dipole") {
-            let dp = evaluate_dipole_moment(scf_data, None);
-
-            println!("Dipole Moment in DEBYE: {:16.8}, {:16.8}, {:16.8}", dp[0], dp[1], dp[2]);
+            if let Some(mpi_op) = &mpi_operator {
+                if mpi_op.rank == 0 {
+                    let dp = evaluate_dipole_moment(scf_data, None);
+                    println!("Dipole Moment in DEBYE: {:16.8}, {:16.8}, {:16.8}", dp[0], dp[1], dp[2]);
+                }
+            } else {
+                let dp = evaluate_dipole_moment(scf_data, None);
+                println!("Dipole Moment in DEBYE: {:16.8}, {:16.8}, {:16.8}", dp[0], dp[1], dp[2]);
+            }
         } else if output_type.eq("force") {
             let displace = match scf_data.mol.geom.unit {
                 crate::geom_io::GeomUnit::Angstrom => scf_data.mol.ctrl.nforce_displacement/ANG,
                 crate::geom_io::GeomUnit::Bohr => scf_data.mol.ctrl.nforce_displacement,
             };
-            let (energy, num_force) = numerical_force(scf_data, displace);
-            println!("Total atomic forces [a.u.]: ");
-            //num_force.formated_output(5, "full");
-            println!("{}", formated_force(&num_force, &scf_data.mol.geom.elem));
-            println!("Total atomic forces [ev/ang]: ");
-            //num_force.formated_output(5, "full");
-            println!("{}", formated_force_ev(&num_force, &scf_data.mol.geom.elem));
+            let (energy, num_force) = numerical_force(scf_data, displace, mpi_operator);
+            if let Some(mpi_op) = &mpi_operator {
+                if mpi_op.rank == 0 {
+                    println!("Total atomic forces [a.u.]: ");
+                    println!("{}", formated_force(&num_force, &scf_data.mol.geom.elem));
+                    println!("Total atomic forces [ev/ang]: ");
+                    println!("{}", formated_force_ev(&num_force, &scf_data.mol.geom.elem));
+                }
+            } else {
+                println!("Total atomic forces [a.u.]: ");
+                println!("{}", formated_force(&num_force, &scf_data.mol.geom.elem));
+                println!("Total atomic forces [ev/ang]: ");
+                println!("{}", formated_force_ev(&num_force, &scf_data.mol.geom.elem));
+            }
         }
     });
 }
@@ -274,12 +333,12 @@ pub fn print_out_dfa(scf_data: &SCF) {
     });
 }
 
-pub fn post_ai_correction(scf_data: &mut SCF) -> Option<Vec<f64>> {
+pub fn post_ai_correction(scf_data: &mut SCF, mpi_operator: &Option<MPIOperator>) -> Option<Vec<f64>> {
     let xc_method = &scf_data.mol.ctrl.xc.to_lowercase();
     let post_ai_corr = &scf_data.mol.ctrl.post_ai_correction.to_lowercase();
     let mut scc = 0.0;
     if post_ai_corr.eq("scc15") && xc_method.eq("r-xdh7") {
-        scc = scc15_for_rxdh7(scf_data);
+        scc = scc15_for_rxdh7(scf_data, mpi_operator);
         let total_energy = scf_data.energies.get("xdh_energy").unwrap()[0];
         if scf_data.mol.ctrl.print_level>0 {
             println!("E(R-xDH7-SCC15): {:16.8} Ha", total_energy + scc);

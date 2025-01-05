@@ -18,16 +18,17 @@ use std::ops::Range;
 use std::sync::mpsc::channel;
 use std::thread::panicking;
 use std::path::PathBuf;
+use rest_libcint::{CINTR2CDATA, CintType};
+use std::path::Path;
+use regex::Regex;
 use crate::basis_io::etb::{get_etb_elem, etb_gen_for_atom_list, InfoV2};
 use crate::constants::{ATM_NUC, ATM_NUC_MOD_OF, AUXBAS_THRESHOLD, ELEM1ST, ELEM2ND, ELEM3RD, ELEM4TH, ELEM5TH, ELEM6TH, ELEMTMS, ENV_PRT_START, NUC_ECP, NUC_FRAC_CHARGE, NUC_STAD_CHARGE};
 use crate::dft::DFA4REST;
 use crate::geom_io::{GeomCell,MOrC, GeomUnit, get_mass_charge};
 use crate::basis_io::{ecp, BasInfo, Basis4Elem};
-use crate::ctrl_io::InputKeywords;
+use crate::ctrl_io::{overall_report_on_ctrl_geom, InputKeywords};
+use crate::mpi_io::{mpi_isend_irecv_wrt_distribution, MPIData, MPIOperator};
 use crate::utilities;
-use rest_libcint::{CINTR2CDATA, CintType};
-use std::path::Path;
-use regex::Regex;
 use crate::basis_io::bse_downloader::{self, ctrl_element_checker, local_element_checker};
 use crate::basis_io::basis_list::{self, basis_fuzzy_matcher, check_basis_name};
 
@@ -74,8 +75,7 @@ pub fn get_basis_name(ang: usize, ctype: &CintType, index: usize) -> String {
 pub struct Molecule {
     #[pyo3(get, set)]
     pub ctrl: InputKeywords,
-    //pub bas : Vec<Basis4Elem>,
-    //pub auxbas : Vec<Basis4Elem>,
+    pub mpi_data: Option<MPIData>, 
     #[pyo3(get, set)]
     pub geom : GeomCell,
     #[pyo3(get, set)]
@@ -121,13 +121,13 @@ pub struct Molecule {
     pub cint_aux_atm : Vec<Vec<i32>>,
     pub cint_aux_env : Vec<f64>,
     pub cint_type: CintType,
-    //    cint_data : CINTR2CDATA,
 }
 
 impl Molecule {
     pub fn init_mol() -> Molecule {
         Molecule {
             ctrl:InputKeywords::init_ctrl(),
+            mpi_data: None,
             xc_data: DFA4REST::new("hf",1, 0),
             use_eri: false,
             geom: GeomCell::init_geom(),
@@ -168,14 +168,18 @@ impl Molecule {
         })
     }
 
-    pub fn build(ctrl_file: String) -> anyhow::Result<Molecule> {
+    pub fn build(ctrl_file: String, mpi_data: Option<MPIData>) -> anyhow::Result<Molecule> {
         //let mut mol = Molecule::new();
         //let (mut ctrl, mut geom) = RawCtrl::parse_ctl_from_jsonfile_v02(ctrl_file)?;
         let (mut ctrl, mut geom) = InputKeywords::parse_ctl(ctrl_file)?;
-        Molecule::build_native(ctrl, geom)
+        if let Some(local_mpi_data) = &mpi_data {
+            if local_mpi_data.rank != 0 {ctrl.print_level = 0};
+        };
+        if ctrl.print_level > 0 {overall_report_on_ctrl_geom(&ctrl, &geom)};
+        Molecule::build_native(ctrl, geom, mpi_data)
     }
 
-    pub fn build_native(mut ctrl: InputKeywords, mut geom: GeomCell) -> anyhow::Result<Molecule> {
+    pub fn build_native(mut ctrl: InputKeywords, mut geom: GeomCell, mpi_data: Option<MPIData>) -> anyhow::Result<Molecule> {
 
         let spin_channel = ctrl.spin_channel;
         let cint_type = if ctrl.basis_type.to_lowercase()==String::from("spheric") {
@@ -224,15 +228,17 @@ impl Molecule {
         let mut start_mo = count_frozen_core_states(ctrl.frozen_core_postscf, &geom.elem);
         let ecp_orbs = ecp_electrons/2;
         if ecp_orbs == 0 {
-            println!("For SCF calculation, no core orbital is frozen by effective core potential (ECP) approximation");
+            if ctrl.print_level > 0 {
+                println!("For SCF calculation, no core orbital is frozen by effective core potential (ECP) approximation");
+            }
         } else if start_mo < ecp_orbs {
-            if ctrl.print_level >= 1 {
+            if ctrl.print_level > 0 {
                 println!("<start_mo> for the frozen-core post-SCF methods {} is smaller than the number of ecp orbitals {}. Set <start_mo> = 0",
                     start_mo, ecp_orbs);
             }
             start_mo = 0;
         } else {
-            if ctrl.print_level >= 1 {
+            if ctrl.print_level > 0 {
                 println!("<start_mo> for the frozen-core post-SCF methods {} is larger than the number of ecp orbitals {}. Take the <start_mo> -= ecp_orbitals",
                         start_mo, ecp_orbs);
             }
@@ -246,6 +252,7 @@ impl Molecule {
         };
         let mut mol = Molecule {
             ctrl,
+            mpi_data,
             geom,
             xc_data,
             use_eri,
@@ -269,7 +276,7 @@ impl Molecule {
             cint_aux_atm,
             cint_aux_bas,
             cint_aux_env,
-            cint_type
+            cint_type,
         };
         // check and prepare the auxiliary basis sets
         if mol.ctrl.use_auxbas {mol.initialize_auxbas()};
@@ -491,12 +498,16 @@ impl Molecule {
             let re = Regex::new(r"/?(?P<basis>[^/]*)/?$").unwrap();
             let cap = re.captures(&ctrl.auxbas_path).unwrap();
             let auxbas_name = cap.name("basis").unwrap().to_string();
-            println!("auxbas_name = {} from {}", &auxbas_name, &ctrl.auxbas_path);
+            if ctrl.print_level > 0 {
+                println!("auxbas_name = {} from {}", &auxbas_name, &ctrl.auxbas_path)
+            };
             if check_basis_name(&auxbas_name) {
                 bse_downloader::bse_auxbas_getter_v2(&auxbas_name,&geom, &ctrl.auxbas_path, &required_elem, ctrl.print_level);
             }
             else {
-                println!("Error: Missing local aux basis sets for {:?}", &required_elem);
+                if ctrl.print_level > 0 {
+                    println!("Error: Missing local aux basis sets for {:?}", &required_elem);
+                }
                 let matched = basis_fuzzy_matcher(&auxbas_name);
                 match matched {
                     Some(_) => panic!("{} may not be a valid basis set name, similar name is {}", auxbas_name, matched.unwrap()),
@@ -663,7 +674,9 @@ impl Molecule {
             if check_basis_name(&basis_name) {
                 bse_downloader::bse_basis_getter_v2(&basis_name,&geom, &ctrl.basis_path, &required_elem);
             }  else {
-                println!("Error: Missing local basis sets for {:?}", &required_elem);
+                if ctrl.print_level > 0 {
+                    println!("Error: Missing local basis sets for {:?}", &required_elem);
+                }
                 let matched = basis_fuzzy_matcher(&basis_name);
                 match matched {
                     Some(_) => panic!("{} may not be a valid basis set name, similar name is {}", basis_name, matched.unwrap()),
@@ -1191,7 +1204,7 @@ impl Molecule {
                 let mut tmp_out_shape = vec![];
                 cint_data.set_rinv_origin(pos);
                 (tmp_out, tmp_out_shape) = cint_data.integral_s2ij::<int1e_rinv>(None);
-                println!("debug pos: {:?}, charge: {}", pos, charge);
+                //println!("debug pos: {:?}, charge: {}", pos, charge);
                 if out.len() == 0 {
                     out = vec![0.0;tmp_out.len()];
                 }
@@ -2648,7 +2661,6 @@ impl Molecule {
 
         utilities::omp_set_num_threads_wrapper(1);
         let (sender, receiver) = channel();
-        //par_shellpair.par_iter().for_each_with(sender, |s, shell_index| {
         (0..n_basis_shell).rev().collect::<Vec<usize>>().par_iter().for_each_with(sender, |s, gj| {
 
             let bas_j = *gj;
@@ -2734,7 +2746,6 @@ impl Molecule {
 
 
             s.send((loc_rimatr,global_start,pair_length)).unwrap();
-            //s.send((loc_rimatr,global_start,pair_length, sub_time_records)).unwrap();
         });
 
         time_records.new_item("rec_ri", "the collection of primitry RI tensor after multi-threads parallization");
@@ -2746,7 +2757,6 @@ impl Molecule {
                 .for_each(|(to, from)| {
                     to.copy_from_slice(from)
             })
-            //time_records.max(&sub_timerecords);
         });
         time_records.count("rec_ri");
 
@@ -2779,6 +2789,232 @@ impl Molecule {
         (ri3fn,basbas2baspar,baspar2basbas)
 
     }
+
+
+    pub fn prepare_inv_aux_matr(&self) -> MatrixFull<f64> {
+        let mut aux_v = self.int_ij_aux_columb();
+        aux_v = _power_rayon(&aux_v, -0.5, AUXBAS_THRESHOLD).unwrap();
+        aux_v
+    }
+
+    //pub fn prepare_prim_ri_for_baspair(&self, ) -> 
+
+    pub fn prepare_baspair_map(&self) -> (MatrixFull<usize>, Vec<[usize;2]>) {
+        let n_basis = self.num_basis;
+        let n_auxbas = self.num_auxbas;
+        let n_baspar = (self.num_basis+1)*self.num_basis/2;
+
+        let mut basbas2baspar = MatrixFull::new([n_basis,n_basis],0_usize);
+        let mut baspar2basbas = vec![[0_usize;2];n_baspar];
+        basbas2baspar.iter_columns_full_mut().enumerate().for_each(|(j,slice_x)| {
+            &slice_x.iter_mut().enumerate().for_each(|(i,map_v)| {
+                let baspar_ind = if i< j {(j+1)*j/2+i} else {(i+1)*i/2+j};
+                *map_v = baspar_ind;
+                baspar2basbas[baspar_ind] = [i,j];
+            });
+        });
+
+        (basbas2baspar, baspar2basbas)
+    }
+
+    pub fn prepare_rimatr_for_ri_v_mpi_rayon(&self, mpi_operator: &Option<MPIOperator>) -> (MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>) {
+        let n_basis = self.num_basis;
+        let n_auxbas = self.num_auxbas;
+        let n_baspar = (self.num_basis+1)*self.num_basis/2;
+
+        if let (Some(mpi_op), Some(loc_mpi_data)) = (&mpi_operator, &self.mpi_data) {
+
+            let my_rank = mpi_op.rank;
+
+            let aux_v = self.prepare_inv_aux_matr();
+            let (basbas2baspar, baspar2basbas) = self.prepare_baspair_map();
+            if let (Some(auxbas_distribution), Some(baspar_distribution)) = 
+                (&loc_mpi_data.auxbas, &loc_mpi_data.baspar) {
+
+                let mut ri3fn = MatrixFull::new([n_baspar, auxbas_distribution[my_rank].len()], 0.0);
+
+                let (baspar, sbsh, ebsh) = &baspar_distribution[my_rank];
+                let loc_ri3fn = if baspar.len() > 0 {
+                    self.prepare_rimatr_for_ri_v_mpi_slot(&aux_v, *sbsh, *ebsh)
+                } else {
+                    MatrixFull::empty()
+                };
+                ////if my_rank == 3 {
+                //    println!("debug rank {}, sbsh: {}, ebsh: {}", my_rank, sbsh, ebsh);
+                //    println!("debug rank {}, loc_ri3fn: {:?}", my_rank, &loc_ri3fn.size());
+                ////};
+
+                //println!("debug mpi 0 of rank {}", my_rank);
+                let loc_ri3fn = mpi_isend_irecv_wrt_distribution(&mpi_op.world, &loc_ri3fn.data_ref().unwrap(), auxbas_distribution, loc_ri3fn.size()[0]);
+                //let loc_start = mpi_isend_irecv_wrt_distribution(&mpi_op.world, &baspar, baspar_distribution, 1);
+                //println!("debug mpi 1 of rank {}", my_rank);
+                //if my_rank == 3 {println!("debug rank {}, loc_ri3fn: {:?}", my_rank, &loc_ri3fn)};
+                
+                loc_ri3fn.iter().enumerate().for_each(|(rank_i, v)| {
+                    let (baspar, sbsh, ebsh) = &baspar_distribution[rank_i];
+                    ri3fn.iter_submatrix_mut(baspar.clone(), 0..auxbas_distribution[my_rank].len())
+                    .zip(v.iter()).for_each(|(to, from)| {*to = *from});
+                });
+
+
+                //// ======= DEBUG IGOR ======
+                //let (test_ri3fn, _, _) = self.prepare_rimatr_for_ri_v_rayon();
+                //let mse = test_ri3fn.iter_submatrix(0..n_baspar, auxbas_distribution[my_rank].clone())
+                //   .zip(ri3fn.data_ref().unwrap().iter()).fold(0.0, |acc, (test_v, v)| {
+                //    acc + (test_v-v).abs()
+                //});
+                //println!("Rank {} debug assert ri3fn with Total Absolute Error of {:?}", my_rank, mse);
+                //// ======= DEBUG IGOR ======
+
+                (ri3fn, basbas2baspar, baspar2basbas)
+            } else {
+                self.prepare_rimatr_for_ri_v_rayon()
+            }
+
+        } else {
+            self.prepare_rimatr_for_ri_v_rayon()
+        }
+
+
+    }
+
+    pub fn prepare_rimatr_for_ri_v_mpi_slot(&self, aux_v: &MatrixFull<f64>, sbsh: usize, ebsh: usize) -> MatrixFull<f64> {
+        //let n_basis_shell = self.cint_bas.len() as i32;
+        //let n_auxbas_shell = self.cint_aux_bas.len() as i32;
+
+        //let n_basis = self.num_basis;
+        //let n_auxbas = self.num_auxbas;
+        //let n_baspar = (self.num_basis+1)*self.num_basis/2;
+
+        //let shl_slices: Vec<[i32;2]> = vec![[0, (ebsh+1) as i32], [sbsh as i32, (ebsh + 1) as i32], [n_basis_shell, n_basis_shell + n_auxbas_shell]];
+
+        //let mut cint_data = self.initialize_cint(true);
+
+        ////let mut out = vec![];
+        ////let mut out_shape = vec![];
+        ////(out, out_shape) = cint_data.integral_s2ij::<int3c2e>(Some(&shl_slices));
+
+        //let mut tmp_ri3fn = MatrixFull::from_vec(out_shape.clone().try_into().unwrap(),out).unwrap();
+
+        //let mut ri3fn = MatrixFull::new(out_shape.clone().try_into().unwrap(),0.0);
+
+        //utilities::omp_set_num_threads_wrapper(self.ctrl.num_threads.unwrap());
+        //_dgemm_full(&tmp_ri3fn, 'N', aux_v, 'N', &mut ri3fn, 1.0, 0.0);
+
+        //ri3fn
+
+        let n_basis_shell = self.cint_bas.len();
+        let n_auxbas_shell = self.cint_aux_bas.len();
+        let n_basis = self.num_basis;
+        let n_basis = self.num_basis;
+        let n_auxbas = self.num_auxbas;
+        let n_baspar = (self.num_basis+1)*self.num_basis/2;
+
+        let basis_start = self.cint_fdqc[sbsh][0];
+        let s_baspar = (basis_start+1)*basis_start/2;
+        let basis_end = self.cint_fdqc[ebsh][0] + self.cint_fdqc[ebsh][1]-1;
+        let e_baspar = (basis_end+1)*basis_end/2 + basis_end;
+
+        let loc_n_baspar = e_baspar - s_baspar + 1;
+
+        let mut tmp_ri3fn = MatrixFull::new([n_auxbas, loc_n_baspar],0.0);
+        utilities::omp_set_num_threads_wrapper(1);
+        let (sender, receiver) = channel();
+        //(0..n_basis_shell).rev().collect::<Vec<usize>>().par_iter().for_each_with(sender, |s, gj| {
+        (sbsh..ebsh+1).collect::<Vec<usize>>().par_iter().for_each_with(sender, |s,gj| {
+
+            let bas_j = *gj;
+            // first, initialize rust_cint for each rayon threads
+            let mut cint_data = self.initialize_cint(true);
+
+            let basis_start_j = self.cint_fdqc[bas_j][0];
+            let basis_len_j = self.cint_fdqc[bas_j][1];
+            let global_start = (basis_start_j+1)*basis_start_j/2;
+
+            let mut i_length:usize = 0;
+            let mut pair_length = 0; 
+            for bas_i in 0..bas_j+1 {
+                let basis_start_i = self.cint_fdqc[bas_i][0];
+                let basis_len_i = self.cint_fdqc[bas_i][1];
+                i_length += basis_len_i;
+
+                if bas_i!=bas_j {
+                    pair_length += basis_len_i*basis_len_j
+                } else {
+                    pair_length += (basis_len_i+1)*basis_len_i/2
+                };
+            }
+
+
+            let mut ri_rayon =  RIFull::new([n_auxbas,i_length,basis_len_j],0.0);
+            let mut loc_rimatr = MatrixFull::new([n_auxbas,pair_length],0.0);
+            for bas_i in 0..bas_j+1 {
+                let basis_start_i = self.cint_fdqc[bas_i][0];
+                let basis_len_i = self.cint_fdqc[bas_i][1];
+                self.cint_aux_fdqc.iter().enumerate().for_each(|(k,bas_info)| {
+                    let basis_start_k = bas_info[0];
+                    let basis_len_k = bas_info[1];
+                    let gk  = k + n_basis_shell;
+
+                    let buf = MatrixFull::from_vec([basis_len_i*basis_len_j, basis_len_k], 
+                        cint_data.cint_3c2e(bas_i as i32, bas_j as i32, gk as i32)).unwrap();
+                    
+                    if bas_i < bas_j {
+                        for loc_j in (0..basis_len_j) {
+                            let index_s = loc_j * basis_len_i;
+                            let gj = loc_j + basis_start_j;
+                            let loc_x_start = (gj+1)*gj/2 - global_start;
+                            for loc_i in (0..basis_len_i) {
+                                let index = index_s + loc_i;
+                                let gi = loc_i + basis_start_i;
+                                let loc_x = loc_x_start + gi;
+                                let tmp_aux = buf.iter_row(index);
+                                loc_rimatr.slice_column_mut(loc_x)[basis_start_k..basis_start_k+basis_len_k].iter_mut()
+                                .zip(tmp_aux).for_each(|(to, from)| *to = *from)
+                            }
+                        }
+                    } else {
+                        for loc_j in (0..basis_len_j) {
+                            let index_s = loc_j * basis_len_i;
+                            let gj = loc_j + basis_start_j;
+                            let loc_x_start = (gj+1)*gj/2 - global_start;
+                            for loc_i in (0..loc_j+1) {
+                                let index = index_s + loc_i;
+                                let gi = loc_i + basis_start_i;
+                                let loc_x = loc_x_start + gi;
+                                let tmp_aux = buf.iter_row(index);
+                                loc_rimatr.slice_column_mut(loc_x)[basis_start_k..basis_start_k+basis_len_k].iter_mut()
+                                .zip(tmp_aux).for_each(|(to, from)| *to = *from)
+                            }
+                        }
+                    }
+                });
+            }
+
+            cint_data.final_c2r();
+
+
+            s.send((loc_rimatr,global_start-s_baspar,pair_length)).unwrap();
+        });
+
+
+        receiver.into_iter().for_each(|(loc_rimatr, global_start, pair_length)| {
+            //tmp_ri3fn.copy_from_matr(0..n_auxbas, global_start..global_start+pair_length, &loc_rimatr, 0..n_auxbas, 0..pair_length);
+            tmp_ri3fn.par_iter_columns_mut(global_start..global_start+pair_length).unwrap().zip(loc_rimatr.par_iter_columns_full())
+                .for_each(|(to, from)| {
+                    to.copy_from_slice(from)
+            })
+        });
+
+
+        let mut ri3fn = MatrixFull::new([loc_n_baspar, n_auxbas],0.0);
+        utilities::omp_set_num_threads_wrapper(self.ctrl.num_threads.unwrap());
+        _dgemm_full(&tmp_ri3fn, 'T', aux_v, 'N', &mut ri3fn, 1.0, 0.0);
+
+        ri3fn
+
+    }
+
 
     // generate the 3-center RI integrals and the basis pair symmetry is used to save the memory
     pub fn prepare_rimatr_for_ri_v_rayon_v05(&self) -> (MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>) {

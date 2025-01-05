@@ -54,7 +54,8 @@ impl TimeRecords {
             }
         } else {
             self.new_item(name, "");
-            println!("WARNING: the time record for {} has not been initialized.", name);
+            self.count_start(name);
+            //println!("WARNING: the time record for {} has not been initialized.", name);
         }
     }
 
