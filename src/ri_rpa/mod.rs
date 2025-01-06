@@ -14,15 +14,16 @@ use tensors::ParMathMatrix;
 use tensors::matrix_blas_lapack::_dgemm;
 
 use crate::molecule_io::Molecule;
+use crate::mpi_io::MPIOperator;
 use crate::scf_io::{SCF,scf};
 use crate::constants::{E, PI};
 use crate::utilities::{debug_print_slices, self};
 
-pub fn rpa_calculations(scf_data: &mut SCF) -> anyhow::Result<f64> {
+pub fn rpa_calculations(scf_data: &mut SCF, mpi_operator: &Option<MPIOperator>) -> anyhow::Result<f64> {
 
-    let x_energy = scf_data.evaluate_exact_exchange_ri_v();
-    let xc_energy_scf = scf_data.evaluate_xc_energy(0);
-    let xc_energy_xdh = scf_data.evaluate_xc_energy(1);
+    let x_energy = scf_data.evaluate_exact_exchange_ri_v(mpi_operator);
+    let xc_energy_scf = scf_data.evaluate_xc_energy(0, mpi_operator);
+    let xc_energy_xdh = scf_data.evaluate_xc_energy(1, mpi_operator);
 
     if scf_data.mol.ctrl.print_level>0 {
         println!("=======================================");

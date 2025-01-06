@@ -45,7 +45,7 @@ pub fn mulliken_pop(scf_data: &SCF) -> Vec<f64>{
     //});
     let pop = m.iter_diagonal().unwrap().map(|x| *x).collect::<Vec<f64>>();
 
-    if scf_data.mol.ctrl.print_level>1 {
+    if scf_data.mol.ctrl.print_level>2 {
         let basis_info = &scf_data.mol.fdqc_bas;
         println!("Mulliken population:");
         pop.iter().zip(basis_info).for_each(|(x, bi)|{

@@ -8,6 +8,7 @@ use tensors::{MatrixFull, MathMatrix, BasicMatrix, matrix_blas_lapack::_dgemm_fu
 
 use crate::{scf_io::{SCF,scf}, utilities::{self, TimeRecords}};
 use crate::constants::{PI, E, INVERSE_THRESHOLD};
+use crate::mpi_io::MPIOperator;
 use tensors::matrix_blas_lapack::{_dgemm,_dsyev};
 
 use super::{trans_gauss_legendre_grids, gauss_legendre_grids, logarithmic_grid};
@@ -113,7 +114,7 @@ pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Resul
     let [a,b, sigma, scaling_factor] = if let Some(value) = scf_data.mol.ctrl.rpa_de_excitation_parameters {
         value
     } else {
-        [0.0, 0.02, 0.02, 0.3]
+        [1.0, 1.0, 1.0, 0.0]
     };
     //let [a,b, sigma, scaling_factor] = [0.0, 0.02, 0.02, 0.1];
 
@@ -168,6 +169,7 @@ pub fn evaluate_spin_response_serial(scf_data: &SCF, freq: f64) -> anyhow::Resul
                             // derived from the ensemble of Green function
                             //=======================================================================
                             let level_shift = screening_de_excitation(energy_gap, freq, a, b, sigma, scaling_factor);
+                            //let level_shift = 0.0;
                             let zeta = 2.0f64*(energy_gap+level_shift)/ ((energy_gap+level_shift).powf(2.0) + freq*freq)*
                                 (j_state_occ*frac_spin_occ)*(1.0f64-k_state_occ*frac_spin_occ);
                             //=======================================================================
@@ -247,6 +249,17 @@ pub fn evaluate_special_radius_only(scf_data: &SCF) -> anyhow::Result<[f64;2]>  
     }
 
     Ok(special_radius)
+}
+
+pub fn evaluate_osrpa_correlation_rayon_mpi(scf_data: &SCF, mpi_operator: &Option<MPIOperator>) -> anyhow::Result<[f64;3]>  {
+    if let (Some(mpi_op), Some(mpi_ix)) = (mpi_operator, &scf_data.mol.mpi_data) {
+        panic!("The MPI implementation is not yet available for the SCSRPA evaluation")
+        //let (rpa_c, _) = evaluate_osrpa_correlation_detailed_rayon_mpi(scf_data, mpi_op, mpi_ix).unwrap();
+        //Ok(rpa_c)
+    } else {
+        let (rpa_c, _) = evaluate_osrpa_correlation_detailed_rayon(scf_data).unwrap();
+        Ok(rpa_c)
+    }
 }
 
 pub fn evaluate_osrpa_correlation_rayon(scf_data: &SCF) -> anyhow::Result<[f64;3]>  {

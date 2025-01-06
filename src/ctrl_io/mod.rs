@@ -332,7 +332,6 @@ impl InputKeywords {
                     serde_json::Value::Number(tmp_num) => {tmp_num.as_i64().unwrap_or(1) as usize},
                     other => {1_usize},
                 };
-                if tmp_input.print_level>0 {println!("Print level:                {}", tmp_input.print_level)};
                 //let default_rayon_current_num_threads = rayon::current_num_threads();
                 tmp_input.num_threads = match tmp_ctrl.get("num_threads").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_str) => {Some(tmp_str.to_lowercase().parse().unwrap_or(1))},
@@ -345,14 +344,14 @@ impl InputKeywords {
                     other => {64},
                 };
                 if let Some(num_threads) = tmp_input.num_threads {
-                    if tmp_input.print_level>0 {println!("The number of threads used for parallelism:      {}", num_threads)};
+                    //if tmp_input.print_level>0 {println!("The number of threads used for parallelism:      {}", num_threads)};
                     // Now move the setting of rayon thread numbers to the main.rs
                     //rayon::ThreadPoolBuilder::new().num_threads(num_threads);
                     rayon::ThreadPoolBuilder::new().num_threads(num_threads).build_global().unwrap_or_else(|x| {println!("{:?}", &x)});
                     utilities::omp_set_num_threads_wrapper(num_threads);
                 } else {
                     utilities::omp_set_num_threads_wrapper(rayon::current_num_threads());
-                    if tmp_input.print_level>0 {println!("The default rayon num_threads value is used:      {}", rayon::current_num_threads())};
+                    //if tmp_input.print_level>0 {println!("The default rayon num_threads value is used:      {}", rayon::current_num_threads())};
                 };
                 //println!("max_num_threads: {}, current_num_threads: {}", rayon::max_num_threads(), rayon::current_num_threads());
                 // ====================================
@@ -377,19 +376,19 @@ impl InputKeywords {
                     serde_json::Value::String(tmp_type) => {tmp_type.to_lowercase()},
                     other => {String::from("spheric")}
                 };
-                if tmp_input.print_level> 0 {println!("The {}-GTO basis set is taken from {}", tmp_input.basis_type,tmp_input.basis_path)};
+                //if tmp_input.print_level> 0 {println!("The {}-GTO basis set is taken from {}", tmp_input.basis_type,tmp_input.basis_path)};
 
                 tmp_input.pruning = match tmp_ctrl.get("pruning").unwrap_or(&serde_json::Value::Null){
                     serde_json::Value::String(tmp_type) => {tmp_type.to_lowercase()},
                     other => {String::from("nwchem")} //default prune method: sg1
                 };
-                if tmp_input.print_level>0 {println!("The pruning method will be {}", tmp_input.pruning)};
+                //if tmp_input.print_level>0 {println!("The pruning method will be {}", tmp_input.pruning)};
 
                 tmp_input.rad_grid_method = match tmp_ctrl.get("radial_grid_method").unwrap_or(&serde_json::Value::Null){
                     serde_json::Value::String(tmp_type) => {tmp_type.to_lowercase()},
                     other => {String::from("treutler")} //default prune method: sg1
                 };
-                if tmp_input.print_level>0 {println!("The radial grid generation method will be {}", tmp_input.rad_grid_method)};
+                //if tmp_input.print_level>0 {println!("The radial grid generation method will be {}", tmp_input.rad_grid_method)};
 
                 tmp_input.eri_type = match tmp_ctrl.get("eri_type").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_eri) => {
@@ -434,19 +433,19 @@ impl InputKeywords {
                     tmp_input.use_auxbas = false;
                     tmp_input.use_isdf = false;
                 };
-                if tmp_input.print_level>0 {println!("ERI Type: {}", tmp_input.eri_type)};
+                //if tmp_input.print_level>0 {println!("ERI Type: {}", tmp_input.eri_type)};
 
                 tmp_input.use_ri_symm = match tmp_ctrl.get("use_ri_symm").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::Bool(tmp_str) => {*tmp_str},
                     other => {true},
                 };
-                if tmp_input.print_level>0 {
-                    if tmp_input.use_ri_symm {
-                        println!("Turn on the basis pair symmetry for RI 3D-tensors")
-                    } else {
-                        println!("Turn off the basis pair symmetry for RI 3D-tensors")
-                    };
-                }
+                //if tmp_input.print_level>0 {
+                //    if tmp_input.use_ri_symm {
+                //        println!("Turn on the basis pair symmetry for RI 3D-tensors")
+                //    } else {
+                //        println!("Turn off the basis pair symmetry for RI 3D-tensors")
+                //    };
+                //}
                 tmp_input.isdf_k_mu = match tmp_ctrl.get("isdf_k_mu").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase().parse().unwrap_or(8_usize)},
                     serde_json::Value::Number(tmp_num) => {tmp_num.as_i64().unwrap_or(8) as usize},
@@ -480,9 +479,9 @@ impl InputKeywords {
                         default_bas
                    }
                 };
-                if tmp_input.use_auxbas && tmp_input.print_level>0 {
-                    println!("The {}-GTO auxiliary basis set is taken from {}", tmp_input.auxbas_type,tmp_input.auxbas_path)
-                };
+                //if tmp_input.use_auxbas && tmp_input.print_level>0 {
+                //    println!("The {}-GTO auxiliary basis set is taken from {}", tmp_input.auxbas_type,tmp_input.auxbas_path)
+                //};
                 // ===============================================
                 //  Keywords for Gradient calculation
                 // ==============================================
@@ -521,7 +520,7 @@ impl InputKeywords {
                     serde_json::Value::String(tmp_xc) => {tmp_xc.to_lowercase()},
                     other => {String::from("hf")},
                 };
-                if tmp_input.print_level>0 {println!("The exchange-correlation method: {}", tmp_input.xc)};
+                //if tmp_input.print_level>0 {println!("The exchange-correlation method: {}", tmp_input.xc)};
                 tmp_input.empirical_dispersion = match tmp_ctrl.get("empirical_dispersion").unwrap_or(&serde_json::Value::Null) {
                     serde_json::Value::String(tmp_emp) => {Some(tmp_emp.to_lowercase())},
                     other => {None},
@@ -572,7 +571,7 @@ impl InputKeywords {
                     } else if corr.to_lowercase().eq("scsrpa") {
                         tmp_input.post_correlation.push(DFAFamily::SCSRPA)
                     } else {
-                        println!("Unknown post-scf correlation method: {}", corr)
+                        println!("WARNNING: Unknown post-scf correlation method: {}", corr)
                     }
                     //if corr.to_lowercase().eq(&pt2) 
                 });
@@ -600,10 +599,10 @@ impl InputKeywords {
                     other => false,
                 };
                 tmp_input.spin_channel = if tmp_input.spin_polarization {
-                    if tmp_input.print_level>0 {println!("Spin polarization: On")};
+                    //if tmp_input.print_level>0 {println!("Spin polarization: On")};
                     2_usize
                 } else {
-                    if tmp_input.print_level>0 {println!("Spin polarization: Off")};
+                    //if tmp_input.print_level>0 {println!("Spin polarization: Off")};
                     1_usize
                 };
                 // ==============================================
@@ -986,48 +985,48 @@ impl InputKeywords {
                     other => {false},
                 };
 
-                //============================================================
-                // Now print out some useful information
-                //============================================================
-                if tmp_input.print_level>0 {
-                    println!("Charge: {:3}; Spin: {:3}",tmp_input.charge,tmp_input.spin);
-                    println!("min_num_angular_points: {}", tmp_input.min_num_angular_points);
-                    println!("max_num_angular_points: {}", tmp_input.max_num_angular_points);
-                    println!("hardness: {}", tmp_input.hardness);
-                    println!("Grid generation level: {}", tmp_input.grid_gen_level);
-                    println!("Even tempered basis generation: {}", tmp_input.even_tempered_basis);
-                    println!("SCF convergency thresholds: {:e} for density matrix", tmp_input.scf_acc_rho);
-                    println!("                            {:e} Ha. for sum of eigenvalues", tmp_input.scf_acc_eev);
-                    println!("                            {:e} Ha. for total energy", tmp_input.scf_acc_etot);
-                    println!("Max. SCF cycle number:      {}", tmp_input.max_scf_cycle);
-                    let tmp_mixer = tmp_input.mixer.clone();
-                    if tmp_mixer.eq(&"direct") {
-                        println!("No charge density mixing is employed for the SCF procedure");
-                    } else if tmp_mixer.eq(&"linear") {
-                        println!("The {} mixing is employed with the mixing parameter of {} for the SCF procedure", 
-                                  &tmp_mixer, &tmp_input.mix_param);
-                    } else if tmp_mixer.eq(&"ddiis") 
-                           || tmp_mixer.eq(&"diis") {
-                        println!("The {} mixing with (param, max_vec_len) = ({}, {}) is employed for the SCF procedure", 
-                                  &tmp_mixer, &tmp_input.mix_param, &tmp_input.num_max_diis);
-                        println!("Turn on the {} mixing after {} step(s) of SCF iteractions with the linear mixing", 
-                                  &tmp_mixer, &tmp_input.start_diis_cycle);
-                    } else {
-                        tmp_input.mixer = String::from("direct");
-                        println!("Unknown charge density mixer ({})! No charge density mixing will be invoked.", tmp_input.mixer);
-                    };
-                    // if guessfile is specified, reading the external initial guess file is prior to reading the restart file
-                    if tmp_input.restart && ! std::path::Path::new(&tmp_input.chkfile).exists() {
-                        println!("The specified checkfile is missing, which will be created after the SCF procedure \n({})",&tmp_input.chkfile)
-                    } else if tmp_input.restart && ! tmp_input.external_init_guess {
-                        println!("The initial guess will be obtained from the existing checkfile \n({})",&tmp_input.chkfile)
-                    } else {
-                        println!("The specified checkfile exists but is not loaded because the keyword 'external_init_guess' is specified");
-                        println!("It will be updated after the SCF procedure \n({})",&tmp_input.chkfile)
-                        //println!("No existing checkfile for restart\n")
-                    };
-                    println!("Initial guess is prepared by ({}).", &tmp_input.initial_guess);
-                }
+                ////============================================================
+                //// Now print out some useful information
+                ////============================================================
+                //if tmp_input.print_level>0 {
+                //    println!("Charge: {:3}; Spin: {:3}",tmp_input.charge,tmp_input.spin);
+                //    println!("min_num_angular_points: {}", tmp_input.min_num_angular_points);
+                //    println!("max_num_angular_points: {}", tmp_input.max_num_angular_points);
+                //    println!("hardness: {}", tmp_input.hardness);
+                //    println!("Grid generation level: {}", tmp_input.grid_gen_level);
+                //    println!("Even tempered basis generation: {}", tmp_input.even_tempered_basis);
+                //    println!("SCF convergency thresholds: {:e} for density matrix", tmp_input.scf_acc_rho);
+                //    println!("                            {:e} Ha. for sum of eigenvalues", tmp_input.scf_acc_eev);
+                //    println!("                            {:e} Ha. for total energy", tmp_input.scf_acc_etot);
+                //    println!("Max. SCF cycle number:      {}", tmp_input.max_scf_cycle);
+                //    let tmp_mixer = tmp_input.mixer.clone();
+                //    if tmp_mixer.eq(&"direct") {
+                //        println!("No charge density mixing is employed for the SCF procedure");
+                //    } else if tmp_mixer.eq(&"linear") {
+                //        println!("The {} mixing is employed with the mixing parameter of {} for the SCF procedure", 
+                //                  &tmp_mixer, &tmp_input.mix_param);
+                //    } else if tmp_mixer.eq(&"ddiis") 
+                //           || tmp_mixer.eq(&"diis") {
+                //        println!("The {} mixing with (param, max_vec_len) = ({}, {}) is employed for the SCF procedure", 
+                //                  &tmp_mixer, &tmp_input.mix_param, &tmp_input.num_max_diis);
+                //        println!("Turn on the {} mixing after {} step(s) of SCF iteractions with the linear mixing", 
+                //                  &tmp_mixer, &tmp_input.start_diis_cycle);
+                //    } else {
+                //        tmp_input.mixer = String::from("direct");
+                //        println!("Unknown charge density mixer ({})! No charge density mixing will be invoked.", tmp_input.mixer);
+                //    };
+                //    // if guessfile is specified, reading the external initial guess file is prior to reading the restart file
+                //    if tmp_input.restart && ! std::path::Path::new(&tmp_input.chkfile).exists() {
+                //        println!("The specified checkfile is missing, which will be created after the SCF procedure \n({})",&tmp_input.chkfile)
+                //    } else if tmp_input.restart && ! tmp_input.external_init_guess {
+                //        println!("The initial guess will be obtained from the existing checkfile \n({})",&tmp_input.chkfile)
+                //    } else {
+                //        println!("The specified checkfile exists but is not loaded because the keyword 'external_init_guess' is specified");
+                //        println!("It will be updated after the SCF procedure \n({})",&tmp_input.chkfile)
+                //        //println!("No existing checkfile for restart\n")
+                //    };
+                //    println!("Initial guess is prepared by ({}).", &tmp_input.initial_guess);
+                //}
 
                 //===========================================================
                 // Global check of ctrl keywords and futher modification
@@ -1037,19 +1036,19 @@ impl InputKeywords {
                         println!("WARNING: etb_beta cannot be below 1.0. REST will use etb_beta=2.0 instead in this calculation");
                         tmp_input.etb_beta=2.0f64;
                     }
-                    if tmp_input.print_level>0 {
-                        println!("Even tempered basis generation starts at: {}", tmp_input.etb_start_atom_number);
-                        println!("Even tempered basis beta is: {}", tmp_input.etb_beta);
-                    }
+                    //if tmp_input.print_level>0 {
+                    //    println!("Even tempered basis generation starts at: {}", tmp_input.etb_start_atom_number);
+                    //    println!("Even tempered basis beta is: {}", tmp_input.etb_beta);
+                    //}
                 }
                 if tmp_input.external_init_guess  {
                     if ! std::path::Path::new(&tmp_input.guessfile).exists() {
                         println!("WARNING: Initial density matrix is required by the keyword of guessfile, which, however, does not exist: \n({}). \n The external initial guess will not be imported.\n",&tmp_input.guessfile);
                         tmp_input.external_init_guess = false;
                     } else {
-                        if tmp_input.print_level>0 {
-                            println!("The initial guess will be imported from \n({}).\n ",&tmp_input.guessfile);
-                        }
+                        //if tmp_input.print_level>0 {
+                        //    println!("The initial guess will be imported from \n({}).\n ",&tmp_input.guessfile);
+                        //}
                     }
                 }
                 if tmp_input.force_state_occupation.len()>0 {
@@ -1122,9 +1121,9 @@ impl InputKeywords {
                         panic!("Find lattice vectors. PBC calculations should be turn on, which, however, is not yet implemented");
                     },
                     other => {
-                        if tmp_input.print_level>0 {
-                            println!("It is a cluster calculation for finite molecules");
-                        }
+                        //if tmp_input.print_level>0 {
+                        //    println!("It is a cluster calculation for finite molecules");
+                        //}
                         tmp_geomcell.pbc = MOrC::Molecule;
                     }
                 }
@@ -1193,5 +1192,107 @@ fn iter_inputkeywords()  {
     let dd = InputKeywords::init_ctrl();
     let ff = toml::to_string(&dd).unwrap();
     println!("{}", ff);
+
+}
+
+pub fn overall_report_on_ctrl_geom(ctrl: &InputKeywords, geom: &GeomCell) {
+    println!("=========================================================");
+    println!("Input parameters for the REST calculation");
+    println!("=========================================================");
+    //println!("Calculation type: {}", ctrl.calculation_type);
+    //println!("SCF procedure: {}", ctrl.scf_type);
+    //println!("Mixer: {}", ctrl.mixer);
+    //println!("Number of DIIS cycles: {}", ctrl.num_diis_cycles);
+    //println!("Number of DIIS cycles for the initial guess: {}", ctrl.num_diis_cycles_init_guess);
+    //println!("Number of DIIS cycles for the initial guess: {}", ctrl.num_diis_cycles_init_guess);
+    //println!("Number of DIIS cycles for the initial guess: {}", ctrl.num_diis_cycles_init_guess);
+
+    match ctrl.job_type {
+        JobType::SinglePoint => {println!("Calculation type: Single-point energy")},
+        JobType::GeomOpt => {println!("Calculation type: Geometry optimization")},
+    }
+    println!("The exchange-correlation method: {}", ctrl.xc);
+
+    println!("Print level:                {}", ctrl.print_level);
+    if let Some(num_threads) = ctrl.num_threads {
+        println!("The number of threads used for parallelism:      {}", num_threads);
+    } else {
+        println!("The number of threads used for parallelism:      {}", rayon::current_num_threads());
+    }
+    println!("The {}-GTO basis set is taken from {}", ctrl.basis_type,ctrl.basis_path);
+
+    println!("The pruning method is {}", ctrl.pruning);
+
+    println!("The radial grid generation method is {}", ctrl.rad_grid_method);
+    println!("ERI Type: {}", ctrl.eri_type);
+
+    if ctrl.use_ri_symm {
+        println!("Turn on the basis pair symmetry for RI 3D-tensors")
+    } else {
+        println!("Turn off the basis pair symmetry for RI 3D-tensors")
+    };
+    if ctrl.use_auxbas {
+        println!("The {}-GTO auxiliary basis set is taken from {}", ctrl.auxbas_type,ctrl.auxbas_path)
+    };
+
+    if ctrl.spin_channel == 1 {
+        println!("Spin polarization: Off")
+    } else if ctrl.spin_channel == 2 {
+        println!("Spin polarization: On")
+    };
+
+    println!("Charge: {:3}; Spin: {:3}",ctrl.charge,ctrl.spin);
+    println!("min_num_angular_points: {}", ctrl.min_num_angular_points);
+    println!("max_num_angular_points: {}", ctrl.max_num_angular_points);
+    println!("hardness: {}", ctrl.hardness);
+    println!("Grid generation level: {}", ctrl.grid_gen_level);
+    println!("Even tempered basis generation: {}", ctrl.even_tempered_basis);
+    println!("SCF convergency thresholds: {:e} for density matrix", ctrl.scf_acc_rho);
+    println!("                            {:e} Ha. for sum of eigenvalues", ctrl.scf_acc_eev);
+    println!("                            {:e} Ha. for total energy", ctrl.scf_acc_etot);
+    println!("Max. SCF cycle number:      {}", ctrl.max_scf_cycle);
+    let tmp_mixer = ctrl.mixer.clone();
+    if tmp_mixer.eq(&"direct") {
+        println!("No charge density mixing is employed for the SCF procedure");
+    } else if tmp_mixer.eq(&"linear") {
+        println!("The {} mixing is employed with the mixing parameter of {} for the SCF procedure", 
+                  &tmp_mixer, &ctrl.mix_param);
+    } else if tmp_mixer.eq(&"ddiis") 
+           || tmp_mixer.eq(&"diis") {
+        println!("The {} mixing with (param, max_vec_len) = ({}, {}) is employed for the SCF procedure", 
+                  &tmp_mixer, &ctrl.mix_param, &ctrl.num_max_diis);
+        println!("Turn on the {} mixing after {} step(s) of SCF iteractions with the linear mixing", 
+                  &tmp_mixer, &ctrl.start_diis_cycle);
+    } else {
+        //ctrl.mixer = String::from("direct");
+        panic!("Unknown charge density mixer ({})! No charge density mixing will be invoked.", ctrl.mixer);
+    };
+    // if guessfile is specified, reading the external initial guess file is prior to reading the restart file
+    if ctrl.restart && ! std::path::Path::new(&ctrl.chkfile).exists() {
+        println!("The specified checkfile is missing, which will be created after the SCF procedure \n({})",&ctrl.chkfile)
+    } else if ctrl.restart && ! ctrl.external_init_guess {
+        println!("The initial guess will be obtained from the existing checkfile \n({})",&ctrl.chkfile)
+    } else {
+        println!("The specified checkfile exists but is not loaded because the keyword 'external_init_guess' is specified");
+        println!("It will be updated after the SCF procedure \n({})",&ctrl.chkfile)
+        //println!("No existing checkfile for restart\n")
+    };
+    println!("Initial guess is prepared by ({}).", &ctrl.initial_guess);
+
+    if ctrl.external_init_guess {
+        println!("The initial guess is obtained from the specified file \n({})", &ctrl.guessfile);
+    }
+
+    if ctrl.even_tempered_basis {
+        println!("Even tempered basis generation starts at: {}", ctrl.etb_start_atom_number);
+        println!("Even tempered basis beta is: {}", ctrl.etb_beta);
+    }
+
+
+    match geom.pbc {
+        MOrC::Molecule => println!("It is a finite cluster calculation"),
+        MOrC::Crystal => println!("It is a periodic calculation")
+    }
+
 
 }

@@ -4,13 +4,14 @@ use crate::constants::{F_SHELL, KR_SHELL, NELE_IN_SHELLS, SPECIES_INFO, S_SHELL,
 use crate::molecule_io::Molecule;
 use crate::ctrl_io::InputKeywords;
 use crate::geom_io::{GeomCell, formated_element_name};
+use crate::mpi_io::MPIOperator;
 use crate::scf_io::{initialize_scf, scf};
 use crate::utilities;
 use std::collections::HashMap;
 use std::num;
 
 
-pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
+pub fn initial_guess_from_sad(mol: &Molecule, mpi_operator: &Option<MPIOperator>) -> Vec<MatrixFull<f64>> {
     //let mut elem_name: Vec<String> = vec![];
     //let mut dms_alpha: Vec<MatrixFull<f64>> = vec![];
     //let mut dms_beta: Vec<MatrixFull<f64>> = vec![];
@@ -58,9 +59,9 @@ pub fn initial_guess_from_sad(mol: &Molecule) -> Vec<MatrixFull<f64>> {
             atom_geom.position = MatrixFull::from_vec([3,1], vec![0.000,0.000,0.000]).unwrap();
             atom_geom.elem = vec![ielem.to_string()];
 
-            let mut atom_mol = Molecule::build_native(atom_ctrl,atom_geom).unwrap();
+            let mut atom_mol = Molecule::build_native(atom_ctrl,atom_geom, None).unwrap();
 
-            let mut atom_scf = scf(atom_mol).unwrap();
+            let mut atom_scf = scf(atom_mol, &None).unwrap();
 
             //println!("debug: elem prepared in this loop: {}, size: {:?}", ielem, atom_scf.density_matrix[0].size());
 
