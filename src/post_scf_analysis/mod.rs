@@ -154,39 +154,39 @@ pub fn save_chkfile(scf_data: &SCF) {
     let is_exist = scf.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("e_tot")});
     if is_exist {
         let dataset = scf.dataset("e_tot").unwrap();
-        dataset.write(&ndarray::arr0(scf_data.scf_energy));
+        dataset.write(&[scf_data.scf_energy]);
     } else {
         let builder = scf.new_dataset_builder();
-        builder.with_data(&ndarray::arr0(scf_data.scf_energy)
+        builder.with_data(&[scf_data.scf_energy]
         ).create("e_tot").unwrap();
     }
 
     let is_exist = scf.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("num_basis")});
     if is_exist {
         let dataset = scf.dataset("num_basis").unwrap();
-        dataset.write(&ndarray::arr0(scf_data.mol.num_basis));
+        dataset.write(&[scf_data.mol.num_basis]).unwrap();
     } else {
         let builder = scf.new_dataset_builder();
-        builder.with_data(&ndarray::arr0(scf_data.mol.num_basis)
+        builder.with_data(&[scf_data.mol.num_basis]
         ).create("num_basis").unwrap();
     }
     let is_exist = scf.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("spin_channel")});
     if is_exist {
         let dataset = scf.dataset("spin_channel").unwrap();
-        dataset.write(&ndarray::arr0(scf_data.mol.spin_channel));
+        dataset.write(&[scf_data.mol.spin_channel]);
     } else {
         let builder = scf.new_dataset_builder();
-        builder.with_data(&ndarray::arr0(scf_data.mol.spin_channel)
+        builder.with_data(&[scf_data.mol.spin_channel]
         ).create("spin_channel").unwrap();
     }
 
     let is_exist = scf.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("num_state")});
     if is_exist {
         let dataset = scf.dataset("num_state").unwrap();
-        dataset.write(&ndarray::arr0(scf_data.mol.num_state));
+        dataset.write(&[scf_data.mol.num_state]);
     } else {
         let builder = scf.new_dataset_builder();
-        builder.with_data(&ndarray::arr0(scf_data.mol.num_state)
+        builder.with_data(&[scf_data.mol.num_state]
         ).create("num_state").unwrap();
     }
 
@@ -198,10 +198,10 @@ pub fn save_chkfile(scf_data: &SCF) {
     }
     if is_exist {
         let dataset = scf.dataset("mo_coeff").unwrap();
-        dataset.write(&ndarray::arr1(&eigenvectors));
+        dataset.write(&eigenvectors);
     } else {
         let builder = scf.new_dataset_builder();
-        builder.with_data(&ndarray::arr1(&eigenvectors)).create("mo_coeff");
+        builder.with_data(&eigenvectors).create("mo_coeff");
     }
 
     let mut eigenvalues: Vec<f64> = vec![];
@@ -210,10 +210,10 @@ pub fn save_chkfile(scf_data: &SCF) {
     }
     if is_exist {
         let dataset = scf.dataset("mo_energy").unwrap();
-        dataset.write(&ndarray::arr1(&eigenvalues));
+        dataset.write(&eigenvalues);
     } else {
         let builder = scf.new_dataset_builder();
-        builder.with_data(&ndarray::arr1(&eigenvalues)).create("mo_energy");
+        builder.with_data(&eigenvalues).create("mo_energy");
     }
 
     let is_exist = scf.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("mo_occupation")});
@@ -223,10 +223,10 @@ pub fn save_chkfile(scf_data: &SCF) {
     }
     if is_exist {
         let dataset = scf.dataset("mo_occupation").unwrap();
-        dataset.write(&ndarray::arr1(&occ));
+        dataset.write(&occ);
     } else {
         let builder = scf.new_dataset_builder();
-        builder.with_data(&ndarray::arr1(&occ)).create("mo_occupation");
+        builder.with_data(&occ).create("mo_occupation");
     }
 
     file.close();
@@ -254,10 +254,10 @@ pub fn save_hamiltonian(scf_data: &SCF) {
     let is_hamiltonian = scf.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("hamiltonian")});
     if is_hamiltonian {
         let dataset = scf.dataset("hamiltonian").unwrap();
-        dataset.write(&ndarray::arr1(&hamiltonians));
+        dataset.write(&hamiltonians);
     } else {
         let builder = scf.new_dataset_builder();
-        builder.with_data(&ndarray::arr1(&hamiltonians)).create("hamiltonian");
+        builder.with_data(&hamiltonians).create("hamiltonian");
     };
     file.close();
 }
@@ -281,10 +281,10 @@ pub fn save_overlap(scf_data: &SCF) {
     let is_exist = scf.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("overlap")});
     if is_exist {
         let dataset = scf.dataset("overlap").unwrap();
-        dataset.write(&ndarray::arr1(&overlap.data));
+        dataset.write(&overlap.data);
     } else {
         let builder = scf.new_dataset_builder();
-        builder.with_data(&ndarray::arr1(&overlap.data)).create("overlap");
+        builder.with_data(&overlap.data).create("overlap");
     };
     file.close();
 }
@@ -313,10 +313,10 @@ pub fn save_geometry(scf_data: &SCF) {
     let is_geom = geom.member_names().unwrap().iter().fold(false,|is_exist,x| {is_exist || x.eq("position")});
     if is_geom {
         let dataset = geom.dataset("position").unwrap();
-        dataset.write(&ndarray::arr1(&geometry));
+        dataset.write(&geometry);
     } else {
         let builder = geom.new_dataset_builder();
-        builder.with_data(&ndarray::arr1(&geometry)).create("position");
+        builder.with_data(&geometry).create("position");
     }
     file.close();
 }

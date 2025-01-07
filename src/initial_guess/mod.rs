@@ -242,7 +242,7 @@ pub fn initial_guess_from_hdf5chkfile(
     let file = hdf5::File::open(chkname).unwrap();
     let scf = file.group("scf").unwrap();
     let member = scf.member_names().unwrap();
-    let e_tot = scf.dataset("e_tot").unwrap().read_scalar::<f64>().unwrap();
+    let e_tot = scf.dataset("e_tot").unwrap().read_1d::<f64>().unwrap()[0];
     if print_level>1 {
         println!("HDF5 Group: {:?} \nMembers: {:?}", scf, member);
     }
@@ -318,9 +318,9 @@ pub fn import_mo_coeff_from_hdf5chkfile(chkname: &str) -> ([MatrixFull<f64>;2], 
     let scf = file.group("scf").unwrap();
     let member = scf.member_names().unwrap();
 
-    let num_basis = scf.dataset("num_basis").unwrap().read_scalar::<usize>().unwrap();
-    let num_state = scf.dataset("num_state").unwrap().read_scalar::<usize>().unwrap();
-    let spin_channel = scf.dataset("spin_channel").unwrap().read_scalar::<usize>().unwrap();
+    let num_basis = scf.dataset("num_basis").unwrap().read_1d::<usize>().unwrap()[0];
+    let num_state = scf.dataset("num_state").unwrap().read_1d::<usize>().unwrap()[0];
+    let spin_channel = scf.dataset("spin_channel").unwrap().read_1d::<usize>().unwrap()[0];
 
     // importing MO coefficients
     let buf01 = scf.dataset("mo_coeff").unwrap().read_raw::<f64>().unwrap();
