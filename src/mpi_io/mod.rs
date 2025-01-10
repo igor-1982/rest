@@ -357,26 +357,53 @@ where
 
     for i in 0..size {
         for j in 0..size {
-            mpi::request::scope(|scope| {
-                let sreq = if rank == j {
-                    let tmp_range = distribution[i].start*scale_vec[j] .. distribution[i].end*scale_vec[j];
-                    Some(
-                        world.process_at_rank(i as i32).immediate_send(scope, &data[tmp_range])
-                    )
-                } else {
-                    None
-                };
-                if rank == i {
-                    let result_slice = result[j].as_mut_slice();
-                    let rreq = world.process_at_rank(j as i32).immediate_receive_into(scope, result_slice);
-                    rreq.wait();
-                } 
-                if rank == j {
-                    if let Some(sreq_j) = sreq {
-                        sreq_j.wait();
-                    }
-                }
-            });
+            if rank == j || rank == i {
+                let tmp_range = distribution[i].start*scale_vec[j] .. distribution[i].end*scale_vec[j];
+                let by_batch = communicate_by_batch(tmp_range.len());
+                println!("debug ij: {} {}, by_batch_len: {}", i, j, &by_batch.len());
+                by_batch.iter().enumerate().for_each(|(k,loc_batch)| {
+                    mpi::request::scope(|scope| {
+                        let sreq = if rank == j {
+                            let tmp_range_batch = (tmp_range.start + loc_batch.start)..(tmp_range.start + loc_batch.start + loc_batch.len());
+                            Some(
+                                world.process_at_rank(i as i32).immediate_send(scope, &data[tmp_range_batch])
+                            )
+                        } else {None};
+                        if rank == i {
+                            let result_slice = &mut result[j][by_batch[k].clone()];//.as_mut_slice();
+                            let rreq = world.process_at_rank(j as i32).immediate_receive_into(scope, result_slice);
+                            rreq.wait();
+                        } 
+                        if rank == j {
+                            if let Some(sreq_j) = sreq {
+                                sreq_j.wait();
+                            }
+                        }
+                    });
+                });
+
+            }
+
+            //mpi::request::scope(|scope| {
+            //    let sreq = if rank == j {
+            //        let tmp_range = distribution[i].start*scale_vec[j] .. distribution[i].end*scale_vec[j];
+            //        Some(
+            //            world.process_at_rank(i as i32).immediate_send(scope, &data[tmp_range])
+            //        )
+            //    } else {
+            //        None
+            //    };
+            //    if rank == i {
+            //        let result_slice = result[j].as_mut_slice();
+            //        let rreq = world.process_at_rank(j as i32).immediate_receive_into(scope, result_slice);
+            //        rreq.wait();
+            //    } 
+            //    if rank == j {
+            //        if let Some(sreq_j) = sreq {
+            //            sreq_j.wait();
+            //        }
+            //    }
+            //});
         }
     }
     result
@@ -419,4 +446,28 @@ pub fn average_distribution_with_residue(num_tasks: usize, size: usize) -> (Vec<
     });
 
     (distribute_vec, start..num_tasks)
+}
+
+pub fn communicate_by_batch(num_tasks: usize) -> Vec<Range<usize>> {
+    let mut chunk_size = MPI_CHUNK; // around 100 Mb
+    //let mut chunk_size = 16_usize; 
+    
+    let chunk_rest = num_tasks%chunk_size;
+    let num_comm = if chunk_rest==0 {num_tasks/chunk_size} else {num_tasks/chunk_size+1};
+
+    let mut distribute_vec: Vec<Range<usize>> = vec![0..num_tasks;num_comm];
+
+    let mut start = 0_usize;
+    distribute_vec.iter_mut().enumerate().for_each(|(i,data)| {
+        let num_length = if start + chunk_size > num_tasks {
+            num_tasks - start
+        } else {
+            chunk_size
+        };
+
+        *data = start..start + num_length;
+        start += num_length;
+    });
+
+    distribute_vec
 }
