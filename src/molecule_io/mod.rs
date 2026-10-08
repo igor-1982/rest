@@ -3329,6 +3329,29 @@ impl Molecule {
         (cderi, basbas2baspar, baspar2basbas)
     }
 
+    /// Build `rimatr` on a pre-screened AO-pair row space.
+    ///
+    /// `keep` lists full packed AO-pair indices, ascending, and has to be a conservative superset
+    /// of the rows the storage-level pruning of the same tensor retains. The returned tensor holds
+    /// one row per entry of `keep`, in that order, so it is `keep.len()` rows tall instead of
+    /// `num_basis(num_basis+1)/2`. `None` reproduces
+    /// [`Molecule::prepare_rimatr_for_ri_v_rayon`].
+    pub fn prepare_rimatr_for_ri_v_rayon_prescreened(
+        &self,
+        omega: Option<f64>,
+        keep: Option<&[usize]>,
+    ) -> (MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>) {
+        let cderi = ri_jk::generate_rimatr_bare_on_cint_prescreened(
+            &ri_jk::util::get_cint_mol(self),
+            &ri_jk::util::get_cint_aux(self),
+            self.ctrl.j2c_decomp,
+            omega,
+            keep,
+        );
+        let (basbas2baspar, baspar2basbas) = ri_jk::generate_baspar(self.num_basis);
+        (cderi, basbas2baspar, baspar2basbas)
+    }
+
     /// Make an auxiliary molecule from a molecule for calculation.
     /// The auxmol is very similar to the origin mole,
     /// except its basis-related infomation is cloned from auxbasis information of the original mole.

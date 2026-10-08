@@ -120,7 +120,7 @@
 - `grid_generation_level`: 取值usize。格点精度等级，数值越大越精确。缺省为3
 - `pruning`: 取值String。DFT方法或sap初猜所选用格点筛选。目前，REST支持nwchem，sg1以及none。其中none为不筛选。缺省为nwchem
 - `radial_grid_method`: 取值String。径向格点的生成方法。目前REST支持treutler，gc2nd， delley, becke, mura_knowles及lmg。缺省为treutler
-- `radii_adjust`: 取值String。Becke划分中原子的半径调整方案。`becke` 用Bragg半径本身（Becke 1988原文形式），`treutler` 用Bragg半径的平方根（Treutler-Ahlrichs 1995形式）。两者都满足权重和为1，差别随格点加密衰减。缺省为becke
+- `radii_adjust`: 取值String。Becke划分中原子的半径调整方案。`becke` 用Bragg半径本身（Becke 1988原文形式），`treutler` 用Bragg半径的平方根（Treutler-Ahlrichs 1995形式）。两者都满足权重和为1，差别随格点加密衰减。缺省为treutler（与 PySCF/PyFock 一致；历史缺省 becke 可用输入卡显式指定）
 
 ### VXC 格点积分优化相关关键词（Keyword）
 - `vxc_screen_threshold`: 取值f64。密度筛选阈值，在 VXC 计算中跳过密度低于此值的格点。对于大分子（真空区域多），可节省 30-70% 的 XC 计算量。设为 0.0 可关闭筛选。缺省为 1.0e-15。
@@ -216,8 +216,8 @@ guessfile = "my_checkpoint.rchk"
 ## 自洽场计算相关关键词（Keyword）
 - `max_scf_cycle`: 取值i32。自洽场运算的最大迭代循环数。缺省为100
 - `noiter`: 取值布尔类型。是否跳过自洽场运算。缺省为false
-- `scf_acc_rho`: 取值f64。自洽场运算密度矩阵的收敛标准。缺省为1.0e-7
-- `scf_acc_eev`: 取值f64。自洽场运算能量差平方和的收敛标准。缺省为1.0e-5
+- `scf_acc_rho`: 取值f64。自洽场运算密度矩阵的收敛标准。缺省为1.0e-5
+- `scf_acc_eev`: 取值f64。自洽场运算能量差平方和的收敛标准。缺省为1.0e-3
 - `scf_acc_etot`: 取值f64。自洽场运算总能量的收敛标准。缺省为1.0e-8
 - `algorithm_jk`: 设置 Fock 矩阵计算中 J (Coulomb) 和 K (Exchange) 两部分的算法：
     - `ri-direct`: 强制使用 direct RI 算法。对于 RI-K 部分，取决于内存大小，可能会使用 semi-direct 算法 (储存相对较小的 $O(N^3)$ 的 $g_{\mu i, P}$)。
@@ -240,6 +240,8 @@ guessfile = "my_checkpoint.rchk"
     - 仍被拒绝：解析导数与 Hessian、SCF/单点之外的 job_type、TDDFT 与响应、GW/BSE、数值力（`outputs = ["num_force"]`），以及 `ri_pt2` 的 `new_driver = true` 与 `engine = "torch"` 两个引擎。
 
     - **推荐用法（杂化泛函的能量与几何优化）**：显式设 `pair_screen_threshold = 1.0e-12`。构建期会丢掉大多数可忽略的 AO 对行，K 的缩并随之变短，内存与时间都明显下降，而能量变化只有 1e-8 Ha 量级。
+
+    - **构建期预筛**：在**任何三中心积分之前**，用壳对 Schwarz 界 `sqrt(max_{μ∈i,ν∈j} |(μν|μν)|)` 展开到 AO 对，挑出一个**保守超集**（阈值取 `pair_screen_threshold / 10` 的安全系数），随后只在这个更小的行空间上做度量变换与剪枝。实测 (H2O)30 / B3LYP / def2-SVP 下保留 43.7% 的行，`rimatr` 构建相由 57.2 s 降到 30.7 s，而**最终保留行集与 `PairMap` 与预筛前完全一致**（剪枝仍照旧在压紧张量上再跑一次）。**仅在串行路径启用**：MPI 下辅助基按列分布在各 rank 上，预筛尚未接入，行为与改造前相同。
 
       ````toml`
       [ctrl]
@@ -300,8 +302,10 @@ chkfile = "mychk.rchk"
       | adiis+diis | 与 ediis+diis 类似 | 快 | B 矩阵保证 PSD，数值更鲁棒 |
     - 已知局限：纯 `ediis` 在极端拉伸的 DFT 体系（如 N₂ r=3Å PBE）中可能不收敛——此时 Fock 混合近似 `ΣcᵢFᵢ ≈ F(D̃)` 因 V_xc 强非线性而失效，建议使用 `ediis+diis`（自动切换到 DIIS）。
 - `mix_param`: 取值f64。DIIS方法或linear方法的混合系数。缺省为0.6
-- `start_diis_cycle`: 取值i32。开始使用diis（或ediis）加速收敛方法的循环数。缺省为2
+- `start_diis_cycle`: 取值i32。开始使用diis（或ediis）加速收敛方法的循环数。缺省为1（第 1 轮即启用 DIIS；DIIS 历史不足时按线性混合回退）
 - `num_max_diis`: 取值i32。DIIS/EDIIS子空间大小（存储的历史Fock/密度矩阵数量）。缺省为8
+- `diis_pinv_threshold`: 取值f64。DIIS 误差矩阵求伪逆时的奇异值截断阈值。缺省为1.0e-12
+- `diis_orthogonalize_error`: 取值bool。是否对 DIIS 误差矢量做正交化（经 S^-1/2 变换改善条件数）。缺省为true；设为 false 可复现历史行为
 - `level_shift`: 取值f64。对于发生近简并振荡不收敛的情况，可以采用level_shift的方式人为破坏简并，加速收敛。单位为hartree，缺省值为None（不开启）。
     - 注意：当体系本身可以用纯 DIIS 正常收敛时，开启 level_shift 反而会减速收敛（DIIS 子空间已充分条件良好）。仅当 DIIS 失效（近简并振荡）时才需要开启此选项。
 - `ediis_penalty`：取值f64。EDIIS 惩罚参数 η（Kudin-Scuseria, JCP 2002, 116, 8255）。η 越大，外推越保守（偏离历史数据点的惩罚越大）。缺省为 0.5。仅当 `mixer = "ediis"`、`"ediis+diis"` 或 `"adiis+diis"` 时生效。

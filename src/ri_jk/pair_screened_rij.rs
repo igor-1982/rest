@@ -72,26 +72,7 @@ impl RIMatrPairScreen {
     pub fn build(ri3fn: &MatrixFull<f64>, basbas2baspar: &MatrixFull<usize>, nao: usize) -> Self {
         let num_baspar = ri3fn.size()[0];
         let num_auxbas = ri3fn.size()[1];
-        let data = ri3fn.data_ref().unwrap();
-
-        // q[p] = max_P |R[p,P]|; column-major, so one row is a strided sweep over the columns
-        let chunk = 512;
-        let mut bounds = vec![0.0_f64; num_baspar];
-        bounds.par_chunks_mut(chunk).enumerate().for_each(|(ic, qs)| {
-            let p0 = ic * chunk;
-            for (io, q) in qs.iter_mut().enumerate() {
-                let mut bound = 0.0_f64;
-                let mut index = p0 + io;
-                for _ in 0..num_auxbas {
-                    let value = data[index].abs();
-                    if value > bound {
-                        bound = value;
-                    }
-                    index += num_baspar;
-                }
-                *q = bound;
-            }
-        });
+        let bounds = row_bounds(ri3fn);
 
         let mut is_diagonal = vec![false; num_baspar];
         for i in 0..nao {
@@ -382,6 +363,121 @@ pub fn compact_rimatr_rows(ri3fn: MatrixFull<f64>, kept: &[usize]) -> MatrixFull
     }
 
     MatrixFull::from_vec([num_kept, num_auxbas], data).unwrap()
+}
+
+/// A-priori keep list of a storage-level **pre-screen** of the AO-pair space.
+///
+/// The storage-level pruning of [`prune_rimatr`] can only run once the tensor exists, so the
+/// three-centre integration and the metric transformation still pay for every pair. This function
+/// produces a **conservative superset** of the rows that pruning will keep, from data available
+/// before any three-centre integral is evaluated: the shell-pair Schwarz bound
+/// `exp(q_cond) = sqrt(max_{mu in i, nu in j} |(mu nu|mu nu)|)` of [`PairList`], expanded to every
+/// AO pair of the shell pair.
+///
+/// `tol` is a **relative** threshold on that bound. The caller is expected to pass a value well
+/// below `[ctrl.ri_jk] pair_screen_threshold` (the production path uses a safety factor of ten):
+/// the Schwarz bound only bounds the *untransformed* three-centre block, while pruning acts on the
+/// row maximum of the *metric-transformed* tensor, so the two orderings differ and a cut of the
+/// same nominal size is not guaranteed to be a superset.
+///
+/// Shell pairs that [`PairList::build`] drops through its diffuse-overlap pre-mask keep a bound of
+/// zero here. That pre-mask uses `schwartz_overlap_tol2` (default 1e-24) on the overlap of the
+/// most diffuse primitives, which is far below any relative cut this screen is used with, so a
+/// pair it removes cannot be one the storage-level pruning would retain.
+pub fn prescreen_pair_keep(
+    cint_mol: &CInt,
+    nao: usize,
+    basbas2baspar: &MatrixFull<usize>,
+    overlap_tol2: f64,
+    tol: f64,
+) -> Vec<usize> {
+    let num_baspar = nao * (nao + 1) / 2;
+    let pairs = super::PairList::build(cint_mol, overlap_tol2);
+
+    let mut bound = vec![0.0_f64; num_baspar];
+    for shell_pair in &pairs.pairs {
+        let q = shell_pair.q_cond.exp();
+        let (i0, i1) = (pairs.ao_loc[shell_pair.ish], pairs.ao_loc[shell_pair.ish + 1]);
+        let (j0, j1) = (pairs.ao_loc[shell_pair.jsh], pairs.ao_loc[shell_pair.jsh + 1]);
+        for mu in i0..i1 {
+            for nu in j0..j1 {
+                let p = basbas2baspar[[mu, nu]];
+                if q > bound[p] {
+                    bound[p] = q;
+                }
+            }
+        }
+    }
+
+    let q_max = bound.iter().fold(0.0_f64, |acc, v| acc.max(*v));
+    let cut = tol * q_max;
+    (0..num_baspar).filter(|&p| bound[p] > cut).collect()
+}
+
+/// Row maxima `q[r] = max_P |R[r,P]|` of a tensor, in the row order of that tensor.
+///
+/// This is the per-row quantity both screening levels are built on.
+/// [`RIMatrPairScreen::build`] augments it with the diagonal-pair flags of a full-space tensor; a
+/// tensor that already lives on the row space of a pre-screen has no full-space pair table to
+/// derive those from, so it uses this directly.
+pub fn row_bounds(ri3fn: &MatrixFull<f64>) -> Vec<f64> {
+    let num_rows = ri3fn.size()[0];
+    let num_auxbas = ri3fn.size()[1];
+    let data = ri3fn.data_ref().unwrap();
+
+    // q[r] = max_P |R[r,P]|; column-major, so one row is a strided sweep over the columns
+    let chunk = 512;
+    let mut bounds = vec![0.0_f64; num_rows];
+    bounds.par_chunks_mut(chunk).enumerate().for_each(|(ic, qs)| {
+        let p0 = ic * chunk;
+        for (io, q) in qs.iter_mut().enumerate() {
+            let mut bound = 0.0_f64;
+            let mut index = p0 + io;
+            for _ in 0..num_auxbas {
+                let value = data[index].abs();
+                if value > bound {
+                    bound = value;
+                }
+                index += num_rows;
+            }
+            *q = bound;
+        }
+    });
+    bounds
+}
+
+/// Prune a tensor that already lives on the row space of a pre-screen.
+///
+/// `outer` gives the full packed pair index of every stored row, ascending, i.e. the row map that
+/// [`prescreen_pair_keep`] produced for this geometry. The retained rows are chosen exactly as in
+/// [`prune_rimatr`] (row bound above `tol` times the largest row bound), and the returned
+/// [`PairMap`] describes them in the **full** packed pair space, so every consumer of the map sees
+/// the layout it would have seen without the pre-screen.
+pub fn prune_rimatr_prescreened(
+    ri3fn: MatrixFull<f64>,
+    bounds: &[f64],
+    outer: &[usize],
+    num_baspar_full: usize,
+    baspar2basbas: &[[usize; 2]],
+    tol: f64,
+) -> PrunedRIMatr {
+    let num_stored = ri3fn.size()[0];
+    assert_eq!(bounds.len(), num_stored, "pair bounds do not match the pre-screened tensor");
+    assert_eq!(outer.len(), num_stored, "pre-screen row map does not match the tensor");
+
+    let q_max = bounds.iter().fold(0.0_f64, |acc, v| acc.max(*v));
+    let cut = tol * q_max;
+    let kept_local: Vec<usize> = (0..num_stored).filter(|&r| bounds[r] > cut).collect();
+
+    // the map is addressed in the full packed pair space, so the bounds go back to that indexing
+    let mut bounds_full = vec![0.0_f64; num_baspar_full];
+    for (r, &p) in outer.iter().enumerate() {
+        bounds_full[p] = bounds[r];
+    }
+    let kept_full: Vec<usize> = kept_local.iter().map(|&r| outer[r]).collect();
+    let compacted = compact_rimatr_rows(ri3fn, &kept_local);
+    let map = PairMap::from_kept(num_baspar_full, &kept_full, baspar2basbas, &bounds_full);
+    PrunedRIMatr { ri3fn: compacted, map }
 }
 
 /// Drop the AO-pair rows of a freshly built `rimatr` whose static bound is negligible.
