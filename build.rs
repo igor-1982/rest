@@ -76,7 +76,13 @@ fn main() {
     // #[cfg(feature = "dftd4")]
     // println!("cargo:rustc-link-lib=dftd4");
 
-    let library_names = ["cint","restmatr","hdf5","rest2fch","openblas","gomp"];
+    // `rest2fch` (the MOKIT-derived Fortran library writing fchk MO coefficients)
+    // is only linked when the `librest2fch` feature is enabled; without it the
+    // MO sections are written natively in Rust (SCF::fchk_write_mo_rust).
+    let mut library_names: Vec<&str> = vec!["cint","restmatr","hdf5","openblas","gomp"];
+    if cfg!(feature = "librest2fch") {
+        library_names.push("rest2fch");
+    }
     library_names.iter().for_each(|name| {
         println!("cargo:rustc-link-lib={}",*name);
     });

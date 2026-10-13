@@ -29,6 +29,8 @@ pub mod ri_jk_io;
 pub mod ri_pt2_io;
 pub use ri_jk_io::*;
 pub use ri_pt2_io::*;
+pub mod output;
+pub use output::*;
 
 mod pyrest_ctrl_io;
 mod geometric_pyo3_io;
@@ -88,12 +90,15 @@ pub fn parse_ctl_from_json(tmp_keys: &serde_json::Value) -> anyhow::Result<(Inpu
         tmp_input.thermo = Some(std::mem::take(tmp_thermo));
     }
     tmp_input.analdrv = parse_analdrv_keywords(tmp_keys);
+    tmp_input.output = parse_output_keywords(tmp_keys);
+    resolve_cube_keywords(&mut tmp_input, tmp_keys);
     Ok((tmp_input,tmp_geomcell))
 }
 
 const VALID_TOP_LEVEL_BLOCKS: &[&str] = &[
     "ctrl",
     "geom",
+    "output",
     "md",
     "tddft",
     "hessian",
@@ -366,6 +371,8 @@ pub struct InputKeywords {
     pub initial_guess: String,
     #[pyo3(get, set)]
     pub basis_projection: String,
+    /// Options of the `[output]` block (see `OutputKeywords`).
+    pub output: OutputKeywords,
     #[pyo3(get, set)]
     pub noiter: bool,
     #[pyo3(get, set)]
@@ -601,6 +608,7 @@ impl InputKeywords {
             external_init_guess: None, // not directly set by input
             initial_guess: String::from("sad"),
             basis_projection: String::from("occupied"),
+            output: OutputKeywords::default(),
             noiter: false,
             check_stab: String::from("off"),
             // Kyewords for the manner to evaluate the Vk (and also Vxc) potentials

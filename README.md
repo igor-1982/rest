@@ -75,23 +75,13 @@
     - `dipole`    偶极
     - `fchk`　    Gaussian程序的fchk文件
         - 双杂化 (PT2 族) 的解析力计算 (`job_type = "force"`) 额外在 fchk 中写入弛豫总密度 `Total MP2 Density` 段；开壳层 (UHF 参考) 另行写入 `Spin MP2 Density` 段 (alpha − beta)。
+        - fchk 文件中 MO 系数与各密度段的写出行为由 `[output]` 区块控制（如 `fchk_dm`、`fchk_writer`），详见 `[output]` 区块说明。缺省设置下无需关心。
     - `cube_orb`  格点化的轨道文件信息 
     - `molden`　　结果输出为molden程序的格式
     - `geometry`  输出分子结构文件
     - `force`     输出分子受力信息
     - `force_for_ghost_point_charges`  在[geom]部分输入ghost point charges时输出原子区域对这些ghost点电荷的作用力
-- `cube_orb_setting`: 取值[f64;2]。`cube_orb`格点参数设置。前一个值(margin)是边界信息，第二个值(num_grids)是生成格点的数目。缺省值为[3.0, 80.0]
-- `cube_orb_indices`: 取值Vec\<[usize;3]\>。
-	- 指定需要生成cube文件的一组轨道。缺省为空，即`[]`
-    - 每一个矢量元素`[usize;3]`代表一组轨道信息：
-    - 第一个值(start_orb)为起始轨道的index
-    - 第二个值(end_orb)为截止轨道的index，与start_orb组成闭区间(closed interval)
-    - 第三个值(i_spin)是这组轨道所在的自旋通道。0为alpha自旋;1为beta自旋
-    - **注意**：REST的轨道排序从0开始，因此第一个轨道是0。如果HOMO是第X个轨道，在REST的排序是X-1
-	- 举例来说：闭壳层基态苯分子体系的HOMO-1、HOMO和LUMO是第20、21和22个轨道，在REST中的排序是19、20和21。打印alpha自旋通道上这三个轨道的设置是[[19,21,0]]
-- `cube_orb_type`: 取值String类型。指定生成的cube文件类型：
-  - `wavefunction`: 生成轨道波函数的cube文件（缺省）
-  - `density`: 生成轨道概率密度的cube文件（|ψ|²）
+- cube文件相关关键词 `cube_orb_setting`、`cube_orb_indices`、`cube_orb_type` 已移至 `[output]` 区块。`[ctrl]` 中的旧位置仍然可用（向后兼容，但已弃用），详见 `[output]` 区块说明。
 
 ## 计算方法相关关键词（Keyword）
 - `xc_parser`：指定用于解析`xc`关键词的方式，选项包括
@@ -1119,6 +1109,41 @@ multipole_orders = [1, 2]
 multipole_origin = [0.0, 0.0, 0.0]
 multipole_rdm1_relax = "unrelaxed"
 ```
+
+# Detailed description of [output] block in the control file
+
+`[output]` 区块控制 `[ctrl]` 中 `outputs` 列表所请求输出文件的生成方式。区块内所有关键词均有缺省设置，一般计算无需显式声明该区块。目前其关键词影响 fchk 文件 (`outputs = ["fchk"]`) 与 cube 文件 (`outputs = ["cube_orb"]`) 的写出。
+
+- `fchk_dm`：取值String类型。控制写入 fchk 文件的密度矩阵段。可选项：
+    - `auto`（缺省）：写入所有已计算的密度。即总是写入 `Total SCF Density`（开壳层 UHF 参考另行写入 `Spin SCF Density` 段，即 alpha − beta；ROHF 因分数占据无 alpha/beta 分拆，写入零占位段）；双杂化 (PT2 族) 计算若已求得弛豫 MP2 密度（如 `job_type = "force"` 的解析力计算），则额外写入 `Total MP2 Density` 段，开壳层另写 `Spin MP2 Density` 段
+    - `scf`：仅写入 SCF 密度段，省略全部 MP2 密度段
+    - `false`：不写入任何密度段
+    - **注意**：`fchk_dm = "false"` 要求链接的 librest2fch 库支持 `gen_density = 0`；过旧的库会无视该选项而总是写出密度
+- `fchk_writer`：取值String类型。选择写出 fchk 文件中 Gaussian 排布内容（MO 系数等）的写入器；密度段始终由 REST 自行计算与写出。可选项：
+    - `default`（缺省）：编译时启用了 cargo feature `librest2fch`（当前为缺省 feature）则使用 MOKIT 衍生的 Fortran 库 librest2fch 写出 MO 系数；否则使用 REST 原生的 Rust 写入器
+    - `librest2fch`：强制使用 librest2fch 库。若编译时未启用该 feature，程序报错
+    - `rust`：强制使用 REST 原生 Rust 写入器（不依赖 librest2fch 库，链接该库失败时可选用）
+
+一个显式设置的例子：
+```toml
+[output]
+fchk_dm = "scf"
+fchk_writer = "rust"
+```
+
+- `cube_orb_setting`: 取值[f64;2]。`outputs = ["cube_orb"]` 的格点参数设置。前一个值(margin)是边界信息，第二个值(num_grids)是生成格点的数目。缺省值为[3.0, 80.0]
+- `cube_orb_indices`: 取值Vec\<[usize;3]\>。
+	- 指定需要生成cube文件的一组轨道。缺省为空，即`[]`
+    - 每一个矢量元素`[usize;3]`代表一组轨道信息：
+    - 第一个值(start_orb)为起始轨道的index
+    - 第二个值(end_orb)为截止轨道的index，与start_orb组成闭区间(closed interval)
+    - 第三个值(i_spin)是这组轨道所在的自旋通道。0为alpha自旋;1为beta自旋
+    - **注意**：REST的轨道排序从0开始，因此第一个轨道是0。如果HOMO是第X个轨道，在REST的排序是X-1
+	- 举例来说：闭壳层基态苯分子体系的HOMO-1、HOMO和LUMO是第20、21和22个轨道，在REST中的排序是19、20和21。打印alpha自旋通道上这三个轨道的设置是[[19,21,0]]
+- `cube_orb_type`: 取值String类型。指定生成的cube文件类型：
+  - `wavefunction`: 生成轨道波函数的cube文件（缺省）
+  - `density`: 生成轨道概率密度的cube文件（|ψ|²）
+- **注意**：以上三个cube关键词原先位于 `[ctrl]` 区块。为向后兼容，`[ctrl]` 中的旧位置仍然可用（程序会打印弃用提示），但同一关键词在 `[output]` 中给出时以 `[output]` 为准。
 
 # Detailed description of [geom] block in the control file
 - `name`：取值String类型。分子体系的名称

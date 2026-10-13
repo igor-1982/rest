@@ -992,7 +992,10 @@ pub fn generator_deriv_hcore<'a>(scf_data: &'a SCF) -> impl FnMut(usize) -> Tsr<
     let device = DeviceBLAS::default();
 
     let necp_by_atom = {
-        let basis4elem = Molecule::collect_basis(&scf_data.mol.ctrl, &mut scf_data.mol.geom.clone()).0;
+        // take the basis already loaded into the molecule (from `basis_path`
+        // files, or reconstructed from the chkfile when `basis_path = "chkfile"`):
+        // re-collecting from disk here would break force jobs with chkbasis
+        let basis4elem = &scf_data.mol.basis4elem;
         basis4elem.iter().map(|i| if let Some(num_ecp) = i.ecp_electrons { num_ecp } else { 0 }).collect::<Vec<usize>>()
     };
     let has_ecp = necp_by_atom.iter().any(|&x| x > 0);

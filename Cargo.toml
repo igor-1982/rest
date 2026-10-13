@@ -87,7 +87,7 @@ features = ["generate-import-lib"]
 criterion = "0.4"
 
 [features]
-default = ["dftd3", "dftd4", "geometric-pyo3", "mpi"]
+default = ["dftd3", "dftd4", "geometric-pyo3", "mpi", "librest2fch"]
 mpi = ["dep:mpi", "rest_tensors/mpi"]
 dftd3 = ["dep:dftd3"]
 dftd4 = ["dep:dftd4"]
@@ -95,6 +95,12 @@ geometric-pyo3 = ["dep:geometric-pyo3"]
 openblas = []
 intel-mkl = []
 scalapack = ["rest_tensors/scalapack", "rest_tensors/mpi"]
+# Link the MOKIT-derived Fortran library `librest2fch` and use it to write the
+# MO coefficients of the fchk file (the default writer). The native Rust writer
+# (SCF::fchk_write_mo_rust) is always compiled in and can be selected at
+# runtime with `fchk_writer = "rust"` in the [ctrl] block; without this
+# feature, the native writer is the only option.
+librest2fch = []
 
 #[[bench]]
 #name = "bench_tensors"
