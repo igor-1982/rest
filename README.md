@@ -14,7 +14,7 @@
   - 输出格式是TOML
   - 输入卡必须包含[ctrl]和[geom]两个区块
   - [ctrl]中的大部分关键词有缺省设置。若用户无具体要求，不必出现在输入卡中
-  - 如果用户没有明确要求，设置num_threads为10
+  - 如果用户没有明确要求，设置num_threads为4
   - [ctr]区块中必须声明的关键词：
      1. 计算方法和配置相关：`xc`，`basis_path`，`print_level`，以及`num_threads`等
      2. 体系相关: `spin`, `charge`, `spin_polarization`等
@@ -112,7 +112,7 @@
   配合 `job_type = "md"/"sp"/"force"/"singlepoint"` 与 `[md]` 中的 `mm_file`/`mm_system_xml`/`mm_cutoff`。
   此时无需 `xc`、`basis_path` 与 `[geom]`。
 - `empirical_dispersion`:　取值为String。针对低级别密度泛函方法（包括LDA、BLYP、PBE、B3LYP、PBE0等）的经验色散校正方法。目前支持D3, D3BJ和D4。对于XYG3型双杂化泛函比如XYG3、XYG7、XYGJOS、scsRPA、R-xDH7、RPA等不需要经验色散校正
-- `post_ai_correction`：取值String。AI辅助的校正方法。目前仅支持SCC15，并只能和R-xDH7重整化双杂化泛函方法相匹配。相关文章见：Wang, Y.; Lin, Z.; Ouyang, R.; Jiang, B.; Zhang, I. Y.; Xu, X. Toward Efficient and Unified Treatment of Static and Dynamic Correlations in Generalized Kohn–Sham Density Functional Theory. [JACS Au 2024, 4 (8), 3205–3216](https://doi.org/10.1021/jacsau.4c00488). 
+- `post_ai_correction`：取值String。AI辅助的校正方法。目前仅支持SCC15，并只能和R-xDH7重整化双杂化泛函方法相匹配。 
 - `post_xc`：取值Vec\<String\>。采用自洽收敛的轨道和密度，进行不同的交换－关联泛函(xc)的计算。允许的方法包括REST支持的"xc"方法
 - `post_correlation`：取值Vec\<String\>。采用自洽收敛的轨道和密度，进行后自洽场高等级相关能方法计算。允许的方法包括PT2、sBGE2、RPA、scsRPA等
 
@@ -120,13 +120,15 @@
 - `grid_generation_level`: 取值usize。格点精度等级，数值越大越精确。缺省为3
 - `pruning`: 取值String。DFT方法或sap初猜所选用格点筛选。目前，REST支持nwchem，sg1以及none。其中none为不筛选。缺省为nwchem
 - `radial_grid_method`: 取值String。径向格点的生成方法。目前REST支持treutler，gc2nd， delley, becke, mura_knowles及lmg。缺省为treutler
-- `radii_adjust`: 取值String。Becke划分中原子的半径调整方案。`becke` 用Bragg半径本身（Becke 1988原文形式），`treutler` 用Bragg半径的平方根（Treutler-Ahlrichs 1995形式）。两者都满足权重和为1，差别随格点加密衰减。缺省为treutler（与 PySCF/PyFock 一致；历史缺省 becke 可用输入卡显式指定）
+- `radii_adjust`: 取值String。Becke划分中原子的半径调整方案。`becke` 用Bragg半径本身（Becke 1988原文形式），`treutler` 用Bragg半径的平方根（Treutler-Ahlrichs 1995形式）。两者都满足权重和为1，差别随格点加密衰减。缺省为treutler（历史缺省 becke 可用输入卡显式指定）
 
 ### VXC 格点积分优化相关关键词（Keyword）
-- `vxc_screen_threshold`: 取值f64。密度筛选阈值，在 VXC 计算中跳过密度低于此值的格点。对于大分子（真空区域多），可节省 30-70% 的 XC 计算量。设为 0.0 可关闭筛选。缺省为 1.0e-15。
+- `vxc_screen_threshold`: 取值f64。格点密度筛选阈值：批次内 `Σ_s|ρ_s|` 低于此值的格点跳过 XC 计算。缺省为 0.0（完全关闭：不构建掩码、不额外扫描格点）。设为正值时，还需该批次被筛掉的格点超过 25%（`active < 3/4·ngrids`）才真正走筛选路径；实测 ≤1.0e-4 从不触发，而能触发的最小档 1.0e-3 因当前实现要做全网格扫描与 AO 列拷贝反而慢约 4 倍、能量偏 44 μHa，故不建议用于生产计算（详见 pyfock_study/guess_compare/PLAN_vxc_screen_opt_20261007.md）。
+
+- `grid_prune_threshold`: 取值f64。**初猜密度的一次性格点裁剪**阈值：在自洽场迭代开始之前，把 `Σ_s|ρ_s|·|w_p|` 低于此值的格点从格点集合中删除（`ρ` 为初猜密度：SAD/vsap/`guessfile`/`hcore`；`w_p` 为该点的积分权重），随后重建 non0tab 压缩 AO/AOP 表；此后所有 SCF 迭代、能量与梯度都在裁剪后的网格上计算。缺省为 0.0（不裁剪）。判据含权重是刻意的：远端格点 ρ 小而 w 大，只用裸 `|ρ|` 会误删这些点；被删比例 < 2% 时程序放弃裁剪（重建不划算）；`use_isdf = true` 时本项被忽略（ISDF 表建在未裁剪网格上）。与 `vxc_screen_threshold` 的区别：后者是**每次迭代**在 Vxc 内部跳过格点，本项是**一次性**从格点集合删除。做法借鉴 PyFock 的一次性 `|ρ·w| ≥ 1e-11` 剪枝。实测：(H2O)10/PBE0/def2-SVP 取 1.0e-11 删 20.8% 格点、能量移动 +4.3e-9 Ha；(H2O)30/B3LYP/def2-SVP 取 1.0e-12 删 21.5%、+1.9e-9 Ha；裁剪结果与线程数无关（1/4 线程删除数相同）。
 - `ao_cutoff`: 取值f64。AO 格点值截断阈值，启用 non0tab 稀疏存储。AO 值低于此阈值的基函数-格点对被当作零处理。缺省为 1.0e-9：格点制表按批次只存超过阈值的 AO/AOP 元素，稠密 AO/AOP 不分配。若某体系在该阈值下 AO 存留率高于 90%，程序自动放弃压缩、回退稠密存储。设为 0.0 可强制关闭压缩。(H2O)30 / B3LYP / def2-SVP 实测：1.0e-9 相对 1.0e-12 峰值内存少约 10%、墙钟少约 12%，能量差约 1 nHa。
 - `non0tab_blksize`: 取值usize。non0tab 压缩存储中每个格点批次的大小。设为 0（缺省）时程序根据基组大小自动选择 [32, 256]。设为具体值则固定该批次大小。
-- `drop_dense_ao`: 取值布尔类型。non0tab 压缩存储生成后是否释放稠密 AO/AOP 矩阵以节省内存。缺省为 false。当 `ao_cutoff > 0` 且该体系 AO 稀疏率 < 90% 时，设为 true 可显著降低内存。
+- `drop_dense_ao`: 取值布尔类型。在稠密 AO/AOP 已经分配、non0tab 压缩存储生成后，是否释放稠密 AO/AOP 矩阵以节省内存。缺省为 false。仅当 `ao_cutoff = 0.0`（稠密路径：先分配稠密 AO/AOP，再额外构建压缩存储）时该开关才起作用；`ao_cutoff > 0` 的稀疏路径只分配压缩存储、从不分配稠密 AO/AOP，此时本项为空操作。
 
 ## 基组相关关键词（Keyword）
 - `eri_type`: 取值String类型。设置四中心积分计算方法。选项：
@@ -213,6 +215,28 @@ auxbas_path = "def2-universal-jkfit"
 guessfile = "my_checkpoint.rchk"
 ```
 
+## RI 密度拟合的分解策略（Keyword）
+
+密度拟合（`eri_type = "ri-v"`）先把 2c-2e 辅助基库仑度量化成 $J = L L^{\mathsf T}$（或 $J^{-1/2}$），再把三中心张量变换为 $Y_{\mu\nu,P}$。`[ctrl.j2c_decomp]` 表控制这一步的分解方式：
+
+````toml
+[ctrl.j2c_decomp]
+     policy = "cd"            # "cd"（Cholesky）或 "eig"（特征值）；缺省 "eig"
+     threshold = 1.0e-13      # 缺省 1.0e-13
+     uplo = "upper"           # 仅 Cholesky 使用；开发者选项，缺省 "upper"
+     distributed = "auto"     # 仅 Cholesky + MPI 使用，缺省 "auto"
+````
+
+- `policy`：取值String。
+    - `"cd"`（别名 `cholesky`）：Cholesky 分解，得到三角因子 $L$，$J^{-1/2}$ 通过三角求解（TRSM）作用于 $L$ 隐式获得，不显式构造逆。
+    - `"eig"`（别名 `eigen`/`eig`/`eigenvalue`）：对称特征分解，显式构造 $J^{-1/2} = V \Lambda^{-1/2} V^{\mathsf T}$。形式上更正交，但代价明显更高。**缺省为 `"eig"`**（保持历史缺省与既有回归参考值；一般计算建议显式写 `policy = "cd"`）。
+- `threshold`：取值f64。缺省 1.0e-13。`policy = "cd"` 时，若 Cholesky 因子对角元小于该阈值，先将矩阵补正到满足该阈值的正定程度再重新分解；`policy = "eig"` 时，只保留大于该阈值的特征值来构造 $J^{-1/2}$。
+- `uplo`：取值String。`"upper"`（缺省）或 `"lower"`，仅对 Cholesky 有效。列主序下通常使用 upper；lower 仅供调试与测试。
+- `distributed`：取值String。`"auto"`（缺省）/`"on"`/`"off"`。仅在（1）编译了 `scalapack` 与 `mpi` 特性、（2）MPI 进程数 ≥ 2、（3）`policy = "cd"` 三条同时满足时生效，其余组合一律回退到 rank-0 串行路径（特征分解没有分布式实现）。`auto` 仅在辅助基函数数 $n_{aux} \ge 8192$ 且进程数 ≥ 32 时才启用分布式 Cholesky 与三角求解；小体系测试可用 `on` 强制打开。
+
+**性能与精度**：(H2O)30 / B3LYP / def2-SVP（4 线程）实测，仅将 `policy` 由 `eig` 改为 `cd`：2c-2e 分解 10.48 s → **0.61 s**，度量变换 145.1 s → **55.2 s**，度量相关（CInt）相 170.3 s → **70.7 s（−58.5%）**，端到端墙钟 8:43 → **6:43（−23%）**；峰值内存不变（13.1 GB），能量差 **+4.2e-9 Ha（4.2 nHa）**。因此对生产计算**推荐显式指定 `policy = "cd"`**。
+
+**与其他关键词的关系**：`algorithm_jk`/`algorithm_j`/`algorithm_k` 决定 $Y_{\mu\nu,P}$ 是常驻内存（`ri-incore`）还是即算即用（`ri-direct`），`j2c_decomp` 决定 $Y$ 的构造方式，两者正交、可自由组合。`ri-incore` 需要约 $0.5\,n_{ao}^2 n_{aux}$ 个双精度数的存储，通常是内存峰值的主要来源。
 ## 自洽场计算相关关键词（Keyword）
 - `max_scf_cycle`: 取值i32。自洽场运算的最大迭代循环数。缺省为100
 - `noiter`: 取值布尔类型。是否跳过自洽场运算。缺省为false

@@ -6113,6 +6113,22 @@ pub fn initialize_scf(scf_data: &mut SCF, mpi_operator: &Option<MPIOperator>) {
     //    println!("{:<16}: {:16.8} Ha", name, energy[0]+energy[1]);
     //});
     //println!("======= IGOR debug ========");
+    // Optional one-shot pruning of the molecular grid on the initial-guess density
+    // (opt-in, `grid_prune_threshold > 0`). The ISDF tables are built from the
+    // unpruned grid, so the combination is refused instead of silently mixing two
+    // grid sets.
+    if scf_data.mol.ctrl.grid_prune_threshold > 0.0 {
+        if scf_data.mol.ctrl.use_isdf {
+            println!("WARNING: grid_prune_threshold is ignored when use_isdf is enabled (the ISDF tables are built from the unpruned grid)");
+        } else if let Some(grids) = scf_data.grids.as_mut() {
+            grids.prune_by_density(
+                &scf_data.mol,
+                &scf_data.density_matrix,
+                scf_data.mol.spin_channel,
+                scf_data.mol.ctrl.grid_prune_threshold,
+            );
+        }
+    }
     time_mark.count("InitGuess");
 
     time_mark.count("Overall");
