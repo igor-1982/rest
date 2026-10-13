@@ -308,11 +308,19 @@ pub fn create_pool(num_threads: usize) -> Result<rayon::ThreadPool,ThreadPoolBui
     }
  }
 
+/// Pattern behind [`convert_scientific_notation_to_fortran_format`].
+///
+/// Compiled once instead of on every call: the original rebuilt the regex
+/// inside the function body, which is invisible for a handful of values but
+/// pathological in a per-value loop (the fchk writer used to call this once per
+/// number written, i.e. millions of times per job).
+static FORTRAN_FORMAT_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"(?P<num> *-?\d.\d*)[E|e](?P<exp>-?\d{1,2})").unwrap());
+
 pub fn convert_scientific_notation_to_fortran_format(n: &String) -> String {
-    let re = Regex::new(r"(?P<num> *-?\d.\d*)[E|e](?P<exp>-?\d{1,2})").unwrap();
     let o_len = n.len();
 
-    if let Some(cap) = re.captures(n) {
+    if let Some(cap) = FORTRAN_FORMAT_RE.captures(n) {
         let main_part = cap["num"].to_string();
         let exp_part = cap["exp"].to_string();
         let exp: i32 = exp_part.parse().unwrap();
