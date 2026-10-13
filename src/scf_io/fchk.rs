@@ -573,7 +573,11 @@ impl SCF {
         let fname = format!("{}.fchk", self.mol.geom.name);
         let tmpname = format!("{}.t", fname);
         let content = fs::read_to_string(&fname).unwrap();
-        let mut output = fs::File::create(&tmpname).unwrap();
+        // The rewrite is line-by-line, so the sink has to be buffered: an
+        // unbuffered `File` costs one `write(2)` per output line, and a job with
+        // a few thousand basis functions rewrites a file of several hundred MB.
+        let file = fs::File::create(&tmpname).unwrap();
+        let mut output = BufWriter::with_capacity(FCHK_BUFFER_SIZE, file);
         for line in content.lines() {
             writeln!(output, "{}", line).unwrap();
             let i_spin = if line.starts_with("Alpha MO coefficients") {
@@ -594,7 +598,8 @@ impl SCF {
                 dump_real_r2f!(output, mo);
             }
         }
-        output.sync_all().unwrap();
+        output.flush().unwrap();
+        output.into_inner().unwrap().sync_all().unwrap();
         fs::rename(&tmpname, &fname).unwrap();
     }
 
