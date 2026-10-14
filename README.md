@@ -1115,14 +1115,13 @@ multipole_rdm1_relax = "unrelaxed"
 `[output]` 区块控制 `[ctrl]` 中 `outputs` 列表所请求输出文件的生成方式。区块内所有关键词均有缺省设置，一般计算无需显式声明该区块。目前其关键词影响 fchk 文件 (`outputs = ["fchk"]`) 与 cube 文件 (`outputs = ["cube_orb"]`) 的写出。
 
 - `fchk_dm`：取值String类型。控制写入 fchk 文件的密度矩阵段。可选项：
-    - `auto`（缺省）：写入所有已计算的密度。即总是写入 `Total SCF Density`（开壳层 UHF 参考另行写入 `Spin SCF Density` 段，即 alpha − beta；ROHF 因分数占据无 alpha/beta 分拆，写入零占位段）；双杂化 (PT2 族) 计算若已求得弛豫 MP2 密度（如 `job_type = "force"` 的解析力计算），则额外写入 `Total MP2 Density` 段，开壳层另写 `Spin MP2 Density` 段
+    - `auto`（缺省）：写入所有已计算的密度。即总是写入 `Total SCF Density`（开壳层 UHF 参考另行写入 `Spin SCF Density`）；双杂化 (PT2 族) 计算若已求得弛豫 MP2 密度（如 `job_type = "force"` 的解析力计算），则额外写入 `Total MP2 Density` 段，开壳层另写 `Spin MP2 Density` 段
     - `scf`：仅写入 SCF 密度段，省略全部 MP2 密度段
     - `false`：不写入任何密度段
-    - **注意**：`fchk_dm = "false"` 要求链接的 librest2fch 库支持 `gen_density = 0`；过旧的库会无视该选项而总是写出密度
-- `fchk_writer`：取值String类型。选择写出 fchk 文件中 Gaussian 排布内容（MO 系数等）的写入器；密度段始终由 REST 自行计算与写出。可选项：
-    - `default`（缺省）：编译时启用了 cargo feature `librest2fch`（当前为缺省 feature）则使用 MOKIT 衍生的 Fortran 库 librest2fch 写出 MO 系数；否则使用 REST 原生的 Rust 写入器
-    - `librest2fch`：强制使用 librest2fch 库。若编译时未启用该 feature，程序报错
-    - `rust`：强制使用 REST 原生 Rust 写入器（不依赖 librest2fch 库，链接该库失败时可选用）
+- `fchk_writer`：取值String类型。选择写出 fchk 文件中 MO 系数等的写入器。可选项：
+    - `default`（缺省）：编译时启用了 cargo feature `librest2fch`（当前为缺省 feature）则使用 MOKIT 的 librest2fch 写出 MO 系数；否则使用 REST 原生的 Rust 写入器
+    - `librest2fch`：使用 librest2fch 库。若编译时未启用该 feature，程序报错
+    - `rust`：使用 REST 原生 Rust 写入器
 
 一个显式设置的例子：
 ```toml
