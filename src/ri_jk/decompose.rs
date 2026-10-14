@@ -156,6 +156,29 @@ pub fn generate_rimatr_bare_on_cint(
     j2c_decomp_option: J2CDecompOption,
     omega: Option<f64>,
 ) -> MatrixFull<f64> {
+    generate_rimatr_bare_on_cint_prescreened(mol, aux, j2c_decomp_option, omega, None)
+}
+
+/// Same as [`generate_rimatr_bare_on_cint`], with the AO-pair rows restricted to `keep` **before**
+/// the metric transformation.
+///
+/// `keep` lists full packed AO-pair indices, ascending, and has to be a conservative superset of
+/// the rows the storage-level pruning of the same tensor will retain
+/// ([`prescreen_pair_keep`](crate::ri_jk::prescreen_pair_keep) produces one). Dropping a row that
+/// the pruning would have kept changes the energy, so the caller must not use a tighter cut here
+/// than the mask it runs afterwards.
+///
+/// The elimination sits between the three-centre integration and the metric solve. The
+/// integration still evaluates every shell pair (the `s2ij` driver has no pair-level screening),
+/// but the metric transformation only touches `keep.len()` rows instead of the full
+/// `nao(nao+1)/2`, and so does the row-max sweep of the storage-level pruning that follows.
+pub fn generate_rimatr_bare_on_cint_prescreened(
+    mol: &CInt,
+    aux: &CInt,
+    j2c_decomp_option: J2CDecompOption,
+    omega: Option<f64>,
+    keep: Option<&[usize]>,
+) -> MatrixFull<f64> {
     let mut mol = mol.clone();
     let mut aux = aux.clone();
 
@@ -167,13 +190,23 @@ pub fn generate_rimatr_bare_on_cint(
     let device = DeviceBLAS::default();
 
     let j2c_decomp = get_j2c_decomp(&aux, &device, j2c_decomp_option);
+
     let j3c = {
         let (out, shape) = CInt::integrate_cross("int3c2e", [&mol, &mol, &aux], "s2ij", None).into();
         rt::asarray((out, shape.f(), &device))
     };
-    let cderi = get_solved_j3c(j3c, &j2c_decomp, false);
 
-    let shape = cderi.shape().to_vec().try_into().unwrap();
+    let cderi = match keep {
+        None => get_solved_j3c(j3c, &j2c_decomp, false),
+        Some(keep) => {
+            let shape: [usize; 2] = j3c.shape().to_vec().try_into().unwrap();
+            let j3c_mat = MatrixFull::from_vec(shape, j3c.into_shape(-1).into_vec()).unwrap();
+            let j3c_mat = super::compact_rimatr_rows(j3c_mat, keep);
+            get_solved_j3c(j3c_mat.into_rstsr(&device), &j2c_decomp, false)
+        }
+    };
+
+    let shape: [usize; 2] = cderi.shape().to_vec().try_into().unwrap();
     MatrixFull::from_vec(shape, cderi.into_shape(-1).into_vec()).unwrap()
 }
 

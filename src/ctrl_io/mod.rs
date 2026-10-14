@@ -381,6 +381,11 @@ pub struct InputKeywords {
     pub use_dm_only: bool,
     #[pyo3(get, set)]
     pub vxc_screen_threshold: f64,
+    /// Drop the grid points whose initial-guess density contribution
+    /// `|rho_p * w_p|` is below this value, once, before the SCF iterations.
+    /// 0.0 (default) keeps every grid point.
+    #[pyo3(get, set)]
+    pub grid_prune_threshold: f64,
     #[pyo3(get, set)]
     pub ao_cutoff: f64,
     #[pyo3(get, set)]
@@ -610,7 +615,8 @@ impl InputKeywords {
             // True:  using only density matrix in the evaluation
             // False: use coefficients as well with higher efficiency
             use_dm_only: false,
-            vxc_screen_threshold: 1.0e-15,
+            vxc_screen_threshold: 0.0, // 0.0 = 关闭格点密度筛选（见 README）
+            grid_prune_threshold: 0.0,  // 0.0 = 不剪枝（见 README）
             ao_cutoff: 1.0e-9,
             non0tab_blksize: 0,     // 0 = auto-select based on nao
             drop_dense_ao: false,
@@ -1717,9 +1723,14 @@ pub fn parse_ctrl_keywords(tmp_keys: &serde_json::Value) -> anyhow::Result<Input
                 other => false,
             };
             tmp_input.vxc_screen_threshold = match tmp_ctrl.get("vxc_screen_threshold").unwrap_or(&serde_json::Value::Null) {
-                serde_json::Value::Number(num) => num.as_f64().unwrap_or(1.0e-15),
-                serde_json::Value::String(s) => s.parse().unwrap_or(1.0e-15),
-                _ => 1.0e-15,
+                serde_json::Value::Number(num) => num.as_f64().unwrap_or(0.0),
+                serde_json::Value::String(s) => s.parse().unwrap_or(0.0),
+                _ => 0.0,
+            };
+            tmp_input.grid_prune_threshold = match tmp_ctrl.get("grid_prune_threshold").unwrap_or(&serde_json::Value::Null) {
+                serde_json::Value::Number(num) => num.as_f64().unwrap_or(0.0),
+                serde_json::Value::String(s) => s.parse().unwrap_or(0.0),
+                _ => 0.0,
             };
             tmp_input.ao_cutoff = match tmp_ctrl.get("ao_cutoff").unwrap_or(&serde_json::Value::Null) {
                 serde_json::Value::Number(num) => num.as_f64().unwrap_or(1.0e-9),

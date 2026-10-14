@@ -496,12 +496,61 @@ impl SCF {
         // K_full still needs standard rimatr (generate_vk_ri_direct has unresolved RSTSR bug).
         // K_erfc uses rimatr_sr.
         // TODO: when generate_vk_ri_direct is fixed, add `if !is_rsh` to skip standard rimatr for RSH.
+
+        // A-priori AO-pair pre-screen of the in-core RI tensor: assigned in the block below,
+        // before the build, and consumed again by the storage-level pruning after it.
+        let mut prescreen_keep: Option<Vec<usize>> = None;
+
         {
             // preparing the three-center integrals in the full format
             self.ri3fn = if ri3fn_full && !isdf {
                 Some(self.mol.prepare_ri3fn_for_ri_v_full_rayon())
             } else if self.mol.ctrl.isdf_k_only {
                 Some(self.mol.prepare_ri3fn_for_ri_v_full_rayon())
+            } else {
+                None
+            };
+
+            // A-priori AO-pair pre-screen of the in-core RI tensor.
+            //
+            // The storage-level pruning below runs on the finished tensor, so the three-centre
+            // integration and the metric transformation would otherwise pay for every AO pair.
+            // The rows it will keep are a subset of the ones whose *Schwarz* bound clears the same
+            // relative threshold, and that bound is available before any three-centre integral, so
+            // the tensor can be built on the smaller row space directly. The pruning still runs
+            // afterwards on the compacted tensor, so the resulting `PairMap` and the row layout
+            // that the SCF, the gradient and the post-SCF consumers see are exactly the ones of the
+            // unprescreened path.
+            //
+            // MPI keeps the full build: the auxiliary columns are distributed over the ranks, and
+            // the pre-screen would have to be threaded through the distributed builder as well.
+            // The cut is deliberately loose (PRESCREEN_SAFETY below the pruning threshold) because
+            // the Schwarz bound bounds the untransformed block while the pruning acts on the
+            // metric-transformed row maximum.
+            const PRESCREEN_SAFETY: f64 = 10.0;
+            prescreen_keep = if self.mol.ctrl.ri_jk.pair_screen_threshold > 0.0
+                && ri3fn_symm
+                && mpi_operator.is_none()
+            {
+                let cint_mol = ri_jk::util::get_cint_mol(&self.mol);
+                let (basbas2baspar, _) = ri_jk::generate_baspar(self.mol.num_basis);
+                let nao = self.mol.num_basis;
+                let keep = ri_jk::prescreen_pair_keep(
+                    &cint_mol,
+                    nao,
+                    &basbas2baspar,
+                    self.mol.ctrl.ri_jk.schwartz_overlap_tol2,
+                    self.mol.ctrl.ri_jk.pair_screen_threshold / PRESCREEN_SAFETY,
+                );
+                info!(
+                    "In-core RI pair pre-screen: {} of {} AO pairs kept for the build \
+                     (threshold {:.1e}, safety factor {:.0}).",
+                    keep.len(),
+                    nao * (nao + 1) / 2,
+                    self.mol.ctrl.ri_jk.pair_screen_threshold,
+                    PRESCREEN_SAFETY
+                );
+                Some(keep)
             } else {
                 None
             };
@@ -515,8 +564,10 @@ impl SCF {
                     let cint_bas = self.mol.cint_fdqc.clone();
                     local_mpi.distribute_rimatr_tasks(num_auxbas, num_basis, cint_bas);
                 }
-                let (rimatr, basbas2baspar, baspar2basbas) =
-                    self.mol.prepare_rimatr_for_ri_v_mpi_rayon(None, mpi_operator);
+                let (rimatr, basbas2baspar, baspar2basbas) = match &prescreen_keep {
+                    Some(keep) => self.mol.prepare_rimatr_for_ri_v_rayon_prescreened(None, Some(keep)),
+                    None => self.mol.prepare_rimatr_for_ri_v_mpi_rayon(None, mpi_operator),
+                };
                 Some((rimatr, basbas2baspar, baspar2basbas))
             } else if ri3fn_symm && isdf {
                 None
@@ -563,24 +614,60 @@ impl SCF {
         if pair_screen_threshold > 0.0 {
             if let Some((rimatr, basbas2baspar, baspar2basbas)) = self.rimatr.take() {
                 let nao = basbas2baspar.size()[0];
-                let mut screen = ri_jk::RIMatrPairScreen::build(&rimatr, &basbas2baspar, nao);
-                // In MPI the auxiliary functions are distributed over the ranks, so the local row
-                // maxima are only partial: without the global maximum every rank would keep a
-                // different pair set and the reduced J/K would miss the dropped contributions.
-                #[cfg(feature = "mpi")]
-                if let Some(mpi_op) = mpi_operator {
-                    let mut global = mpi_reduce(&mpi_op.world, &screen.bounds, 0, &SystemOperation::max());
-                    mpi_broadcast_vector(&mpi_op.world, &mut global, 0);
-                    screen.bounds = global;
-                }
-                info!(
-                    "In-core RI pair screening enabled (threshold {:.1e}, {} AO pairs).",
-                    pair_screen_threshold,
-                    screen.bounds.len()
-                );
+                let num_baspar_full = nao * (nao + 1) / 2;
+                let (pruned, screen) = match &prescreen_keep {
+                    // The tensor was built on the row space of the a-priori pre-screen, so its own
+                    // row bounds are the ones the storage level selects on. The map is built back
+                    // in the full packed pair space of `baspar2basbas`, and the diagonal-pair flags
+                    // of the full-space diagnostic screen are recovered from the pair table.
+                    Some(outer) => {
+                        let bounds = ri_jk::row_bounds(&rimatr);
+                        info!(
+                            "In-core RI pair screening enabled (threshold {:.1e}, {} AO pairs, \
+                             pre-screened build of {} rows).",
+                            pair_screen_threshold,
+                            num_baspar_full,
+                            bounds.len()
+                        );
+                        let num_auxbas = rimatr.size()[1];
+                        let pruned = ri_jk::prune_rimatr_prescreened(
+                            rimatr, &bounds, outer, num_baspar_full, &baspar2basbas, pair_screen_threshold);
+                        let mut bounds_full = vec![0.0_f64; num_baspar_full];
+                        for (r, &p) in outer.iter().enumerate() {
+                            bounds_full[p] = bounds[r];
+                        }
+                        let mut is_diagonal = vec![false; num_baspar_full];
+                        for i in 0..nao {
+                            let p = basbas2baspar[[i, i]];
+                            if p < num_baspar_full {
+                                is_diagonal[p] = true;
+                            }
+                        }
+                        let screen = ri_jk::RIMatrPairScreen { bounds: bounds_full, is_diagonal, num_auxbas };
+                        (pruned, screen)
+                    }
+                    None => {
+                        let mut screen = ri_jk::RIMatrPairScreen::build(&rimatr, &basbas2baspar, nao);
+                        // In MPI the auxiliary functions are distributed over the ranks, so the
+                        // local row maxima are only partial: without the global maximum every rank
+                        // would keep a different pair set and the reduced J/K would miss the
+                        // dropped contributions.
+                        #[cfg(feature = "mpi")]
+                        if let Some(mpi_op) = mpi_operator {
+                            let mut global = mpi_reduce(&mpi_op.world, &screen.bounds, 0, &SystemOperation::max());
+                            mpi_broadcast_vector(&mpi_op.world, &mut global, 0);
+                            screen.bounds = global;
+                        }
+                        info!(
+                            "In-core RI pair screening enabled (threshold {:.1e}, {} AO pairs).",
+                            pair_screen_threshold,
+                            screen.bounds.len()
+                        );
 
-                let num_baspar_full = screen.bounds.len();
-                let pruned = ri_jk::prune_rimatr(rimatr, &screen, &baspar2basbas, pair_screen_threshold);
+                        let pruned = ri_jk::prune_rimatr(rimatr, &screen, &baspar2basbas, pair_screen_threshold);
+                        (pruned, screen)
+                    }
+                };
                 let num_kept = pruned.map.len();
                 info!(
                     "Storage-level AO-pair pruning: {} of {} AO-pair rows stored ({:.2}%), \
@@ -2480,7 +2567,6 @@ impl SCF {
                 }
                 electron_force[t] = 2.0 * sum_val;
             }
-
             let mut nuclear_force = [0.0; 3];
             for a in 0..nuclear_charges.len() {
                 let pos_a = [qm_position[[0, a]], qm_position[[1, a]], qm_position[[2, a]]];
@@ -6027,6 +6113,22 @@ pub fn initialize_scf(scf_data: &mut SCF, mpi_operator: &Option<MPIOperator>) {
     //    println!("{:<16}: {:16.8} Ha", name, energy[0]+energy[1]);
     //});
     //println!("======= IGOR debug ========");
+    // Optional one-shot pruning of the molecular grid on the initial-guess density
+    // (opt-in, `grid_prune_threshold > 0`). The ISDF tables are built from the
+    // unpruned grid, so the combination is refused instead of silently mixing two
+    // grid sets.
+    if scf_data.mol.ctrl.grid_prune_threshold > 0.0 {
+        if scf_data.mol.ctrl.use_isdf {
+            println!("WARNING: grid_prune_threshold is ignored when use_isdf is enabled (the ISDF tables are built from the unpruned grid)");
+        } else if let Some(grids) = scf_data.grids.as_mut() {
+            grids.prune_by_density(
+                &scf_data.mol,
+                &scf_data.density_matrix,
+                scf_data.mol.spin_channel,
+                scf_data.mol.ctrl.grid_prune_threshold,
+            );
+        }
+    }
     time_mark.count("InitGuess");
 
     time_mark.count("Overall");
