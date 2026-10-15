@@ -19,6 +19,7 @@ use crate::grad::rhf::{RIRHFGradient, RIHFGradientFlags};
 use crate::dft::{Grids, DFA4REST};
 use crate::dft::xc_deriv::XCType;
 use crate::dft::num_int::{NumInt, XCData, BlockSettings};
+use crate::dft::num_int::{GRID_BLOCK_AO_NS, GRID_BLOCK_RHOXC_NS, GRID_BLOCK_CONTRACT_NS, GRID_BLOCK_COUNT};
 use crate::dft::num_int::{eval_rho5_batch, eval_rho5_dm_only_batch, eval_ao_batch};
 use crate::dft::libxc_itrf::{eval_xc_eff};
 use crate::utilities::{self, balancing};
@@ -179,8 +180,29 @@ impl RIRHFGradient<'_> {
         // get dx vxc [nao, nao, 3]
         let scf_data = self.scf_data; 
         let xc_data = self.gen_xc_data(scf_data, 0);
-        let mut mol = scf_data.mol.clone();
-        let grids = &mut Grids::build(&mut mol);
+        // Reuse the SCF grid (points/weights/partition) instead of regenerating
+        // it. The SCF grid carries the identical deterministic content (the
+        // rank-local portion under MPI) plus any grid pruning applied during
+        // `initialize_scf`, so the XC gradient is evaluated on the same grid
+        // as the XC energy and one full grid generation is saved. AO values
+        // (up to second derivatives) are still evaluated per block on the fly.
+        // Fall back to a fresh build only when the SCF data holds no grids.
+        let mut owned_grids: Option<Grids> = None;
+        let mut owned_mol: Option<Molecule> = None;
+        let t_grid_build = std::time::Instant::now();
+        let grids_reused = scf_data.grids.is_some();
+        let grids: &Grids = match scf_data.grids.as_ref() {
+            Some(g) => g,
+            None => {
+                let mut mol = scf_data.mol.clone();
+                let g = Grids::build(&mut mol);
+                owned_mol = Some(mol);
+                owned_grids = Some(g);
+                owned_grids.as_ref().unwrap()
+            },
+        };
+        let t_grid_build = t_grid_build.elapsed();
+        let mol: &Molecule = owned_mol.as_ref().unwrap_or(&scf_data.mol);
         let mem_probe_on =
             utilities::memory_batch::mem_probe_enabled(self.scf_data.mol.ctrl.print_level);
         utilities::memory_batch::mem_probe("calc_de_xc: before get_vxc_rayon_new", mem_probe_on);
@@ -188,7 +210,24 @@ impl RIRHFGradient<'_> {
         // let dao_vxc = get_vxc_rayon(&self, &xc_data, grids, &scf_data.mol);
         // 每线程每块的 XC 工作集预算，由 [ctrl] max_memory 推得，未设置时保持历史上的 16 MiB
         let xc_block_mb = utilities::memory_batch::xc_grad_block_mb(self.flags.max_memory, 16.0);
-        let dao_vxc = get_vxc_rayon_new(&self, &xc_data, grids, &mol, xc_block_mb as usize);
+        GRID_BLOCK_AO_NS.store(0, std::sync::atomic::Ordering::Relaxed);
+        GRID_BLOCK_RHOXC_NS.store(0, std::sync::atomic::Ordering::Relaxed);
+        GRID_BLOCK_CONTRACT_NS.store(0, std::sync::atomic::Ordering::Relaxed);
+        GRID_BLOCK_COUNT.store(0, std::sync::atomic::Ordering::Relaxed);
+        let t_pipeline = std::time::Instant::now();
+        let dao_vxc = get_vxc_rayon_new(&self, &xc_data, grids, mol, xc_block_mb as usize);
+        let t_pipeline = t_pipeline.elapsed();
+        if self.scf_data.mol.ctrl.print_level >= 2 {
+            let nthr = rayon::current_num_threads() as f64;
+            let nblk = GRID_BLOCK_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+            let ao_s = GRID_BLOCK_AO_NS.load(std::sync::atomic::Ordering::Relaxed) as f64 / 1.0e9;
+            let rho_s = GRID_BLOCK_RHOXC_NS.load(std::sync::atomic::Ordering::Relaxed) as f64 / 1.0e9;
+            let con_s = GRID_BLOCK_CONTRACT_NS.load(std::sync::atomic::Ordering::Relaxed) as f64 / 1.0e9;
+            println!("XC grad profile: grid {} ({:.3} s); block pipeline {:.3} s wall over {} blocks / {} threads; worker-sums: ao_eval {:.3} s, rho+xc {:.3} s, contraction {:.3} s (est. wall shares: {:.3}, {:.3}, {:.3} s)",
+                if grids_reused { "reused from SCF" } else { "freshly built" },
+                t_grid_build.as_secs_f64(), t_pipeline.as_secs_f64(), nblk, nthr as usize,
+                ao_s, rho_s, con_s, ao_s / nthr, rho_s / nthr, con_s / nthr);
+        }
         utilities::memory_batch::mem_probe("calc_de_xc: after get_vxc_rayon_new", mem_probe_on);
         // println!("Print dao_vxc: {:?}", dao_vxc);
         
@@ -657,7 +696,7 @@ fn get_vxc_rayon(gradient_method: &RIRHFGradient, xc_data: &XCData, grids: &mut 
 /// `block_mem_mb` bounds the workspace of **one block of one worker**, so callers pass a
 /// per-thread share of the declared budget (`utilities::memory_batch::xc_grad_block_mb`),
 /// never `[ctrl] max_memory` itself.
-pub fn get_vxc_rayon_new(gradient_method: &RIRHFGradient, xc_data: &XCData, grids: &mut Grids, mol: &Molecule, block_mem_mb: usize) -> Tsr<f64> {
+pub fn get_vxc_rayon_new(gradient_method: &RIRHFGradient, xc_data: &XCData, grids: &Grids, mol: &Molecule, block_mem_mb: usize) -> Tsr<f64> {
     let default_omp_num_threads = omp_get_num_threads_wrapper();
 
     let num_grids = grids.weights.len();
@@ -705,7 +744,8 @@ pub fn get_vxc_rayon_new(gradient_method: &RIRHFGradient, xc_data: &XCData, grid
             omp_set_num_threads_wrapper(1);
 
             let ng = block.weights.len();
-            let loc_rho = if let Some(mo) = &xc_data.mo_coeffs 
+            let t_rhoxc = std::time::Instant::now();
+            let loc_rho = if let Some(mo) = &xc_data.mo_coeffs
             {
                 eval_rho5_batch(&block.ao, xc_data.xc_type, mo, xc_data.occ.as_ref().unwrap(), 1, ng)
             } else {
@@ -713,6 +753,7 @@ pub fn get_vxc_rayon_new(gradient_method: &RIRHFGradient, xc_data: &XCData, grid
             };
 
             let xc_ten = eval_xc_eff(xc_data.xc_code, xc_data.xc_params, xc_data.xc_type, 0, &loc_rho.raw(), ng, deriv);
+            GRID_BLOCK_RHOXC_NS.fetch_add(t_rhoxc.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
             let loc_vxc = rt::asarray(xc_ten[1].as_ref().expect("vxc not provided for this xc_type"));
 
             let loc_w = rt::asarray((block.weights, device));
@@ -722,6 +763,7 @@ pub fn get_vxc_rayon_new(gradient_method: &RIRHFGradient, xc_data: &XCData, grid
             let mut wv = loc_vxc * &loc_w.i((.., None));
             let mut loc_vmat = rt::zeros(([num_basis, num_basis, 3], device));
 
+            let t_contract = std::time::Instant::now();
             match xc_data.xc_type {
                 XCType::LDA => {
                     // `loc_vmat` has the Cartesian axis LAST ([nao,nao,3]), like
@@ -746,6 +788,7 @@ pub fn get_vxc_rayon_new(gradient_method: &RIRHFGradient, xc_data: &XCData, grid
                 }
                 XCType::HF => unreachable!("HF gradient not supported in get_vxc_rayon_new"),
             }
+            GRID_BLOCK_CONTRACT_NS.fetch_add(t_contract.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
             loc_vmat
         })
         .reduce(

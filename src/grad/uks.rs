@@ -88,8 +88,23 @@ impl RIUHFGradient<'_> {
         // println!("Calculating dx vxc");
         let scf_data = self.scf_data; 
         let xc_data = self.gen_xc_data(scf_data, 1);
-        let mut mol = scf_data.mol.clone();
-        let grids = &mut Grids::build(&mut mol);
+        // Reuse the SCF grid (points/weights/partition), mirroring the RKS
+        // path: identical deterministic content (rank-local under MPI),
+        // consistent with any SCF grid pruning, and one grid generation saved.
+        // Fall back to a fresh build only when the SCF data holds no grids.
+        let mut owned_grids: Option<Grids> = None;
+        let mut owned_mol: Option<Molecule> = None;
+        let grids: &Grids = match scf_data.grids.as_ref() {
+            Some(g) => g,
+            None => {
+                let mut mol = scf_data.mol.clone();
+                let g = Grids::build(&mut mol);
+                owned_mol = Some(mol);
+                owned_grids = Some(g);
+                owned_grids.as_ref().unwrap()
+            },
+        };
+        let mol: &Molecule = owned_mol.as_ref().unwrap_or(&scf_data.mol);
         let mem_probe_on =
             utilities::memory_batch::mem_probe_enabled(self.scf_data.mol.ctrl.print_level);
         utilities::memory_batch::mem_probe("calc_de_xc (uks): before get_vxc_rayon_new", mem_probe_on);
@@ -97,7 +112,7 @@ impl RIUHFGradient<'_> {
         // let dao_vxc = get_vxc_rayon(&self, &xc_data, grids, &scf_data.mol);
         // 每线程每块的 XC 工作集预算，由 [ctrl] max_memory 推得，未设置时保持历史上的 16 MiB
         let xc_block_mb = utilities::memory_batch::xc_grad_block_mb(self.flags.max_memory, 16.0);
-        let dao_vxc = get_vxc_rayon_new(&self, &xc_data, grids, &mol, xc_block_mb as usize);
+        let dao_vxc = get_vxc_rayon_new(&self, &xc_data, grids, mol, xc_block_mb as usize);
         utilities::memory_batch::mem_probe("calc_de_xc (uks): after get_vxc_rayon_new", mem_probe_on);
         // println!("Finished calculating dx vxc");
         
@@ -450,7 +465,7 @@ fn get_vxc_rayon(gradient_method: &RIUHFGradient, xc_data: &XCData, grids: &mut 
 /// `block_mem_mb` bounds the workspace of **one block of one worker**, so callers pass a
 /// per-thread share of the declared budget (`utilities::memory_batch::xc_grad_block_mb`),
 /// never `[ctrl] max_memory` itself.
-pub fn get_vxc_rayon_new(gradient_method: &RIUHFGradient, xc_data: &XCData, grids: &mut Grids, mol: &Molecule, block_mem_mb: usize) -> Vec<Tsr<f64>> {
+pub fn get_vxc_rayon_new(gradient_method: &RIUHFGradient, xc_data: &XCData, grids: &Grids, mol: &Molecule, block_mem_mb: usize) -> Vec<Tsr<f64>> {
     let default_omp_num_threads = omp_get_num_threads_wrapper();
 
     let num_grids = grids.weights.len();

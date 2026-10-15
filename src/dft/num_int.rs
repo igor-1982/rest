@@ -21,6 +21,17 @@ use crate::ri_tddft::utils::tddft_occupation_parameters;
 use rest_libcint::prelude::CInt;
 
 
+/// Wall-clock accumulators (nanoseconds, summed across rayon workers) for the
+/// parallel grid-block pipeline that feeds the analytical XC gradient.
+/// The gradient driver (`grad::rks::calc_de_xc`) resets them right before the
+/// block loop and reports the totals at `print_level >= 2`, so the
+/// AO-evaluation / rho+XC / contraction split can be read from the log
+/// without an external profiler.
+pub static GRID_BLOCK_AO_NS: AtomicU64 = AtomicU64::new(0);
+pub static GRID_BLOCK_RHOXC_NS: AtomicU64 = AtomicU64::new(0);
+pub static GRID_BLOCK_CONTRACT_NS: AtomicU64 = AtomicU64::new(0);
+pub static GRID_BLOCK_COUNT: AtomicU64 = AtomicU64::new(0);
+
 pub fn eval_ao_batch(mol:&Molecule, coords:&[[f64; 3]], ao_deriv:usize, num_grids:usize) -> RIFull<f64> {
     // let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
     // let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
@@ -2617,7 +2628,10 @@ impl<'a> GridBlockProducer<'a> {
         let num_grids = end - start;
         let coords = &self.grids.coordinates[start..end];
         let weights = &self.grids.weights[start..end];
+        let t_ao = std::time::Instant::now();
         let ao = eval_ao_batch(self.mol, coords, self.settings.ao_deriv, num_grids);
+        GRID_BLOCK_AO_NS.fetch_add(t_ao.elapsed().as_nanos() as u64, Ordering::Relaxed);
+        GRID_BLOCK_COUNT.fetch_add(1, Ordering::Relaxed);
         BlockData { coords, weights, ao }
     }
 }
@@ -2785,7 +2799,7 @@ pub trait NumInt<'a> {
     fn par_block_loop(
         &'a self,
         mol: &'a Molecule,
-        grids: &'a mut Grids,
+        grids: &'a Grids,
         settings: BlockSettings,
     ) -> GridParallelIterator<'a> {
         GridParallelIterator::new(mol, grids, settings)
