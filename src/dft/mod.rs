@@ -4420,9 +4420,11 @@ impl Grids {
 
         // The kept points are a subset of the points the tables already cover, so the
         // tabulated AO/AOP values can be copied into the smaller grid instead of being
-        // evaluated again (`compact_tabulated_ao`). The re-tabulation below remains the
-        // fallback for the cases the compaction cannot serve.
-        let compacted = self.compact_tabulated_ao(&keep);
+        // evaluated again (`compact_tabulated_ao`). That costs about a fifth of a
+        // re-tabulation but needs the old and the new table at once, so
+        // `grid_prune_compact = false` (or a table that cannot be compacted) selects the
+        // re-tabulation, which keeps the peak at one table.
+        let compacted = mol.ctrl.grid_prune_compact && self.compact_tabulated_ao(&keep);
         if !compacted {
             // Release the stale tables *before* rebuilding: the old AOP table can be
             // several GB, and the rebuild below allocates a fresh one.
@@ -4445,7 +4447,13 @@ impl Grids {
                 dropped_sum, total_sum,
                 if total_sum > 0.0 { dropped_sum / total_sum } else { 0.0 },
                 dropped_max,
-                if compacted { "compacted in place" } else { "rebuilt" });
+                if compacted {
+                    "compacted in place"
+                } else if !mol.ctrl.grid_prune_compact {
+                    "rebuilt (grid_prune_compact = false)"
+                } else {
+                    "rebuilt"
+                });
         }
         n_drop
     }
