@@ -443,6 +443,11 @@ pub fn switch_h(x: f64) -> f64 {
 
 /// Solve V·x = b where V is symmetric positive definite, using Cholesky decomposition.
 /// Uses LAPACK's dpotrf (Cholesky) + forward/backward substitution.
+///
+/// This factors `V` on every call. When the same `V` is solved repeatedly (the
+/// RI-PCM path solves the auxiliary-basis metric on every SCF iteration), factor
+/// it once and use [`solve_cholesky_factorized`] instead: an `naux × naux`
+/// factorization dominates the solve and is geometry-only.
 pub fn solve_cholesky(v: &MatrixFull<f64>, b: &[f64]) -> Vec<f64> {
     let n = v.size[0];
     assert!(v.size[1] == n && b.len() == n, "solve_cholesky: dimension mismatch");
@@ -453,26 +458,39 @@ pub fn solve_cholesky(v: &MatrixFull<f64>, b: &[f64]) -> Vec<f64> {
     // Cholesky factorization: V = L·L^T (L stored in lower triangle)
     v_work.to_matrixfullslicemut().lapack_dpotrf(b'L');
 
+    solve_cholesky_factorized(&v_work, b)
+}
+
+/// Solve V·x = b from an **already computed** lower Cholesky factor of V.
+///
+/// `chol` must be the output of `lapack_dpotrf(b'L')` applied to V, i.e. V = L·Lᵀ
+/// with L in the lower triangle; only that triangle is read. The two triangular
+/// substitutions below are the same ones [`solve_cholesky`] performs, so the
+/// result is bit-identical to factor-and-solve on the same V.
+pub fn solve_cholesky_factorized(chol: &MatrixFull<f64>, b: &[f64]) -> Vec<f64> {
+    let n = chol.size[0];
+    assert!(chol.size[1] == n && b.len() == n, "solve_cholesky_factorized: dimension mismatch");
+
     let mut x = b.to_vec();
 
     // Forward substitution: L·y = b
-    // L[i,j] = v_work[(i, j)] for j <= i (lower triangle)
+    // L[i,j] = chol[(i, j)] for j <= i (lower triangle)
     for i in 0..n {
         let mut sum = 0.0;
         for j in 0..i {
-            sum += v_work[(i, j)] * x[j];
+            sum += chol[(i, j)] * x[j];
         }
-        x[i] = (x[i] - sum) / v_work[(i, i)];
+        x[i] = (x[i] - sum) / chol[(i, i)];
     }
 
     // Backward substitution: L^T·x = y
-    // L^T[i,j] = L[j,i] = v_work[(j, i)]
+    // L^T[i,j] = L[j,i] = chol[(j, i)]
     for i in (0..n).rev() {
         let mut sum = 0.0;
         for j in i+1..n {
-            sum += v_work[(j, i)] * x[j];
+            sum += chol[(j, i)] * x[j];
         }
-        x[i] = (x[i] - sum) / v_work[(i, i)];
+        x[i] = (x[i] - sum) / chol[(i, i)];
     }
 
     x

@@ -500,6 +500,14 @@ impl SCF {
         // A-priori AO-pair pre-screen of the in-core RI tensor: assigned in the block below,
         // before the build, and consumed again by the storage-level pruning after it.
         let mut prescreen_keep: Option<Vec<usize>> = None;
+        // The row space the finished tensor actually lives on: `Some(outer)` when the builder
+        // compacted it onto the pre-screen, `None` when the tensor still covers every AO pair
+        // (no pre-screen at all, or the distributed builder, which keeps the shape and only
+        // skips the metric solve). The storage-level pruning needs to know which one it holds.
+        let mut prescreen_compacted: Option<&[usize]> = None;
+        // Number of packed AO pairs: a tensor with fewer rows than this lived on a compacted
+        // row space (see the `prescreen_compacted` assignment below).
+        let nbaspar_full = self.mol.num_basis * (self.mol.num_basis + 1) / 2;
 
         {
             // preparing the three-center integrals in the full format
@@ -522,16 +530,15 @@ impl SCF {
             // that the SCF, the gradient and the post-SCF consumers see are exactly the ones of the
             // unprescreened path.
             //
-            // MPI keeps the full build: the auxiliary columns are distributed over the ranks, and
-            // the pre-screen would have to be threaded through the distributed builder as well.
+            // MPI runs the same pre-screen. The auxiliary columns are distributed over the
+            // ranks, but the selection is geometry-only and rank-local, and the distributed
+            // builder carries it into the metric solve while keeping the local block shape,
+            // so no collective is added (see `Molecule::prepare_rimatr_for_ri_v_mpi_rayon`).
             // The cut is deliberately loose (PRESCREEN_SAFETY below the pruning threshold) because
             // the Schwarz bound bounds the untransformed block while the pruning acts on the
             // metric-transformed row maximum.
             const PRESCREEN_SAFETY: f64 = 10.0;
-            prescreen_keep = if self.mol.ctrl.ri_jk.pair_screen_threshold > 0.0
-                && ri3fn_symm
-                && mpi_operator.is_none()
-            {
+            prescreen_keep = if self.mol.ctrl.ri_jk.pair_screen_threshold > 0.0 && ri3fn_symm {
                 let cint_mol = ri_jk::util::get_cint_mol(&self.mol);
                 let (basbas2baspar, _) = ri_jk::generate_baspar(self.mol.num_basis);
                 let nao = self.mol.num_basis;
@@ -564,16 +571,29 @@ impl SCF {
                     let cint_bas = self.mol.cint_fdqc.clone();
                     local_mpi.distribute_rimatr_tasks(num_auxbas, num_basis, cint_bas);
                 }
-                let (rimatr, basbas2baspar, baspar2basbas) = match &prescreen_keep {
-                    Some(keep) => self.mol.prepare_rimatr_for_ri_v_rayon_prescreened(None, Some(keep)),
-                    None => self.mol.prepare_rimatr_for_ri_v_mpi_rayon(None, mpi_operator),
-                };
+                let (rimatr, basbas2baspar, baspar2basbas) = self
+                    .mol
+                    .prepare_rimatr_for_ri_v_mpi_rayon(None, prescreen_keep.as_deref(), mpi_operator);
                 Some((rimatr, basbas2baspar, baspar2basbas))
             } else if ri3fn_symm && isdf {
                 None
             } else {
                 None
             };
+
+            // Did the builder COMPACT the tensor onto the pre-screen? The local prescreened
+            // builder returns the selected rows alone; the distributed one cannot (the
+            // redistribution places rows by contiguous packed range) and keeps the full row
+            // space with the pre-screened rows zeroed. Instead of re-deriving which builder
+            // ran, read it off the tensor: only a compacted tensor has fewer rows than the
+            // full packed pair count. Every full-row-space tensor, pre-screened or not, goes
+            // through the plain pruning, which is also the only variant that takes the global
+            // maximum of the row bounds across the ranks.
+            if let Some((rimatr, _, _)) = self.rimatr.as_ref() {
+                if rimatr.size[0] != nbaspar_full {
+                    prescreen_compacted = prescreen_keep.as_deref();
+                }
+            }
         }
 
         // build short-range 3c RI integrals for range-separated hybrid (RSH) functionals
@@ -582,7 +602,7 @@ impl SCF {
             info!("Building short-range 3c RI integrals for RSH (omega = {:.4})", omega);
             if ri3fn_symm {
                 // Note: SR RI omega is negative in libcint's convention.
-                self.rimatr_sr = Some(self.mol.prepare_rimatr_for_ri_v_mpi_rayon(Some(-omega), mpi_operator));
+                self.rimatr_sr = Some(self.mol.prepare_rimatr_for_ri_v_mpi_rayon(Some(-omega), None, mpi_operator));
             } else {
                 self.ri3fn_sr = Some(self.mol.prepare_ri3fn_sr_rayon(omega));
             }
@@ -615,7 +635,7 @@ impl SCF {
             if let Some((rimatr, basbas2baspar, baspar2basbas)) = self.rimatr.take() {
                 let nao = basbas2baspar.size()[0];
                 let num_baspar_full = nao * (nao + 1) / 2;
-                let (pruned, screen) = match &prescreen_keep {
+                let (pruned, screen) = match prescreen_compacted {
                     // The tensor was built on the row space of the a-priori pre-screen, so its own
                     // row bounds are the ones the storage level selects on. The map is built back
                     // in the full packed pair space of `baspar2basbas`, and the diagonal-pair flags
@@ -745,7 +765,7 @@ impl SCF {
             }
 
             let (rimatr, basbas2baspar, baspar2basbas) =
-                self.mol.prepare_rimatr_for_ri_v_mpi_rayon(None, mpi_operator);
+                self.mol.prepare_rimatr_for_ri_v_mpi_rayon(None, None, mpi_operator);
             self.rimatr_bse = Some((rimatr, basbas2baspar, baspar2basbas));
         } else {
             self.ri3fn_bse = Some(self.mol.prepare_ri3fn_for_ri_v_full_rayon());
@@ -2481,6 +2501,69 @@ impl SCF {
     }
 
     pub fn refresh_solvent_with_mpi(&mut self, mpi_operator: &Option<MPIOperator>) {
+        // Prototype (2.1): reuse the resident, metric-solved RI tensor for the two
+        // nao²·naux PCM contractions instead of re-evaluating the 3c integrals.
+        // Opt-in via `REST_PCM_RI_REUSE=1`; requires the tensor to be readable through
+        // `pairs`/`PairMap`, the matching metric factor and a known auxiliary layout.
+        //
+        // Under MPI the distributed builder splits the auxiliary dimension over the ranks
+        // and keeps every packed AO pair on every rank, so both contractions are completed
+        // by one sum per rank (`solvent::reduce_aux_contribution`). The metric factor is
+        // replicated, so the reduced result is identical on the ranks.
+        let ri_reuse = if std::env::var("REST_PCM_RI_REUSE").map(|v| v == "1").unwrap_or(false) {
+            let nao = self.mol.num_basis;
+            let nbaspar = nao * (nao + 1) / 2;
+            match (&self.rimatr, &self.solvent_static_obj) {
+                (Some((cderi, _, pairs)), Some(st)) => {
+                    // `rimatr` holds either all packed pairs or, for a storage-level pruned
+                    // tensor, the retained rows only — in which case the compact indexing
+                    // comes from `PairMap` (`scf_io` stores the pruned tensor in `rimatr`,
+                    // see the `pair_screen_threshold` block in `prepare_necessary_integrals`).
+                    let map = self.rimatr_pair_map.as_ref();
+                    let rows_ok = match map {
+                        None => cderi.size[0] == nbaspar,
+                        Some(m) => cderi.size[0] == m.len(),
+                    };
+                    // Auxiliary columns: the whole space in serial, the rank's slice of
+                    // `mpi_data.auxbas` under MPI. Either way the column count of the
+                    // tensor has to match, otherwise the contractions would silently read
+                    // the wrong auxiliary block.
+                    let naux_full = self.mol.num_auxbas;
+                    let aux_cols = match (&mpi_operator, &self.mol.mpi_data) {
+                        (Some(op), Some(mpi_data)) => mpi_data
+                            .auxbas
+                            .as_ref()
+                            .and_then(|d| d.get(op.rank).cloned()),
+                        _ => Some(0..naux_full),
+                    };
+                    let cols_ok = aux_cols.as_ref().map_or(false, |c| c.len() == cderi.size[1]);
+                    if rows_ok && cols_ok {
+                        let aux_cols = aux_cols.unwrap();
+                        st.pstatic.j2c_factor.as_ref().map(|m| {
+                            crate::solvent::PcmRiReuse { cderi, pairs, map, m, aux_cols, naux_full }
+                        })
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }
+        } else {
+            None
+        };
+        if let Some(ri) = ri_reuse.as_ref() {
+            if mpi_operator.as_ref().map_or(true, |op| op.rank == 0) {
+                println!(
+                    "RI-PCM: reusing the resident 3c tensor for the solvent contractions \
+                     ({} stored AO-pair rows, auxiliary columns {}..{} of {}, {} rank(s)).",
+                    ri.cderi.size[0],
+                    ri.aux_cols.start,
+                    ri.aux_cols.end,
+                    ri.naux_full,
+                    mpi_operator.as_ref().map_or(1, |op| op.size)
+                );
+            }
+        }
         if let Some(solvent_static) = self.solvent_static_obj.as_ref() {
             let s_static = PcmScf::get_pcm_refresh(
                 &solvent_static.surface,
@@ -2490,6 +2573,8 @@ impl SCF {
                 &solvent_static.pstatic.K_ipiv,
                 &solvent_static.pstatic.R,
                 &solvent_static.pstatic.v_grids_n,
+                &solvent_static.pstatic.v_pq_chol,
+                ri_reuse.as_ref(),
                 &self.mol.spin_channel,
                 &self.mol.ctrl.max_memory,
                 &self.mol.ctrl.solv_chunk,
