@@ -4348,28 +4348,54 @@ impl Grids {
         if threshold <= 0.0 { return 0; }
         let ngrids = self.coordinates.len();
         if ngrids == 0 { return 0; }
+        // One grid table per point; a short table would make the survivors of the
+        // compaction below silently mis-aligned (`atm_idx` / quadrature weights are
+        // indexed by the surviving points).
+        assert!(
+            self.atm_idx.len() == ngrids && self.quadrature_weights.len() == ngrids,
+            "prune_by_density: grid tables are not aligned ({} points, {} atom indices, {} quadrature weights)",
+            ngrids, self.atm_idx.len(), self.quadrature_weights.len()
+        );
 
         let rho: MatrixFull<f64> = if self.ao_compressed.is_some() {
             self.prepare_tabulated_density_slots_dm_only_compressed(dm, spin_channel, 0..ngrids).0
         } else if self.ao.is_some() {
             self.prepare_tabulated_density_slots_dm_only(dm, spin_channel, 0..ngrids).0
         } else {
+            if mol.ctrl.print_level >= 1 {
+                println!(" [grid-prune] threshold {:.1e}: skipped, the grid holds no tabulated AO values", threshold);
+            }
             return 0;
         };
 
-        let keep: Vec<bool> = (0..ngrids)
-            .map(|p| {
-                let mut rho_sum = 0.0f64;
-                for s in 0..spin_channel { rho_sum += rho[[p, s]].abs(); }
-                rho_sum * self.weights[p].abs() >= threshold
-            })
-            .collect();
+        // Per-point density contribution `Σ_s |ρ_s| · |w_p|`, and the two sums that make
+        // the truncation auditable: what the dropped points carried, and what the whole
+        // grid carries. The XC integrand is `ρ·w·e_xc`, so the dropped sum bounds the
+        // missed energy up to `max|e_xc|` (order 1 Ha for GGA); its *share* of the total
+        // is the scale-free number, and it is the one that decides whether an absolute
+        // threshold is loose enough for the system at hand.
+        let mut contributions = Vec::with_capacity(ngrids);
+        let mut dropped_sum = 0.0_f64;
+        let mut dropped_max = 0.0_f64;
+        let mut total_sum = 0.0_f64;
+        for p in 0..ngrids {
+            let mut rho_sum = 0.0f64;
+            for s in 0..spin_channel { rho_sum += rho[[p, s]].abs(); }
+            let contribution = rho_sum * self.weights[p].abs();
+            total_sum += contribution;
+            if contribution < threshold {
+                dropped_sum += contribution;
+                if contribution > dropped_max { dropped_max = contribution; }
+            }
+            contributions.push(contribution);
+        }
+        let keep: Vec<bool> = contributions.iter().map(|&c| c >= threshold).collect();
         let n_keep = keep.iter().filter(|&&k| k).count();
         let n_drop = ngrids - n_keep;
         if n_drop * 50 < ngrids {
             if mol.ctrl.print_level >= 1 {
-                println!(" [grid-prune] threshold {:.1e}: only {} of {} points would go (<2%), keeping the full grid",
-                    threshold, n_drop, ngrids);
+                println!(" [grid-prune] threshold {:.1e}: only {} of {} points would go (<2%), keeping the full grid (they carry {:.3e} of the {:.3e} grid total)",
+                    threshold, n_drop, ngrids, dropped_sum, total_sum);
             }
             return 0;
         }
@@ -4392,25 +4418,315 @@ impl Grids {
         self.quadrature_weights = quadrature_weights;
         self.parallel_balancing = crate::utilities::balancing(n_keep, rayon::current_num_threads());
 
-        // Release the stale tables *before* rebuilding: the old AOP table can be
-        // several GB, and the rebuild below allocates a fresh one.
-        self.ao = None;
-        self.aop = None;
-        self.non0tab = None;
-        self.ao_compressed = None;
-        self.aop_compressed = None;
-        if self.ao_cutoff > 0.0 {
-            self.prepare_tabulated_ao_sparse(mol);
-        } else {
-            self.prepare_tabulated_ao(mol);
-            self.build_non0tab(mol);
-            self.build_compressed_storage();
+        // The kept points are a subset of the points the tables already cover, so the
+        // tabulated AO/AOP values can be copied into the smaller grid instead of being
+        // evaluated again (`compact_tabulated_ao`). That costs about a fifth of a
+        // re-tabulation but needs the old and the new table at once, so
+        // `grid_prune_compact = false` (or a table that cannot be compacted) selects the
+        // re-tabulation, which keeps the peak at one table.
+        let compacted = mol.ctrl.grid_prune_compact && self.compact_tabulated_ao(&keep);
+        if !compacted {
+            // Release the stale tables *before* rebuilding: the old AOP table can be
+            // several GB, and the rebuild below allocates a fresh one.
+            self.ao = None;
+            self.aop = None;
+            self.non0tab = None;
+            self.ao_compressed = None;
+            self.aop_compressed = None;
+            if self.ao_cutoff > 0.0 {
+                self.prepare_tabulated_ao_sparse(mol);
+            } else {
+                self.prepare_tabulated_ao(mol);
+                self.build_non0tab(mol);
+                self.build_compressed_storage();
+            }
         }
         if mol.ctrl.print_level >= 1 {
-            println!(" [grid-prune] threshold {:.1e}: dropped {} of {} grid points ({:.1}%), tabulated AO/AOP rebuilt",
-                threshold, n_drop, ngrids, n_drop as f64 / ngrids as f64 * 100.0);
+            println!(" [grid-prune] threshold {:.1e}: dropped {} of {} grid points ({:.1}%), they carried {:.3e} of the {:.3e} total density contribution ({:.2e}), largest dropped term {:.3e}; tabulated AO/AOP {}",
+                threshold, n_drop, ngrids, n_drop as f64 / ngrids as f64 * 100.0,
+                dropped_sum, total_sum,
+                if total_sum > 0.0 { dropped_sum / total_sum } else { 0.0 },
+                dropped_max,
+                if compacted {
+                    "compacted in place"
+                } else if !mol.ctrl.grid_prune_compact {
+                    "rebuilt (grid_prune_compact = false)"
+                } else {
+                    "rebuilt"
+                });
         }
         n_drop
+    }
+
+    /// Copy the tabulated AO/AOP values of the surviving grid points into a fresh,
+    /// re-chunked batch structure, instead of evaluating every basis function again.
+    ///
+    /// `keep` masks the points the tables were built on (`keep.len()` must equal the number
+    /// of points they cover), and the point arrays must already hold the surviving points in
+    /// ascending order. The compaction walks the kept points in that same order, so the new
+    /// batches are again the contiguous ranges `ib*blksize..(ib+1)*blksize` of the new grid,
+    /// which is the layout the consumers derive from `blksize`
+    /// (see `prepare_tabulated_density_slots_dm_only_compressed`).
+    ///
+    /// Every stored value is copied verbatim, so the compacted table is the one the
+    /// re-tabulation would have produced, up to the rows a contributing old batch had
+    /// dropped: those are the entries whose values are all below `ao_cutoff` in that batch,
+    /// which the compressed storage treats as zero by construction, and they enter the
+    /// merged batch as zeros. Old blocks are released as soon as no later batch can need
+    /// them, so the peak stays at roughly the old table's size rather than old + new.
+    ///
+    /// Returns `false`, leaving the object untouched, when there is nothing to compact:
+    /// no tabulated values, inconsistent bookkeeping, or an empty surviving set.
+    pub fn compact_tabulated_ao(&mut self, keep: &[bool]) -> bool {
+        let old_ngrids = keep.len();
+        let n_keep = keep.iter().filter(|&&k| k).count();
+        if n_keep == 0 {
+            // an empty surviving set is refused here; the caller guards it (see
+            // the `n_drop`/`n_keep` checks in `prune_by_density`)
+            return false;
+        }
+        if n_keep == old_ngrids {
+            // nothing was dropped, so the tables already match the grid
+            return true;
+        }
+        let mut new2old: Vec<usize> = Vec::with_capacity(n_keep);
+        for (p, &k) in keep.iter().enumerate() {
+            if k { new2old.push(p); }
+        }
+
+        // ── compressed path (the default, `ao_cutoff > 0`) ──
+        if let Some(ao_c) = self.ao_compressed.as_ref() {
+            let aop_c = self.aop_compressed.as_ref();
+            let blksize = ao_c.blksize.max(1);
+            let nao = ao_c.nao_total;
+            if ao_c.ngrids != old_ngrids
+                || ao_c.batches.len() != ao_c.batch_grid_ranges.len()
+                || ao_c.batches.len() != ao_c.batch_ao_map.len()
+                || ao_c.batches.is_empty()
+                || aop_c.map_or(false, |c| {
+                    c.ngrids != old_ngrids
+                        || c.batches.len() != ao_c.batches.len()
+                        || c.batch_aop_map.len() != ao_c.batches.len()
+                })
+            {
+                return false;
+            }
+            let ao_cutoff = self.non0tab.as_ref().map_or(0.0, |n| n.ao_cutoff);
+
+            // take ownership of the blocks so each old batch can be freed as it is consumed
+            let CompressedGridAO { batches: mut old_ao, batch_ao_map: old_map, blksize: _, .. } =
+                self.ao_compressed.take().unwrap();
+            let mut old_aop = self.aop_compressed.take().map(|c| c.batches);
+
+            let nbatches_new = (n_keep + blksize - 1) / blksize;
+            let mut new_batches: Vec<MatrixFull<f64>> = Vec::with_capacity(nbatches_new);
+            let mut new_aop_batches: Vec<[MatrixFull<f64>; 3]> = Vec::with_capacity(nbatches_new);
+            let mut new_maps: Vec<Vec<usize>> = Vec::with_capacity(nbatches_new);
+            let mut new_ranges: Vec<std::ops::Range<usize>> = Vec::with_capacity(nbatches_new);
+            // global AO index -> row of the batch being built (usize::MAX = absent)
+            let mut row_of = vec![usize::MAX; nao];
+            let mut freed_upto = 0usize;
+
+            for ib in 0..nbatches_new {
+                let gs = ib * blksize;
+                let ge = (gs + blksize).min(n_keep);
+                let nb = ge - gs;
+
+                // the kept points of this batch, grouped by the old batch they came from
+                // (ascending, because `new2old` is ascending)
+                let mut groups: Vec<(usize, usize, usize)> = Vec::new(); // (old batch, first col, end col)
+                for g in gs..ge {
+                    let p = new2old[g];
+                    let ob = p / blksize;
+                    debug_assert!(ob < old_ao.len());
+                    match groups.last_mut() {
+                        Some((last, _, end)) if *last == ob => *end = p - ob * blksize + 1,
+                        _ => groups.push((ob, p - ob * blksize, p - ob * blksize + 1)),
+                    }
+                }
+
+                // the merged active-row set of this batch, in the old tables' ascending order
+                let mut map: Vec<usize> = Vec::new();
+                for &(ob, _, _) in &groups {
+                    for &mu in old_map[ob].iter() {
+                        if row_of[mu] == usize::MAX {
+                            row_of[mu] = map.len();
+                            map.push(mu);
+                        }
+                    }
+                }
+                map.sort_unstable();
+                for (r, &mu) in map.iter().enumerate() {
+                    row_of[mu] = r;
+                }
+
+                // An entirely inactive batch is stored as an empty block, exactly as the
+                // re-tabulation stores it (`n_active == 0`).
+                let empty_block = || MatrixFull::<f64>::empty();
+                let mut ao_block = if map.is_empty() {
+                    empty_block()
+                } else {
+                    MatrixFull::new([map.len(), nb], 0.0)
+                };
+                let want_aop = old_aop.is_some();
+                let mut aop_block = [
+                    MatrixFull::<f64>::empty(),
+                    MatrixFull::<f64>::empty(),
+                    MatrixFull::<f64>::empty(),
+                ];
+                if want_aop && !map.is_empty() {
+                    for x in 0..3 {
+                        aop_block[x] = MatrixFull::new([map.len(), nb], 0.0);
+                    }
+                }
+                if !map.is_empty() {
+                    for g in gs..ge {
+                        let p = new2old[g];
+                        let ob = p / blksize;
+                        // a contributing old batch whose own row set is empty stores no
+                        // values at all (its points were below the cutoff for every AO)
+                        if old_map[ob].is_empty() {
+                            continue;
+                        }
+                        let col = p - ob * blksize;
+                        let gcol = g - gs;
+                        let src = old_ao[ob].slice_column(col);
+                        let dst = ao_block.slice_column_mut(gcol);
+                        for (r_old, &mu) in old_map[ob].iter().enumerate() {
+                            dst[row_of[mu]] = src[r_old];
+                        }
+                        if want_aop {
+                            let src_aop = &old_aop.as_ref().unwrap()[ob];
+                            for x in 0..3 {
+                                let s = src_aop[x].slice_column(col);
+                                let d = aop_block[x].slice_column_mut(gcol);
+                                for (r_old, &mu) in old_map[ob].iter().enumerate() {
+                                    d[row_of[mu]] = s[r_old];
+                                }
+                            }
+                        }
+                    }
+                }
+                for &mu in map.iter() {
+                    row_of[mu] = usize::MAX;
+                }
+
+                new_batches.push(ao_block);
+                if want_aop {
+                    new_aop_batches.push(aop_block);
+                }
+                new_maps.push(map);
+                new_ranges.push(gs..ge);
+
+                // Release the old blocks that no later batch can reach: the kept points are
+                // ascending, so a new batch only ever draws from the old batches of its own
+                // range, and nothing below the next batch's first old batch can come back.
+                let next_first = if ge < n_keep {
+                    (new2old[ge] / blksize).min(old_ao.len())
+                } else {
+                    old_ao.len()
+                };
+                while freed_upto < next_first {
+                    old_ao[freed_upto] = MatrixFull::empty();
+                    if let Some(v) = old_aop.as_mut() {
+                        v[freed_upto] = [
+                            MatrixFull::empty(),
+                            MatrixFull::empty(),
+                            MatrixFull::empty(),
+                        ];
+                    }
+                    freed_upto += 1;
+                }
+            }
+            debug_assert!(freed_upto <= old_ao.len());
+
+            // bookkeeping: same statistics the re-tabulation reports
+            let total_stored_ao: usize = new_maps
+                .iter()
+                .zip(new_ranges.iter())
+                .map(|(m, r)| m.len() * r.len())
+                .sum();
+            let total_elements = n_keep * nao;
+            let sparsity_ratio = if total_elements > 0 {
+                total_stored_ao as f64 / total_elements as f64
+            } else {
+                1.0
+            };
+            let do_gradient = !new_aop_batches.is_empty();
+            let total_stored_aop = if do_gradient { 3 * total_stored_ao } else { 0 };
+
+            self.ao_compressed = Some(CompressedGridAO {
+                batches: new_batches,
+                batch_ao_map: new_maps.clone(),
+                batch_grid_ranges: new_ranges.clone(),
+                blksize,
+                nao_total: nao,
+                ngrids: n_keep,
+            });
+            self.aop_compressed = if do_gradient {
+                Some(CompressedGridAOP {
+                    batches: new_aop_batches,
+                    batch_aop_map: new_maps.clone(),
+                    batch_grid_ranges: new_ranges,
+                    blksize,
+                    nao_total: nao,
+                    ngrids: n_keep,
+                })
+            } else {
+                None
+            };
+            self.non0tab = Some(Non0Tab {
+                batch_ao_indices: new_maps.clone(),
+                batch_aop_indices: new_maps,
+                blksize,
+                ngrids: n_keep,
+                nao,
+                ao_cutoff,
+                sparsity_ratio,
+                total_nonzero_ao: total_stored_ao,
+                total_nonzero_aop: total_stored_aop,
+                total_stored_aop,
+                total_elements,
+            });
+            // A dense copy that was decompressed from the old storage no longer matches
+            // the grid; drop it so `ensure_dense_ao`/`ensure_dense_aop` rebuild it from the
+            // compacted storage on demand (this is what the re-tabulation path did too).
+            self.ao = None;
+            self.aop = None;
+            return true;
+        }
+
+        // ── dense path (`ao_cutoff = 0`): keep the surviving columns ──
+        if self.ao.is_some() {
+            let nao = self.ao.as_ref().unwrap().size[0];
+            if self.ao.as_ref().unwrap().size[1] != old_ngrids {
+                return false;
+            }
+            let old_ao = self.ao.take().unwrap();
+            let mut ao = MatrixFull::new([nao, n_keep], 0.0);
+            for (g_new, &g_old) in new2old.iter().enumerate() {
+                ao.slice_column_mut(g_new)
+                    .copy_from_slice(old_ao.slice_column(g_old));
+            }
+            self.ao = Some(ao);
+            if let Some(old_aop) = self.aop.take() {
+                let mut aop = RIFull::<f64>::new([nao, n_keep, 3], 0.0);
+                for x in 0..3 {
+                    let src = old_aop.get_reducing_matrix(x).unwrap();
+                    let mut dst = aop.get_reducing_matrix_mut(x).unwrap();
+                    // column-major slab [nao, ngrids]: column g is the contiguous run
+                    // `g*nao .. (g+1)*nao` (same layout `decompress_aop` writes)
+                    for (g_new, &g_old) in new2old.iter().enumerate() {
+                        dst.data[g_new * nao..(g_new + 1) * nao]
+                            .copy_from_slice(&src.data[g_old * nao..(g_old + 1) * nao]);
+                    }
+                }
+                self.aop = Some(aop);
+            }
+            return true;
+        }
+
+        false
     }
     pub fn prepare_tabulated_ao_rayon_v02(&mut self, mol: &Molecule) {
         //In this subroutine, we call the lapack dgemm in a rayon parallel environment.

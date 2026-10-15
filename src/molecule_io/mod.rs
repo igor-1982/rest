@@ -2913,7 +2913,16 @@ impl Molecule {
         (basbas2baspar, baspar2basbas)
     }
 
-    pub fn prepare_rimatr_for_ri_v_mpi_rayon(&self, omega: Option<f64>, mpi_operator: &Option<MPIOperator>) -> (MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>) {
+    /// Distributed (MPI) build of the in-core RI tensor.
+    ///
+    /// `keep` is the optional build-time pre-screen: a conservative superset of the packed
+    /// AO-pair rows that the storage-level pruning will retain (see
+    /// `scf_io::prescreen_pair_keep`). When given, each rank carries only the rows in `keep`
+    /// through the metric solve; the other rows of the local block stay zero. The block keeps
+    /// its shape, so the redistribution that follows is untouched, and the zeroed rows are
+    /// exactly the ones the pruning drops anyway — the final row set and `PairMap` are the
+    /// same as without the pre-screen.
+    pub fn prepare_rimatr_for_ri_v_mpi_rayon(&self, omega: Option<f64>, keep: Option<&[usize]>, mpi_operator: &Option<MPIOperator>) -> (MatrixFull<f64>,MatrixFull<usize>,Vec<[usize;2]>) {
         let n_basis = self.num_basis;
         let n_auxbas = self.num_auxbas;
         let n_baspar = (self.num_basis+1)*self.num_basis/2;
@@ -2993,6 +3002,15 @@ impl Molecule {
                 };
 
                 let (baspar, sbsh, ebsh) = &baspar_distribution[my_rank];
+                // Build-time pre-screen, per rank: `baspar` is this rank's contiguous range
+                // of packed pair indices, kept as a plain `Range` so that the redistribution
+                // below needs no change; the rows outside `keep` are solved as zero.
+                let local_sel: Option<Vec<usize>> = keep.map(|keep| {
+                    keep.iter()
+                        .filter(|p| baspar.contains(p))
+                        .map(|p| p - baspar.start)
+                        .collect()
+                });
                 // IMPORTANT: scatter_to_blockcyclic / distributed_triangular_solve /
                 // gather_from_blockcyclic are COLLECTIVE over the BLACS grid — every
                 // rank must participate even when it has no basis-pair work. Ranks
@@ -3027,14 +3045,14 @@ impl Molecule {
                     // serial fallback (no distributed j2c): only ranks with work
                     // participate (solve_tmp_to_ri3fn is local)
                     let tmp = self.prepare_rimatr_for_ri_v_mpi_slot(*sbsh, *ebsh);
-                    self.solve_tmp_to_ri3fn(&aux_v, tmp)
+                    self.solve_tmp_to_ri3fn_local(&aux_v, tmp, &local_sel)
                 } else {
                     MatrixFull::empty()
                 };
                 #[cfg(not(all(feature = "mpi", feature = "scalapack")))]
                 let loc_ri3fn = if baspar.len() > 0 {
                     let tmp = self.prepare_rimatr_for_ri_v_mpi_slot(*sbsh, *ebsh);
-                    self.solve_tmp_to_ri3fn(&aux_v, tmp)
+                    self.solve_tmp_to_ri3fn_local(&aux_v, tmp, &local_sel)
                 } else {
                     MatrixFull::empty()
                 };
@@ -3058,14 +3076,14 @@ impl Molecule {
 
                 (ri3fn, basbas2baspar, baspar2basbas)
             } else {
-                self.prepare_rimatr_for_ri_v_rayon(omega)
+                self.build_rimatr_local_or_prescreened(omega, keep)
             }
 
         } else {
-            self.prepare_rimatr_for_ri_v_rayon(omega)
+            self.build_rimatr_local_or_prescreened(omega, keep)
         }
         #[cfg(not(feature = "mpi"))]
-        { self.prepare_rimatr_for_ri_v_rayon(omega) }
+        { self.build_rimatr_local_or_prescreened(omega, keep) }
 
 
     }
@@ -3230,6 +3248,59 @@ impl Molecule {
             },
         }
         ri3fn
+    }
+
+    /// Build the in-core RI tensor locally: the plain rayon builder, or the pre-screened
+    /// one when a `keep` row selection is available.
+    fn build_rimatr_local_or_prescreened(
+        &self,
+        omega: Option<f64>,
+        keep: Option<&[usize]>,
+    ) -> (MatrixFull<f64>, MatrixFull<usize>, Vec<[usize; 2]>) {
+        match keep {
+            Some(keep) => self.prepare_rimatr_for_ri_v_rayon_prescreened(omega, Some(keep)),
+            None => self.prepare_rimatr_for_ri_v_rayon(omega),
+        }
+    }
+
+    /// Metric solve of one rank's local 3c block, carrying only the rows listed in `sel`
+    /// through the solve (`None` solves the whole block).
+    ///
+    /// The returned block keeps the shape of the full local row space, with the rows left
+    /// out set to zero, so the redistribution that follows is byte-for-byte the layout it
+    /// expects and no collective changes. The zeroed rows are the ones the build-time
+    /// pre-screen proved negligible and the storage-level pruning drops anyway; see
+    /// [`Molecule::prepare_rimatr_for_ri_v_mpi_rayon`].
+    fn solve_tmp_to_ri3fn_local(
+        &self,
+        aux_v: &MatrixFull<f64>,
+        tmp_ri3fn: MatrixFull<f64>,
+        sel: &Option<Vec<usize>>,
+    ) -> MatrixFull<f64> {
+        let sel = match sel {
+            None => return self.solve_tmp_to_ri3fn(aux_v, tmp_ri3fn),
+            Some(sel) => sel,
+        };
+        let n_auxbas = tmp_ri3fn.size()[0];
+        let nrows = tmp_ri3fn.size()[1];
+        let mut out = MatrixFull::new([nrows, n_auxbas], 0.0);
+        if sel.is_empty() {
+            return out;
+        }
+        let mut tmp_sel = MatrixFull::new([n_auxbas, sel.len()], 0.0);
+        for (k_sel, &row) in sel.iter().enumerate() {
+            tmp_sel
+                .iter_column_mut(k_sel)
+                .zip(tmp_ri3fn.iter_column(row))
+                .for_each(|(to, from)| *to = *from);
+        }
+        let solved = self.solve_tmp_to_ri3fn(aux_v, tmp_sel);
+        for (k_sel, &row) in sel.iter().enumerate() {
+            out.iter_row_mut(row)
+                .zip(solved.iter_row(k_sel))
+                .for_each(|(to, from)| *to = *from);
+        }
+        out
     }
 
 

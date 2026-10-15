@@ -386,6 +386,13 @@ pub struct InputKeywords {
     /// 0.0 (default) keeps every grid point.
     #[pyo3(get, set)]
     pub grid_prune_threshold: f64,
+    /// How the one-shot grid pruning materializes the smaller grid. `true` (default)
+    /// copies the surviving columns of the already tabulated AO/AOP tables, which costs
+    /// about a fifth of a re-tabulation but needs the old and the new table at once.
+    /// `false` re-tabulates the surviving points, keeping the peak at one table at the
+    /// price of about 0.8x of the first tabulation.
+    #[pyo3(get, set)]
+    pub grid_prune_compact: bool,
     #[pyo3(get, set)]
     pub ao_cutoff: f64,
     #[pyo3(get, set)]
@@ -617,6 +624,7 @@ impl InputKeywords {
             use_dm_only: false,
             vxc_screen_threshold: 0.0, // 0.0 = 关闭格点密度筛选（见 README）
             grid_prune_threshold: 0.0,  // 0.0 = 不剪枝（见 README）
+            grid_prune_compact: true,   // true = 就地压缩（省时间、多一份表的峰值内存）
             ao_cutoff: 1.0e-9,
             non0tab_blksize: 0,     // 0 = auto-select based on nao
             drop_dense_ao: false,
@@ -1731,6 +1739,11 @@ pub fn parse_ctrl_keywords(tmp_keys: &serde_json::Value) -> anyhow::Result<Input
                 serde_json::Value::Number(num) => num.as_f64().unwrap_or(0.0),
                 serde_json::Value::String(s) => s.parse().unwrap_or(0.0),
                 _ => 0.0,
+            };
+            tmp_input.grid_prune_compact = match tmp_ctrl.get("grid_prune_compact").unwrap_or(&serde_json::Value::Null) {
+                serde_json::Value::String(s) => s.to_lowercase().parse().unwrap_or(true),
+                serde_json::Value::Bool(b) => *b,
+                _ => true,
             };
             tmp_input.ao_cutoff = match tmp_ctrl.get("ao_cutoff").unwrap_or(&serde_json::Value::Null) {
                 serde_json::Value::Number(num) => num.as_f64().unwrap_or(1.0e-9),
