@@ -75,76 +75,10 @@ pub fn morton_order(coords: &[[f64; 3]]) -> Vec<usize> {
     perm
 }
 
-/// Conservative per-atom influence radii (bohr) for locality screening on
-/// grid blocks: beyond `radius(a)` no basis function on atom `a` can exceed
-/// `cutoff` in magnitude. Derived from a primitive-wise envelope of the
-/// contracted spherical GTOs with a safety factor covering the c2s/angular
-/// parts; a 0.5 bohr margin is added. Derivatives up to second order amplify
-/// the value by a modest polynomial factor at these distances; that is
-/// accounted for by choosing the screening cutoff tighter than `ao_cutoff`
-/// (see `GridParallelIterator::new`).
-pub fn atom_influence_radii(mol: &Molecule, cutoff: f64) -> Vec<f64> {
-    mol.basis4elem
-        .iter()
-        .map(|elem| {
-            let mut r_max = 0.0_f64;
-            for shell in &elem.electron_shells {
-                let l = shell.angular_momentum[0] as usize;
-                let alpha_min = shell.exponents.iter().cloned().fold(f64::INFINITY, f64::min);
-                if !alpha_min.is_finite() || alpha_min <= 0.0 {
-                    continue;
-                }
-                for coeffs in &shell.coefficients {
-                    // envelope prefactor: sum_p |c_p| * Norm0(alpha_p, l), with a
-                    // factor of 2 covering the c2s and solid-harmonic angular parts
-                    let c_env: f64 = 2.0
-                        * coeffs
-                            .iter()
-                            .zip(shell.exponents.iter())
-                            .map(|(c, a)| {
-                                c.abs()
-                                    * (2.0 * a / std::f64::consts::PI).powf(0.75)
-                                    * (4.0 * a).powf(l as f64 / 2.0)
-                            })
-                            .sum::<f64>();
-                    r_max = f64::max(r_max, envelope_radius(c_env, l, alpha_min, cutoff));
-                }
-            }
-            r_max + 0.5
-        })
-        .collect()
-}
-
-/// Largest r (bohr) at which `C * r^l * exp(-alpha r^2) >= cutoff`, solved by
-/// bracketing the tail root and bisecting; 0 when the envelope never reaches
-/// the cutoff (a function that is everywhere negligible).
-fn envelope_radius(c: f64, l: usize, alpha: f64, cutoff: f64) -> f64 {
-    if c <= 0.0 {
-        return 0.0;
-    }
-    let f = |r: f64| c * r.powi(l as i32) * (-alpha * r * r).exp();
-    let r_peak = (l as f64 / (2.0 * alpha)).sqrt();
-    if f(r_peak) < cutoff {
-        return 0.0;
-    }
-    let mut lo = r_peak.max(1.0e-8);
-    let mut hi = (r_peak * 2.0).max(1.0);
-    while f(hi) >= cutoff {
-        hi *= 2.0;
-        if hi > 1.0e4 {
-            return hi;
-        }
-    }
-    for _ in 0..60 {
-        let mid = 0.5 * (lo + hi);
-        if f(mid) >= cutoff {
-            lo = mid;
-        } else {
-            hi = mid;
-        }
-    }
-    lo
-}
+// The locality-screening primitives (`atom_influence_radii`, `block_bbox`,
+// `atom_reaches_block`, `screen_rows_by_value`) live in `dft::locality`,
+// shared with the SCF sparse AO tabulation (`Grids::prepare_tabulated_ao_sparse`).
+use crate::dft::locality::{atom_influence_radii, atom_reaches_block, block_bbox, screen_rows_by_value};
 
 pub fn eval_ao_batch(mol:&Molecule, coords:&[[f64; 3]], ao_deriv:usize, num_grids:usize) -> RIFull<f64> {
     // let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
@@ -2789,15 +2723,8 @@ impl<'a> GridBlockProducer<'a> {
         let ao_deriv = self.settings.ao_deriv;
         let ncomp = (ao_deriv + 1) * (ao_deriv + 2) * (ao_deriv + 3) / 6;
 
-        // block bounding box
-        let mut lo = [f64::INFINITY; 3];
-        let mut hi = [f64::NEG_INFINITY; 3];
-        for c in coords {
-            for k in 0..3 {
-                lo[k] = lo[k].min(c[k]);
-                hi[k] = hi[k].max(c[k]);
-            }
-        }
+        // block bounding box (shared helper)
+        let (lo, hi) = block_bbox(coords);
 
         // per-atom passes: (global kept rows, per-component tables)
         let mut parts: Vec<(usize, Vec<usize>, Vec<MatrixFull<f64>>)> = Vec::new();
@@ -2811,23 +2738,16 @@ impl<'a> GridBlockProducer<'a> {
         {
             let mut center = [0.0_f64; 3];
             center.iter_mut().zip(geom.iter()).for_each(|(c, v)| *c = *v);
-            let dx = (lo[0] - center[0]).max(0.0) + (center[0] - hi[0]).max(0.0);
-            let dy = (lo[1] - center[1]).max(0.0) + (center[1] - hi[1]).max(0.0);
-            let dz = (lo[2] - center[2]).max(0.0) + (center[2] - hi[2]).max(0.0);
-            let radius = self.active_radii[iatom];
-            if dx * dx + dy * dy + dz * dz > radius * radius {
+            if !atom_reaches_block(&center, self.active_radii[iatom], &lo, &hi) {
                 continue;
             }
             let t_gto = std::time::Instant::now();
             let tab = spheric_gto_deriv_batch_serial(coords, &center, elem, ao_deriv);
             GRID_BLOCK_GTO_NS.fetch_add(t_gto.elapsed().as_nanos() as u64, Ordering::Relaxed);
             let bas_start = elem.global_index.0;
-            let nbas = elem.global_index.1;
             // keep a row when its value exceeds the cutoff at some block point
-            let vals = &tab[0];
-            let kept: Vec<usize> = (0..nbas)
-                .filter(|&r| (0..num_grids).any(|g| vals[[r, g]].abs() > self.row_cutoff))
-                .collect();
+            // (same predicate as the SCF sparse AO tabulation)
+            let kept = screen_rows_by_value(&tab[0], num_grids, self.row_cutoff);
             if kept.is_empty() {
                 continue;
             }
