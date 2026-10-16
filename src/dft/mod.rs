@@ -4370,16 +4370,16 @@ impl Grids {
             ngrids, self.atm_idx.len(), self.quadrature_weights.len()
         );
 
-        let rho: MatrixFull<f64> = if self.ao_compressed.is_some() {
-            self.prepare_tabulated_density_slots_dm_only_compressed(dm, spin_channel, 0..ngrids).0
-        } else if self.ao.is_some() {
-            self.prepare_tabulated_density_slots_dm_only(dm, spin_channel, 0..ngrids).0
-        } else {
+        if self.ao_compressed.is_none() && self.ao.is_none() {
             if mol.ctrl.print_level >= 1 {
                 println!(" [grid-prune] threshold {:.1e}: skipped, the grid holds no tabulated AO values", threshold);
             }
             return 0;
-        };
+        }
+        let t_rho_start = std::time::Instant::now();
+        let default_omp_threads = mol.ctrl.num_threads.unwrap_or(rayon::current_num_threads().max(1));
+        let contributions = self.eval_prune_contributions(dm, spin_channel, default_omp_threads);
+        let t_rho = t_rho_start.elapsed();
 
         // Per-point density contribution `Σ_s |ρ_s| · |w_p|`, and the two sums that make
         // the truncation auditable: what the dropped points carried, and what the whole
@@ -4387,20 +4387,16 @@ impl Grids {
         // missed energy up to `max|e_xc|` (order 1 Ha for GGA); its *share* of the total
         // is the scale-free number, and it is the one that decides whether an absolute
         // threshold is loose enough for the system at hand.
-        let mut contributions = Vec::with_capacity(ngrids);
         let mut dropped_sum = 0.0_f64;
         let mut dropped_max = 0.0_f64;
         let mut total_sum = 0.0_f64;
         for p in 0..ngrids {
-            let mut rho_sum = 0.0f64;
-            for s in 0..spin_channel { rho_sum += rho[[p, s]].abs(); }
-            let contribution = rho_sum * self.weights[p].abs();
+            let contribution = contributions[p];
             total_sum += contribution;
             if contribution < threshold {
                 dropped_sum += contribution;
                 if contribution > dropped_max { dropped_max = contribution; }
             }
-            contributions.push(contribution);
         }
         let keep: Vec<bool> = contributions.iter().map(|&c| c >= threshold).collect();
         let n_keep = keep.iter().filter(|&&k| k).count();
@@ -4430,6 +4426,7 @@ impl Grids {
         self.atm_idx = atm_idx;
         self.quadrature_weights = quadrature_weights;
         self.parallel_balancing = crate::utilities::balancing(n_keep, rayon::current_num_threads());
+        let t_decide = t_rho_start.elapsed() - t_rho;
 
         // The kept points are a subset of the points the tables already cover, so the
         // tabulated AO/AOP values can be copied into the smaller grid instead of being
@@ -4437,6 +4434,7 @@ impl Grids {
         // re-tabulation but needs the old and the new table at once, so
         // `grid_prune_compact = false` (or a table that cannot be compacted) selects the
         // re-tabulation, which keeps the peak at one table.
+        let t_compact_start = std::time::Instant::now();
         let compacted = mol.ctrl.grid_prune_compact && self.compact_tabulated_ao(&keep);
         if !compacted {
             // Release the stale tables *before* rebuilding: the old AOP table can be
@@ -4454,6 +4452,7 @@ impl Grids {
                 self.build_compressed_storage();
             }
         }
+        let t_compact = t_compact_start.elapsed();
         if mol.ctrl.print_level >= 1 {
             println!(" [grid-prune] threshold {:.1e}: dropped {} of {} grid points ({:.1}%), they carried {:.3e} of the {:.3e} total density contribution ({:.2e}), largest dropped term {:.3e}; tabulated AO/AOP {}",
                 threshold, n_drop, ngrids, n_drop as f64 / ngrids as f64 * 100.0,
@@ -4468,7 +4467,164 @@ impl Grids {
                     "rebuilt"
                 });
         }
+        if mol.ctrl.print_level >= 2 {
+            println!(" [grid-prune] timing: rho {:.3} s ({} threads), decide + gather {:.3} s, {} {:.3} s",
+                t_rho.as_secs_f64(), rayon::current_num_threads(),
+                t_decide.as_secs_f64(),
+                if compacted { "compact" } else { "rebuild" },
+                t_compact.as_secs_f64());
+        }
         n_drop
+    }
+
+    /// Per-point prune criterion `Σ_s |ρ_s(p)| · |w_p|` from the tabulated AOs and
+    /// the initial-guess density, evaluated **without** the gradient density and
+    /// **in parallel** over the grid balancing ranges.
+    ///
+    /// `prepare_tabulated_density_slots_dm_only[_compressed]` compute ρ and ∇ρ on
+    /// one thread over the whole grid: on a 1.3 M-point / 41 k-batch grid that is
+    /// minutes of serial work, three quarters of it (∇ρ, discarded by the caller)
+    /// pure waste. This variant shares the batch math with the compressed branch
+    /// of that routine (same `dm_sub` gather, same GEMM, same dot, so the per-point
+    /// values are bit-identical to the serial evaluation), restricts itself to ρ,
+    /// and distributes the balancing ranges over the rayon pool the SCF hot path
+    /// already uses. Each task returns its range's contributions and they are
+    /// assembled in order, so the result does not depend on the thread count.
+    fn eval_prune_contributions(
+        &self,
+        dm: &Vec<MatrixFull<f64>>,
+        spin_channel: usize,
+        default_omp_threads: usize,
+    ) -> Vec<f64> {
+        use rayon::prelude::*;
+        let ngrids = self.coordinates.len();
+        let mut contributions = vec![0.0_f64; ngrids];
+        if ngrids == 0 { return contributions; }
+        let balancing: Vec<std::ops::Range<usize>> = {
+            let covers = !self.parallel_balancing.is_empty()
+                && self.parallel_balancing.iter().map(|r| r.len()).sum::<usize>() == ngrids
+                && self.parallel_balancing.iter().all(|r| r.end <= ngrids);
+            if covers {
+                self.parallel_balancing.clone()
+            } else {
+                crate::utilities::balancing(ngrids, rayon::current_num_threads().max(1))
+            }
+        };
+        // The small per-batch GEMMs must not recruit the whole BLAS thread pool from
+        // inside every rayon task (the tabulation pass does the same).
+        omp_set_num_threads_wrapper(1);
+        let parts: Vec<(std::ops::Range<usize>, Vec<f64>)> = balancing
+            .par_iter()
+            .filter(|r| r.len() > 0)
+            .map(|range| {
+                let rho = self.eval_rho_range(dm, spin_channel, range.clone());
+                let vals: Vec<f64> = rho
+                    .chunks_exact(spin_channel.max(1))
+                    .zip(range.clone())
+                    .map(|(rho_p, p)| {
+                        let mut rho_sum = 0.0f64;
+                        for s in 0..spin_channel { rho_sum += rho_p[s].abs(); }
+                        rho_sum * self.weights[p].abs()
+                    })
+                    .collect();
+                (range.clone(), vals)
+            })
+            .collect();
+        omp_set_num_threads_wrapper(default_omp_threads);
+        for (range, vals) in parts {
+            contributions[range].copy_from_slice(&vals);
+        }
+        contributions
+    }
+
+    /// ρ on a contiguous grid range from the tabulated AOs, gradient-free.
+    /// Returns `range.len() * spin_channel` values laid out point-major
+    /// (`rho[p * spin_channel + s]`), matching `prepare_tabulated_density_slots_
+    /// dm_only[_compressed]`'s ρ block (batch order, gather and contraction are
+    /// the same, so the values agree bit for bit with the serial full-range call).
+    fn eval_rho_range(
+        &self,
+        dm: &Vec<MatrixFull<f64>>,
+        spin_channel: usize,
+        range: std::ops::Range<usize>,
+    ) -> Vec<f64> {
+        let n_out = range.len();
+        let mut rho = vec![0.0_f64; n_out * spin_channel];
+        if let Some(ao_c) = self.ao_compressed.as_ref() {
+            let blksize = ao_c.blksize.max(1);
+            let ibatch_start = range.start / blksize;
+            let ibatch_end = ((range.end + blksize - 1) / blksize).min(ao_c.batches.len());
+            for ibatch in ibatch_start..ibatch_end {
+                let batch_ao = &ao_c.batches[ibatch];
+                let indices = &ao_c.batch_ao_map[ibatch];
+                let n_active = indices.len();
+                if n_active == 0 { continue; }
+                let g_range = &ao_c.batch_grid_ranges[ibatch];
+                let g_local_start = range.start.saturating_sub(g_range.start);
+                let g_local_end = (range.end.min(g_range.end) - g_range.start).min(batch_ao.size[1]);
+                if g_local_end <= g_local_start { continue; }
+                let n_batch = g_local_end - g_local_start;
+                let g_out_start = g_range.start + g_local_start - range.start;
+
+                // dm_sub gather over the batch's active set, on raw slices: the
+                // `[[i, j]]` indexing of the general routine costs a bounds check
+                // and a stride multiply per element, and this gather is the
+                // dominant serial cost on large grids.
+                let nao = dm[0].size[0];
+                let mut dm_sub = vec![MatrixFull::new([n_active, n_active], 0.0); spin_channel];
+                for i_spin in 0..spin_channel {
+                    let dm_s = &dm[i_spin].data;
+                    let sub = &mut dm_sub[i_spin].data;
+                    for (j_local, &nu_global) in indices.iter().enumerate() {
+                        let src_col = nu_global * nao;
+                        for (i_local, &mu_global) in indices.iter().enumerate() {
+                            sub[i_local + j_local * n_active] = dm_s[mu_global + src_col];
+                        }
+                    }
+                }
+
+                for i_spin in 0..spin_channel {
+                    let mut wao = MatrixFull::new([n_active, n_batch], 0.0);
+                    _dgemm(
+                        &dm_sub[i_spin], (0..n_active, 0..n_active), 'N',
+                        batch_ao, (0..n_active, g_local_start..g_local_end), 'N',
+                        &mut wao, (0..n_active, 0..n_batch), 1.0, 0.0,
+                    );
+                    let ao_data = &batch_ao.data;
+                    let wao_data = &wao.data;
+                    for g in 0..n_batch {
+                        let mut rho_val = 0.0;
+                        let ao_col = &ao_data[(g_local_start + g) * n_active..(g_local_start + g + 1) * n_active];
+                        let wao_col = &wao_data[g * n_active..(g + 1) * n_active];
+                        for i_local in 0..n_active {
+                            rho_val += ao_col[i_local] * wao_col[i_local];
+                        }
+                        rho[(g_out_start + g) * spin_channel + i_spin] = rho_val;
+                    }
+                }
+            }
+        } else if let Some(ao) = self.ao.as_ref() {
+            let num_basis = dm[0].size[0];
+            let ao_data = &ao.data;
+            for i_spin in 0..spin_channel {
+                let mut wao = MatrixFull::new([num_basis, n_out], 0.0);
+                _dgemm(
+                    &dm[i_spin], (0..num_basis, 0..num_basis), 'N',
+                    ao, (0..num_basis, range.clone()), 'N',
+                    &mut wao, (0..num_basis, 0..n_out), 1.0, 0.0,
+                );
+                let wao_data = &wao.data;
+                for g in 0..n_out {
+                    let col = (range.start + g) * num_basis;
+                    let mut rho_val = 0.0;
+                    for mu in 0..num_basis {
+                        rho_val += ao_data[col + mu] * wao_data[g * num_basis + mu];
+                    }
+                    rho[g * spin_channel + i_spin] = rho_val;
+                }
+            }
+        }
+        rho
     }
 
     /// Copy the tabulated AO/AOP values of the surviving grid points into a fresh,
@@ -4491,6 +4647,7 @@ impl Grids {
     /// Returns `false`, leaving the object untouched, when there is nothing to compact:
     /// no tabulated values, inconsistent bookkeeping, or an empty surviving set.
     pub fn compact_tabulated_ao(&mut self, keep: &[bool]) -> bool {
+        use rayon::prelude::*;
         let old_ngrids = keep.len();
         let n_keep = keep.iter().filter(|&&k| k).count();
         if n_keep == 0 {
@@ -4532,110 +4689,133 @@ impl Grids {
             let mut old_aop = self.aop_compressed.take().map(|c| c.batches);
 
             let nbatches_new = (n_keep + blksize - 1) / blksize;
+            let want_aop = old_aop.is_some();
             let mut new_batches: Vec<MatrixFull<f64>> = Vec::with_capacity(nbatches_new);
             let mut new_aop_batches: Vec<[MatrixFull<f64>; 3]> = Vec::with_capacity(nbatches_new);
             let mut new_maps: Vec<Vec<usize>> = Vec::with_capacity(nbatches_new);
             let mut new_ranges: Vec<std::ops::Range<usize>> = Vec::with_capacity(nbatches_new);
-            // global AO index -> row of the batch being built (usize::MAX = absent)
-            let mut row_of = vec![usize::MAX; nao];
             let mut freed_upto = 0usize;
 
-            for ib in 0..nbatches_new {
-                let gs = ib * blksize;
-                let ge = (gs + blksize).min(n_keep);
-                let nb = ge - gs;
+            // The new batches are built in parallel, in chunks. Inside a chunk the
+            // batches are independent: each reads only the old blocks of its own
+            // window (kept points are ascending, so the windows of one chunk overlap
+            // at most at their edges, read-only), writes its own fresh block, and
+            // carries a thread-local `row_of` scratch. The chunks themselves stay
+            // sequential so the old blocks can keep being released after each chunk
+            // at the same granularity of a few hundred batches: the peak stays at
+            // roughly the old table's size plus one chunk of the new one, as in the
+            // batch-at-a-time release.
+            let nthreads = rayon::current_num_threads().max(1);
+            let nchunks = (nthreads * 4).clamp(1, nbatches_new);
+            for c in 0..nchunks {
+                let b0 = c * nbatches_new / nchunks;
+                let b1 = ((c + 1) * nbatches_new / nchunks).max(b0 + 1).min(nbatches_new);
+                let built: Vec<(usize, MatrixFull<f64>, [MatrixFull<f64>; 3], Vec<usize>)> =
+                    (b0..b1).into_par_iter().map_init(
+                        || vec![usize::MAX; nao],
+                        |row_of, ib| {
+                            let gs = ib * blksize;
+                            let ge = (gs + blksize).min(n_keep);
+                            let nb = ge - gs;
 
-                // the kept points of this batch, grouped by the old batch they came from
-                // (ascending, because `new2old` is ascending)
-                let mut groups: Vec<(usize, usize, usize)> = Vec::new(); // (old batch, first col, end col)
-                for g in gs..ge {
-                    let p = new2old[g];
-                    let ob = p / blksize;
-                    debug_assert!(ob < old_ao.len());
-                    match groups.last_mut() {
-                        Some((last, _, end)) if *last == ob => *end = p - ob * blksize + 1,
-                        _ => groups.push((ob, p - ob * blksize, p - ob * blksize + 1)),
-                    }
-                }
-
-                // the merged active-row set of this batch, in the old tables' ascending order
-                let mut map: Vec<usize> = Vec::new();
-                for &(ob, _, _) in &groups {
-                    for &mu in old_map[ob].iter() {
-                        if row_of[mu] == usize::MAX {
-                            row_of[mu] = map.len();
-                            map.push(mu);
-                        }
-                    }
-                }
-                map.sort_unstable();
-                for (r, &mu) in map.iter().enumerate() {
-                    row_of[mu] = r;
-                }
-
-                // An entirely inactive batch is stored as an empty block, exactly as the
-                // re-tabulation stores it (`n_active == 0`).
-                let empty_block = || MatrixFull::<f64>::empty();
-                let mut ao_block = if map.is_empty() {
-                    empty_block()
-                } else {
-                    MatrixFull::new([map.len(), nb], 0.0)
-                };
-                let want_aop = old_aop.is_some();
-                let mut aop_block = [
-                    MatrixFull::<f64>::empty(),
-                    MatrixFull::<f64>::empty(),
-                    MatrixFull::<f64>::empty(),
-                ];
-                if want_aop && !map.is_empty() {
-                    for x in 0..3 {
-                        aop_block[x] = MatrixFull::new([map.len(), nb], 0.0);
-                    }
-                }
-                if !map.is_empty() {
-                    for g in gs..ge {
-                        let p = new2old[g];
-                        let ob = p / blksize;
-                        // a contributing old batch whose own row set is empty stores no
-                        // values at all (its points were below the cutoff for every AO)
-                        if old_map[ob].is_empty() {
-                            continue;
-                        }
-                        let col = p - ob * blksize;
-                        let gcol = g - gs;
-                        let src = old_ao[ob].slice_column(col);
-                        let dst = ao_block.slice_column_mut(gcol);
-                        for (r_old, &mu) in old_map[ob].iter().enumerate() {
-                            dst[row_of[mu]] = src[r_old];
-                        }
-                        if want_aop {
-                            let src_aop = &old_aop.as_ref().unwrap()[ob];
-                            for x in 0..3 {
-                                let s = src_aop[x].slice_column(col);
-                                let d = aop_block[x].slice_column_mut(gcol);
-                                for (r_old, &mu) in old_map[ob].iter().enumerate() {
-                                    d[row_of[mu]] = s[r_old];
+                            // the kept points of this batch, grouped by the old batch they
+                            // came from (ascending, because `new2old` is ascending)
+                            let mut groups: Vec<(usize, usize, usize)> = Vec::new(); // (old batch, first col, end col)
+                            for g in gs..ge {
+                                let p = new2old[g];
+                                let ob = p / blksize;
+                                debug_assert!(ob < old_ao.len());
+                                match groups.last_mut() {
+                                    Some((last, _, end)) if *last == ob => *end = p - ob * blksize + 1,
+                                    _ => groups.push((ob, p - ob * blksize, p - ob * blksize + 1)),
                                 }
                             }
-                        }
+
+                            // the merged active-row set of this batch, ascending
+                            let mut map: Vec<usize> = Vec::new();
+                            for &(ob, _, _) in &groups {
+                                for &mu in old_map[ob].iter() {
+                                    if row_of[mu] == usize::MAX {
+                                        row_of[mu] = map.len();
+                                        map.push(mu);
+                                    }
+                                }
+                            }
+                            map.sort_unstable();
+                            for (r, &mu) in map.iter().enumerate() {
+                                row_of[mu] = r;
+                            }
+
+                            // An entirely inactive batch is stored as an empty block, exactly
+                            // as the re-tabulation stores it (`n_active == 0`).
+                            let empty_block = || MatrixFull::<f64>::empty();
+                            let mut ao_block = if map.is_empty() {
+                                empty_block()
+                            } else {
+                                MatrixFull::new([map.len(), nb], 0.0)
+                            };
+                            let mut aop_block = [
+                                MatrixFull::<f64>::empty(),
+                                MatrixFull::<f64>::empty(),
+                                MatrixFull::<f64>::empty(),
+                            ];
+                            if want_aop && !map.is_empty() {
+                                for x in 0..3 {
+                                    aop_block[x] = MatrixFull::new([map.len(), nb], 0.0);
+                                }
+                            }
+                            if !map.is_empty() {
+                                for g in gs..ge {
+                                    let p = new2old[g];
+                                    let ob = p / blksize;
+                                    // a contributing old batch whose own row set is empty stores
+                                    // no values at all (its points were below the cutoff for
+                                    // every AO)
+                                    if old_map[ob].is_empty() {
+                                        continue;
+                                    }
+                                    let col = p - ob * blksize;
+                                    let gcol = g - gs;
+                                    let src = old_ao[ob].slice_column(col);
+                                    let dst = ao_block.slice_column_mut(gcol);
+                                    for (r_old, &mu) in old_map[ob].iter().enumerate() {
+                                        dst[row_of[mu]] = src[r_old];
+                                    }
+                                    if want_aop {
+                                        let src_aop = &old_aop.as_ref().unwrap()[ob];
+                                        for x in 0..3 {
+                                            let s = src_aop[x].slice_column(col);
+                                            let d = aop_block[x].slice_column_mut(gcol);
+                                            for (r_old, &mu) in old_map[ob].iter().enumerate() {
+                                                d[row_of[mu]] = s[r_old];
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            for &mu in map.iter() {
+                                row_of[mu] = usize::MAX;
+                            }
+                            (ib, ao_block, aop_block, map)
+                        },
+                    )
+                    .collect();
+                for (ib, ao_block, aop_block, map) in built {
+                    let gs = ib * blksize;
+                    let ge = (gs + blksize).min(n_keep);
+                    new_batches.push(ao_block);
+                    if want_aop {
+                        new_aop_batches.push(aop_block);
                     }
-                }
-                for &mu in map.iter() {
-                    row_of[mu] = usize::MAX;
+                    new_maps.push(map);
+                    new_ranges.push(gs..ge);
                 }
 
-                new_batches.push(ao_block);
-                if want_aop {
-                    new_aop_batches.push(aop_block);
-                }
-                new_maps.push(map);
-                new_ranges.push(gs..ge);
-
-                // Release the old blocks that no later batch can reach: the kept points are
-                // ascending, so a new batch only ever draws from the old batches of its own
-                // range, and nothing below the next batch's first old batch can come back.
-                let next_first = if ge < n_keep {
-                    (new2old[ge] / blksize).min(old_ao.len())
+                // Release the old blocks that no later chunk can reach: the kept points
+                // are ascending, so nothing below the next chunk's first old batch can
+                // come back.
+                let next_first = if b1 < nbatches_new {
+                    (new2old[b1 * blksize] / blksize).min(old_ao.len())
                 } else {
                     old_ao.len()
                 };
@@ -4717,22 +4897,26 @@ impl Grids {
             }
             let old_ao = self.ao.take().unwrap();
             let mut ao = MatrixFull::new([nao, n_keep], 0.0);
-            for (g_new, &g_old) in new2old.iter().enumerate() {
-                ao.slice_column_mut(g_new)
-                    .copy_from_slice(old_ao.slice_column(g_old));
-            }
+            ao.data
+                .par_chunks_exact_mut(nao)
+                .zip(new2old.par_iter())
+                .for_each(|(dst_col, &g_old)| {
+                    dst_col.copy_from_slice(&old_ao.data[g_old * nao..(g_old + 1) * nao]);
+                });
             self.ao = Some(ao);
             if let Some(old_aop) = self.aop.take() {
                 let mut aop = RIFull::<f64>::new([nao, n_keep, 3], 0.0);
                 for x in 0..3 {
                     let src = old_aop.get_reducing_matrix(x).unwrap();
-                    let mut dst = aop.get_reducing_matrix_mut(x).unwrap();
+                    let dst = aop.get_reducing_matrix_mut(x).unwrap();
                     // column-major slab [nao, ngrids]: column g is the contiguous run
                     // `g*nao .. (g+1)*nao` (same layout `decompress_aop` writes)
-                    for (g_new, &g_old) in new2old.iter().enumerate() {
-                        dst.data[g_new * nao..(g_new + 1) * nao]
-                            .copy_from_slice(&src.data[g_old * nao..(g_old + 1) * nao]);
-                    }
+                    dst.data
+                        .par_chunks_exact_mut(nao)
+                        .zip(new2old.par_iter())
+                        .for_each(|(dst_col, &g_old)| {
+                            dst_col.copy_from_slice(&src.data[g_old * nao..(g_old + 1) * nao]);
+                        });
                 }
                 self.aop = Some(aop);
             }
