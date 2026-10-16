@@ -19,6 +19,7 @@ use crate::grad::rhf::{RIRHFGradient, RIHFGradientFlags};
 use crate::dft::{Grids, DFA4REST};
 use crate::dft::xc_deriv::XCType;
 use crate::dft::num_int::{NumInt, XCData, BlockSettings};
+use crate::dft::num_int::{GRID_BLOCK_AO_NS, GRID_BLOCK_RHOXC_NS, GRID_BLOCK_CONTRACT_NS, GRID_BLOCK_COUNT, GRID_BLOCK_ACTIVE_SUM, GRID_BLOCK_GTO_NS};
 use crate::dft::num_int::{eval_rho5_batch, eval_rho5_dm_only_batch, eval_ao_batch};
 use crate::dft::libxc_itrf::{eval_xc_eff};
 use crate::utilities::{self, balancing};
@@ -179,8 +180,50 @@ impl RIRHFGradient<'_> {
         // get dx vxc [nao, nao, 3]
         let scf_data = self.scf_data; 
         let xc_data = self.gen_xc_data(scf_data, 0);
-        let mut mol = scf_data.mol.clone();
-        let grids = &mut Grids::build(&mut mol);
+        // Reuse the SCF grid (points/weights/partition) instead of regenerating
+        // it. The SCF grid carries the identical deterministic content (the
+        // rank-local portion under MPI) plus any grid pruning applied during
+        // `initialize_scf`, so the XC gradient is evaluated on the same grid
+        // as the XC energy and one full grid generation is saved. AO values
+        // (up to second derivatives) are still evaluated per block on the fly.
+        // Fall back to a fresh build only when the SCF data holds no grids.
+        let mut owned_grids: Option<Grids> = None;
+        let mut owned_mol: Option<Molecule> = None;
+        let t_grid_build = std::time::Instant::now();
+        let grids_reused = scf_data.grids.is_some();
+        let grids: &Grids = match scf_data.grids.as_ref() {
+            Some(g) => g,
+            None => {
+                let mut mol = scf_data.mol.clone();
+                let g = Grids::build(&mut mol);
+                owned_mol = Some(mol);
+                owned_grids = Some(g);
+                owned_grids.as_ref().unwrap()
+            },
+        };
+        let t_grid_build = t_grid_build.elapsed();
+        let mol: &Molecule = owned_mol.as_ref().unwrap_or(&scf_data.mol);
+        // Reorder the gradient grid into spatially compact (Morton) order on a
+        // private copy of the point arrays. Contiguous blocks then cover local
+        // regions, which is what the per-block active-basis screening exploits.
+        // Only the quadrature summation order changes, so results move at the
+        // level of floating-point roundoff.
+        let t_reorder = std::time::Instant::now();
+        let perm = crate::dft::num_int::morton_order(&grids.coordinates);
+        let grad_grids = Grids {
+            coordinates: perm.iter().map(|&i| grids.coordinates[i]).collect(),
+            weights: perm.iter().map(|&i| grids.weights[i]).collect(),
+            ao: None,
+            aop: None,
+            parallel_balancing: balancing(grids.coordinates.len(), rayon::current_num_threads()),
+            non0tab: None,
+            ao_cutoff: grids.ao_cutoff,
+            ao_compressed: None,
+            aop_compressed: None,
+            atm_idx: perm.iter().map(|&i| grids.atm_idx[i]).collect(),
+            quadrature_weights: perm.iter().map(|&i| grids.quadrature_weights[i]).collect(),
+        };
+        let t_reorder = t_reorder.elapsed();
         let mem_probe_on =
             utilities::memory_batch::mem_probe_enabled(self.scf_data.mol.ctrl.print_level);
         utilities::memory_batch::mem_probe("calc_de_xc: before get_vxc_rayon_new", mem_probe_on);
@@ -188,7 +231,30 @@ impl RIRHFGradient<'_> {
         // let dao_vxc = get_vxc_rayon(&self, &xc_data, grids, &scf_data.mol);
         // 每线程每块的 XC 工作集预算，由 [ctrl] max_memory 推得，未设置时保持历史上的 16 MiB
         let xc_block_mb = utilities::memory_batch::xc_grad_block_mb(self.flags.max_memory, 16.0);
-        let dao_vxc = get_vxc_rayon_new(&self, &xc_data, grids, &mol, xc_block_mb as usize);
+        GRID_BLOCK_AO_NS.store(0, std::sync::atomic::Ordering::Relaxed);
+        GRID_BLOCK_RHOXC_NS.store(0, std::sync::atomic::Ordering::Relaxed);
+        GRID_BLOCK_CONTRACT_NS.store(0, std::sync::atomic::Ordering::Relaxed);
+        GRID_BLOCK_COUNT.store(0, std::sync::atomic::Ordering::Relaxed);
+        GRID_BLOCK_ACTIVE_SUM.store(0, std::sync::atomic::Ordering::Relaxed);
+        GRID_BLOCK_GTO_NS.store(0, std::sync::atomic::Ordering::Relaxed);
+        let t_pipeline = std::time::Instant::now();
+        let dao_vxc = get_vxc_rayon_new(&self, &xc_data, &grad_grids, mol, xc_block_mb as usize);
+        let t_pipeline = t_pipeline.elapsed();
+        if self.scf_data.mol.ctrl.print_level >= 2 {
+            let nthr = rayon::current_num_threads() as f64;
+            let nblk = GRID_BLOCK_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+            let ao_s = GRID_BLOCK_AO_NS.load(std::sync::atomic::Ordering::Relaxed) as f64 / 1.0e9;
+            let rho_s = GRID_BLOCK_RHOXC_NS.load(std::sync::atomic::Ordering::Relaxed) as f64 / 1.0e9;
+            let con_s = GRID_BLOCK_CONTRACT_NS.load(std::sync::atomic::Ordering::Relaxed) as f64 / 1.0e9;
+            let nbb_avg = GRID_BLOCK_ACTIVE_SUM.load(std::sync::atomic::Ordering::Relaxed) as f64
+                / (nblk.max(1) as f64);
+            let gto_s = GRID_BLOCK_GTO_NS.load(std::sync::atomic::Ordering::Relaxed) as f64 / 1.0e9;
+            println!("XC grad profile: grid {} ({:.3} s) + Morton reorder {:.3} s; block pipeline {:.3} s wall over {} blocks / {} threads; avg active basis {:.0}/{}; worker-sums: ao_eval {:.3} s (gto {:.3} s + screen/asm {:.3} s), rho+xc {:.3} s, contraction {:.3} s (est. wall shares: {:.3}, {:.3}, {:.3} s)",
+                if grids_reused { "reused from SCF" } else { "freshly built" },
+                t_grid_build.as_secs_f64(), t_reorder.as_secs_f64(), t_pipeline.as_secs_f64(),
+                nblk, nthr as usize, nbb_avg, mol.num_basis,
+                ao_s, gto_s, ao_s - gto_s, rho_s, con_s, ao_s / nthr, rho_s / nthr, con_s / nthr);
+        }
         utilities::memory_batch::mem_probe("calc_de_xc: after get_vxc_rayon_new", mem_probe_on);
         // println!("Print dao_vxc: {:?}", dao_vxc);
         
@@ -325,6 +391,57 @@ fn get_dm(scf_data: &SCF, device: &DeviceBLAS) -> Tsr<f64> {
 /// through `rstsr`'s `matmul_from` on the permuted views measured ~2.4x slower
 /// (`tests/bench_gga.rs`: 2.15 s vs 0.91 s per call at nao=86, ng=115752),
 /// which dominated the TDDFT response gradient.  The arithmetic is unchanged.
+/// Gather the rows listed in `idx` from a column-major [n_row, n_col] matrix
+/// (used to compact MO coefficients to the active basis of a screened grid
+/// block).
+pub fn gather_rows_full(m: &MatrixFull<f64>, idx: &[usize]) -> MatrixFull<f64> {
+    let n_row = m.size[0];
+    let n_col = m.size[1];
+    let n_act = idx.len();
+    let mut out = MatrixFull::new([n_act, n_col], 0.0);
+    for j in 0..n_col {
+        for (ii, &mu) in idx.iter().enumerate() {
+            out.data[ii + j * n_act] = m.data[mu + j * n_row];
+        }
+    }
+    out
+}
+
+/// Gather the rows and columns listed in `idx` from a square column-major
+/// matrix (used to compact the density matrix for screened grid blocks).
+pub fn gather_submatrix_full(m: &MatrixFull<f64>, idx: &[usize]) -> MatrixFull<f64> {
+    let n = m.size[0];
+    let n_act = idx.len();
+    let mut out = MatrixFull::new([n_act, n_act], 0.0);
+    for (jj, &nu) in idx.iter().enumerate() {
+        for (ii, &mu) in idx.iter().enumerate() {
+            out.data[ii + jj * n_act] = m.data[mu + nu * n];
+        }
+    }
+    out
+}
+
+/// Scatter a compact [nbb,nbb,3] block contraction into a fresh full-size
+/// [nao,nao,3] tensor using the block's global basis index list. The compact
+/// contraction already contains the per-block sum, so this is a plain
+/// scatter (no accumulation into a nonzero target).
+pub fn scatter_to_full(vmat_c: &Tsr<f64>, idx: &[usize], nao: usize, device: &DeviceOpenBLAS) -> Tsr<f64> {
+    let nbb = idx.len();
+    let mut full = rt::zeros(([nao, nao, 3], device));
+    let src = vmat_c.raw();
+    let dst = full.raw_mut();
+    for d in 0..3 {
+        let off_c = d * nbb * nbb;
+        let off_f = d * nao * nao;
+        for (jj, &nu) in idx.iter().enumerate() {
+            for (ii, &mu) in idx.iter().enumerate() {
+                dst[off_f + mu + nu * nao] += src[off_c + ii + jj * nbb];
+            }
+        }
+    }
+    full
+}
+
 pub fn gga_grad_sum(vmat: &mut Tsr<f64>, ao: TsrView<f64>, wv: TsrView<f64>) {
     let nao = ao.shape()[0];
     let ng = ao.shape()[1];
@@ -657,7 +774,7 @@ fn get_vxc_rayon(gradient_method: &RIRHFGradient, xc_data: &XCData, grids: &mut 
 /// `block_mem_mb` bounds the workspace of **one block of one worker**, so callers pass a
 /// per-thread share of the declared budget (`utilities::memory_batch::xc_grad_block_mb`),
 /// never `[ctrl] max_memory` itself.
-pub fn get_vxc_rayon_new(gradient_method: &RIRHFGradient, xc_data: &XCData, grids: &mut Grids, mol: &Molecule, block_mem_mb: usize) -> Tsr<f64> {
+pub fn get_vxc_rayon_new(gradient_method: &RIRHFGradient, xc_data: &XCData, grids: &Grids, mol: &Molecule, block_mem_mb: usize) -> Tsr<f64> {
     let default_omp_num_threads = omp_get_num_threads_wrapper();
 
     let num_grids = grids.weights.len();
@@ -705,48 +822,85 @@ pub fn get_vxc_rayon_new(gradient_method: &RIRHFGradient, xc_data: &XCData, grid
             omp_set_num_threads_wrapper(1);
 
             let ng = block.weights.len();
-            let loc_rho = if let Some(mo) = &xc_data.mo_coeffs 
+            // Locality-screened blocks carry a compact AO table plus the global
+            // basis indices of its rows; contract on the compact block and
+            // scatter the result into the full [nao,nao,3] accumulator.
+            let idx_opt: Option<&Vec<usize>> =
+                block.active_bas.as_ref().filter(|idx| idx.len() < num_basis);
+            let nbb = idx_opt.map_or(num_basis, |idx| idx.len());
+
+            let t_rhoxc = std::time::Instant::now();
+            let mo_compact: Vec<MatrixFull<f64>>;
+            let dm_compact: Vec<MatrixFull<f64>>;
+            let loc_rho = if let Some(mo) = &xc_data.mo_coeffs
             {
-                eval_rho5_batch(&block.ao, xc_data.xc_type, mo, xc_data.occ.as_ref().unwrap(), 1, ng)
+                let mo_use = match &idx_opt {
+                    Some(idx) => {
+                        mo_compact = mo.iter().map(|m| gather_rows_full(m, idx)).collect();
+                        &mo_compact
+                    },
+                    None => mo,
+                };
+                eval_rho5_batch(&block.ao, xc_data.xc_type, mo_use, xc_data.occ.as_ref().unwrap(), 1, ng)
             } else {
-                eval_rho5_dm_only_batch(&block.ao, xc_data.xc_type, xc_data.dm, 1, ng)
+                // Only the first spin-channel entries of `dm` are consumed by
+                // `eval_rho5_dm_only_batch`; the Vec may carry additional
+                // degenerate placeholders (e.g. the xDH skeleton path keeps an
+                // empty trailing MatrixFull). Gather exactly the consumed
+                // entries, and pass through untouched when they are unusable.
+                let dm_usable = !xc_data.dm.is_empty()
+                    && xc_data.dm.iter().take(1).all(|m| m.size[0] == num_basis && !m.data.is_empty());
+                let dm_use = match (&idx_opt, dm_usable) {
+                    (Some(idx), true) => {
+                        dm_compact = xc_data.dm.iter().take(1).map(|m| gather_submatrix_full(m, idx)).collect();
+                        &dm_compact
+                    },
+                    _ => xc_data.dm,
+                };
+                eval_rho5_dm_only_batch(&block.ao, xc_data.xc_type, dm_use, 1, ng)
             };
 
             let xc_ten = eval_xc_eff(xc_data.xc_code, xc_data.xc_params, xc_data.xc_type, 0, &loc_rho.raw(), ng, deriv);
+            GRID_BLOCK_RHOXC_NS.fetch_add(t_rhoxc.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
             let loc_vxc = rt::asarray(xc_ten[1].as_ref().expect("vxc not provided for this xc_type"));
 
             let loc_w = rt::asarray((block.weights, device));
-            let ao_shape = vec![num_basis, ng, ao_comp];
+            let ao_shape = vec![nbb, ng, ao_comp];
             let loc_ao = rt::asarray((&block.ao.data, ao_shape, device));
 
             let mut wv = loc_vxc * &loc_w.i((.., None));
-            let mut loc_vmat = rt::zeros(([num_basis, num_basis, 3], device));
+            let mut vmat_c = rt::zeros(([nbb, nbb, 3], device));
 
+            let t_contract = std::time::Instant::now();
             match xc_data.xc_type {
                 XCType::LDA => {
-                    // `loc_vmat` has the Cartesian axis LAST ([nao,nao,3]), like
+                    // `vmat_c` has the Cartesian axis LAST ([nbb,nbb,3]), like
                     // the GGA/MGGA branches and `gga_grad_sum`; indexing it with
                     // a bare `ic` addresses the wrong axis.
                     let aow = &loc_ao.i((.., .., 0)) * &wv.i((None, .., 0));
                     let aow = aow.t();
                     for ic in 0..3 {
-                        loc_vmat.i_mut((.., .., ic)).matmul_from(
+                        vmat_c.i_mut((.., .., ic)).matmul_from(
                             &loc_ao.i((.., .., ic + 1)), &aow, 1.0, 1.0);
                     }
                 }
                 XCType::GGA => {
                     wv.i_mut((.., 0)).mul_assign(0.5);
-                    gga_grad_sum(&mut loc_vmat, loc_ao.view(), wv.view());
+                    gga_grad_sum(&mut vmat_c, loc_ao.view(), wv.view());
                 }
                 XCType::MGGA => {
                     wv.i_mut((.., 0)).mul_assign(0.5);
                     wv.i_mut((.., 4)).mul_assign(0.5);
-                    gga_grad_sum(&mut loc_vmat, loc_ao.view(), wv.view());
-                    tau_grad_dot(&mut loc_vmat, loc_ao.view(), wv.view());
+                    gga_grad_sum(&mut vmat_c, loc_ao.view(), wv.view());
+                    tau_grad_dot(&mut vmat_c, loc_ao.view(), wv.view());
                 }
                 XCType::HF => unreachable!("HF gradient not supported in get_vxc_rayon_new"),
             }
-            loc_vmat
+            GRID_BLOCK_CONTRACT_NS.fetch_add(t_contract.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
+            match idx_opt {
+                Some(idx) => scatter_to_full(&vmat_c, idx, num_basis, device),
+                None => vmat_c,
+            }
         })
         .reduce(
             || rt::zeros(([num_basis, num_basis, 3], device)),

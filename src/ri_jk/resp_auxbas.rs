@@ -87,8 +87,16 @@ pub fn cderi_pair<'a>(scf_data: &'a SCF, config: &AnalDrvConfig) -> (TsrCow<'a>,
             debug!("Building the response rimatr on `resp_auxbas_path` = \"{}\".", resp_auxbas_path);
             let mol = get_cint_mol(&scf_data.mol);
             let aux = get_cint_aux_on_path(&scf_data.mol, resp_auxbas_path);
-            let cderi =
-                generate_rimatr_bare_on_cint(&mol, &aux, scf_data.mol.ctrl.j2c_decomp, None).into_rstsr(&device);
+            let cderi = generate_rimatr_bare_on_cint(
+                &mol,
+                &aux,
+                scf_data.mol.ctrl.j2c_decomp,
+                None,
+                // deliberately unscreened: low-precision response path, small aux basis
+                0.0,
+                0.0,
+            )
+            .into_rstsr(&device);
             debug!(
                 "RI-JK low-precision response path on the `resp_auxbas_path` decomposed ERI (owned, {} auxiliary functions).",
                 cderi.shape()[1]
@@ -134,8 +142,16 @@ pub fn cderi_pair_sr<'a>(scf_data: &'a SCF, config: &AnalDrvConfig) -> (TsrCow<'
             );
             let mol = get_cint_mol(&scf_data.mol);
             let aux = get_cint_aux_on_path(&scf_data.mol, resp_auxbas_path);
-            let cderi_sr =
-                generate_rimatr_bare_on_cint(&mol, &aux, scf_data.mol.ctrl.j2c_decomp, Some(-omega)).into_rstsr(&device);
+            let cderi_sr = generate_rimatr_bare_on_cint(
+                &mol,
+                &aux,
+                scf_data.mol.ctrl.j2c_decomp,
+                Some(-omega),
+                // deliberately unscreened: low-precision response path, small aux basis
+                0.0,
+                0.0,
+            )
+            .into_rstsr(&device);
             debug!("RSH short-range low-precision response path on the `resp_auxbas_path` decomposed ERI (owned).");
             Some(cderi_sr.into_cow())
         },

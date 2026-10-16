@@ -1,6 +1,7 @@
 #![warn(unused_imports)]
 pub mod libxc_helper;
 pub mod gen_grids;
+pub mod locality;
 pub mod deep_learning;
 pub mod libxc_itrf;
 pub mod xc_deriv;
@@ -3864,6 +3865,14 @@ impl Grids {
             })
             .collect();
 
+        // Geometric pre-screen (shared with the gradient block pipeline, see
+        // `dft::locality`): an atom whose influence radius does not reach the
+        // batch bounding box cannot produce a row that survives the value
+        // screen below, because the radius envelope is a rigorous upper bound
+        // of the spherical GTO magnitude at the same cutoff. Skipping its
+        // evaluation is therefore bit-identical in outcome.
+        let influence_radii = locality::atom_influence_radii(mol, cutoff);
+
         // ── Single pass: evaluate each batch once, decide the active AO rows from
         //    the values, and gather those rows straight into the compressed blocks.
         //    The AOP block is row-aligned with the AO block, so it reuses the AO
@@ -3881,13 +3890,19 @@ impl Grids {
                 let mut ao_vals: Vec<f64> = Vec::new();
                 let mut aop_vals: [Vec<f64>; 3] = [Vec::new(), Vec::new(), Vec::new()];
 
+                let (bbox_lo, bbox_hi) = locality::block_bbox(&self.coordinates[g_range.clone()]);
+
                 mol.basis4elem
                     .iter()
                     .zip(mol.geom.rg_position.iter_columns_full())
-                    .for_each(|(elem, geom)| {
-                        let start = elem.global_index.0;
-                        let nbas = elem.global_index.1;
+                    .enumerate()
+                    .for_each(|(iatom, (elem, geom))| {
                         let tmp_geom: [f64; 3] = geom.try_into().unwrap();
+                        // geometric pre-screen: bit-identical, see above
+                        if !locality::atom_reaches_block(&tmp_geom, influence_radii[iatom], &bbox_lo, &bbox_hi) {
+                            return;
+                        }
+                        let start = elem.global_index.0;
                         let tab = gto_value_serial(
                             &self.coordinates[g_range.clone()],
                             &tmp_geom,
@@ -3906,12 +3921,10 @@ impl Grids {
                         };
                         // Every basis function belongs to exactly one element, so the
                         // per-row decision can be made here: keep a row when any grid
-                        // point of this batch has |value| above the cutoff. Elements are
+                        // point of this batch has |value| above the cutoff (the shared
+                        // predicate, `dft::locality::screen_rows_by_value`). Elements are
                         // visited in global AO order, so the gathered rows stay ordered.
-                        for r in 0..nbas {
-                            if !(0..nbatch).any(|g| tab[[r, g]].abs() > cutoff) {
-                                continue;
-                            }
+                        for &r in &locality::screen_rows_by_value(&tab, nbatch, cutoff) {
                             ao_indices.push(start + r);
                             for g in 0..nbatch {
                                 ao_vals.push(tab[[r, g]]);

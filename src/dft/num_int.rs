@@ -21,6 +21,65 @@ use crate::ri_tddft::utils::tddft_occupation_parameters;
 use rest_libcint::prelude::CInt;
 
 
+/// Wall-clock accumulators (nanoseconds, summed across rayon workers) for the
+/// parallel grid-block pipeline that feeds the analytical XC gradient.
+/// The gradient driver (`grad::rks::calc_de_xc`) resets them right before the
+/// block loop and reports the totals at `print_level >= 2`, so the
+/// AO-evaluation / rho+XC / contraction split can be read from the log
+/// without an external profiler.
+pub static GRID_BLOCK_AO_NS: AtomicU64 = AtomicU64::new(0);
+pub static GRID_BLOCK_RHOXC_NS: AtomicU64 = AtomicU64::new(0);
+pub static GRID_BLOCK_CONTRACT_NS: AtomicU64 = AtomicU64::new(0);
+pub static GRID_BLOCK_COUNT: AtomicU64 = AtomicU64::new(0);
+/// Sum of the per-block active (locality-screened) basis counts; averaged by
+/// the gradient driver to report the effective compression of the screened
+/// contraction.
+pub static GRID_BLOCK_ACTIVE_SUM: AtomicU64 = AtomicU64::new(0);
+/// Sub-split of `GRID_BLOCK_AO_NS`: time inside the per-atom GTO evaluator
+/// (`spheric_gto_deriv_batch_serial`) versus the screening+assembly around it.
+pub static GRID_BLOCK_GTO_NS: AtomicU64 = AtomicU64::new(0);
+
+/// Z-order (Morton) permutation of grid points: sorting points by this order
+/// makes contiguous index ranges spatially compact, which is what the block
+/// locality screening in the XC gradient pipeline exploits. The sort only
+/// reorders quadrature points, so it changes results at the level of floating
+/// point summation order (roundoff), nothing else.
+pub fn morton_order(coords: &[[f64; 3]]) -> Vec<usize> {
+    fn spread(v: u32) -> u64 {
+        let mut x = (v as u64) & 0x1F_FFFF;
+        x = (x | (x << 32)) & 0x1F00_0000_00FF_FFFF;
+        x = (x | (x << 16)) & 0x1F00_00FF_0000_FFFF;
+        x = (x | (x << 8)) & 0x100F_00F0_0F00_F00F;
+        x = (x | (x << 4)) & 0x10C3_0C30_C30C_30C3;
+        x = (x | (x << 2)) & 0x1249_2492_4924_9249;
+        x
+    }
+    let mut lo = [f64::INFINITY; 3];
+    let mut hi = [f64::NEG_INFINITY; 3];
+    for c in coords {
+        for k in 0..3 {
+            lo[k] = lo[k].min(c[k]);
+            hi[k] = hi[k].max(c[k]);
+        }
+    }
+    // 21-bit quantization per axis inside the bounding box
+    let scale: Vec<f64> = (0..3)
+        .map(|k| if hi[k] > lo[k] { (0x1F_FFFE as f64) / (hi[k] - lo[k]) } else { 0.0 })
+        .collect();
+    let key = |c: &[f64; 3]| -> u64 {
+        let q = |k: usize| -> u32 { ((c[k] - lo[k]) * scale[k]) as u32 };
+        spread(q(0)) | (spread(q(1)) << 1) | (spread(q(2)) << 2)
+    };
+    let mut perm: Vec<usize> = (0..coords.len()).collect();
+    perm.sort_by_cached_key(|&i| key(&coords[i]));
+    perm
+}
+
+// The locality-screening primitives (`atom_influence_radii`, `block_bbox`,
+// `atom_reaches_block`, `screen_rows_by_value`) live in `dft::locality`,
+// shared with the SCF sparse AO tabulation (`Grids::prepare_tabulated_ao_sparse`).
+use crate::dft::locality::{atom_influence_radii, atom_reaches_block, block_bbox, screen_rows_by_value};
+
 pub fn eval_ao_batch(mol:&Molecule, coords:&[[f64; 3]], ao_deriv:usize, num_grids:usize) -> RIFull<f64> {
     // let default_omp_num_threads = unsafe {utilities::openblas_get_num_threads()};
     // let default_omp_num_threads = utilities::omp_get_num_threads_wrapper();
@@ -2532,6 +2591,10 @@ pub struct BlockData<'a> {
     pub coords: &'a [[f64; 3]],
     pub weights: &'a [f64],
     pub ao: RIFull<f64>, // atomic orbitals evaluated on grids
+    /// Global basis-function indices of the rows of `ao` when the block was
+    /// locality-screened (`ao` is then the compact [n_active, ngrids, ncomp]
+    /// table); `None` means the dense, unscreened [nao, ngrids, ncomp] table.
+    pub active_bas: Option<Vec<usize>>,
 }
 
 pub struct XCData<'a> {
@@ -2590,6 +2653,7 @@ impl<'a> Iterator for GridIterator<'a> {
             coords: &self.grids.coordinates[start..end],
             weights: &self.grids.weights[start..end],
             ao: ao,
+            active_bas: None,
         })
     }
 }
@@ -2600,6 +2664,13 @@ struct GridBlockProducer<'a> {
     grids: &'a Grids,
     settings: BlockSettings,
     total_grids: usize,
+    /// Per-atom influence radii (bohr) used to skip atoms that cannot
+    /// contribute above `row_cutoff` anywhere in the block; empty means the
+    /// dense, unscreened path.
+    active_radii: std::sync::Arc<Vec<f64>>,
+    /// Row-keep threshold for the locality screen (magnitude of the AO value
+    /// at any block point); <= 0 disables screening.
+    row_cutoff: f64,
     /// Range of block indices this producer owns, [block_start, block_end).
     block_range: Range<usize>,
 }
@@ -2617,8 +2688,100 @@ impl<'a> GridBlockProducer<'a> {
         let num_grids = end - start;
         let coords = &self.grids.coordinates[start..end];
         let weights = &self.grids.weights[start..end];
-        let ao = eval_ao_batch(self.mol, coords, self.settings.ao_deriv, num_grids);
-        BlockData { coords, weights, ao }
+        let t_ao = std::time::Instant::now();
+        if self.row_cutoff <= 0.0 {
+            let ao = eval_ao_batch(self.mol, coords, self.settings.ao_deriv, num_grids);
+            GRID_BLOCK_AO_NS.fetch_add(t_ao.elapsed().as_nanos() as u64, Ordering::Relaxed);
+            GRID_BLOCK_COUNT.fetch_add(1, Ordering::Relaxed);
+            GRID_BLOCK_ACTIVE_SUM.fetch_add(self.mol.num_basis as u64, Ordering::Relaxed);
+            return BlockData { coords, weights, ao, active_bas: None };
+        }
+        let (ao, active_bas) = self.eval_ao_batch_screened(coords);
+        if active_bas.is_empty() {
+            // Degenerate block (every AO value below the cutoff): fall back to
+            // the dense table so downstream never sees an empty contraction.
+            let ao = eval_ao_batch(self.mol, coords, self.settings.ao_deriv, num_grids);
+            GRID_BLOCK_AO_NS.fetch_add(t_ao.elapsed().as_nanos() as u64, Ordering::Relaxed);
+            GRID_BLOCK_COUNT.fetch_add(1, Ordering::Relaxed);
+            GRID_BLOCK_ACTIVE_SUM.fetch_add(self.mol.num_basis as u64, Ordering::Relaxed);
+            return BlockData { coords, weights, ao, active_bas: None };
+        }
+        GRID_BLOCK_AO_NS.fetch_add(t_ao.elapsed().as_nanos() as u64, Ordering::Relaxed);
+        GRID_BLOCK_COUNT.fetch_add(1, Ordering::Relaxed);
+        GRID_BLOCK_ACTIVE_SUM.fetch_add(active_bas.len() as u64, Ordering::Relaxed);
+        BlockData { coords, weights, ao, active_bas: Some(active_bas) }
+    }
+
+    /// Locality-screened AO evaluation: keep only the atoms whose influence
+    /// radius reaches the block's bounding box, evaluate them with
+    /// `spheric_gto_deriv_batch_serial`, then keep only the basis rows whose
+    /// value exceeds `row_cutoff` at some point of the block. Returns the
+    /// compact [n_active, num_grids, ncomp] table and the global basis
+    /// indices of its rows.
+    fn eval_ao_batch_screened(&self, coords: &[[f64; 3]]) -> (RIFull<f64>, Vec<usize>) {
+        let num_grids = coords.len();
+        let ao_deriv = self.settings.ao_deriv;
+        let ncomp = (ao_deriv + 1) * (ao_deriv + 2) * (ao_deriv + 3) / 6;
+
+        // block bounding box (shared helper)
+        let (lo, hi) = block_bbox(coords);
+
+        // per-atom passes: (global kept rows, per-component tables)
+        let mut parts: Vec<(usize, Vec<usize>, Vec<MatrixFull<f64>>)> = Vec::new();
+        let mut n_active = 0usize;
+        for (iatom, (elem, geom)) in self
+            .mol
+            .basis4elem
+            .iter()
+            .zip(self.mol.geom.rg_position.iter_columns_full())
+            .enumerate()
+        {
+            let mut center = [0.0_f64; 3];
+            center.iter_mut().zip(geom.iter()).for_each(|(c, v)| *c = *v);
+            if !atom_reaches_block(&center, self.active_radii[iatom], &lo, &hi) {
+                continue;
+            }
+            let t_gto = std::time::Instant::now();
+            let tab = spheric_gto_deriv_batch_serial(coords, &center, elem, ao_deriv);
+            GRID_BLOCK_GTO_NS.fetch_add(t_gto.elapsed().as_nanos() as u64, Ordering::Relaxed);
+            let bas_start = elem.global_index.0;
+            // keep a row when its value exceeds the cutoff at some block point
+            // (same predicate as the SCF sparse AO tabulation)
+            let kept = screen_rows_by_value(&tab[0], num_grids, self.row_cutoff);
+            if kept.is_empty() {
+                continue;
+            }
+            n_active += kept.len();
+            parts.push((bas_start, kept, tab));
+        }
+
+        // assemble the compact [n_active, num_grids, ncomp] column-major table;
+        // every element is written exactly once below, so skip the zero-init
+        let mut data: Vec<f64> = Vec::with_capacity(n_active * num_grids * ncomp);
+        #[allow(clippy::uninit_vec)]
+        unsafe {
+            data.set_len(n_active * num_grids * ncomp);
+        }
+        let mut active_bas: Vec<usize> = Vec::with_capacity(n_active);
+        let mut row0 = 0usize;
+        for (bas_start, kept, tab) in &parts {
+            for c in 0..ncomp {
+                let src = &tab[c];
+                let comp_base = c * n_active * num_grids;
+                // g outer / row inner: contiguous writes into the destination
+                // column, gathered reads from the (short) source column
+                for g in 0..num_grids {
+                    let dst = &mut data[comp_base + g * n_active + row0..comp_base + g * n_active + row0 + kept.len()];
+                    for (r, &lr) in kept.iter().enumerate() {
+                        dst[r] = src[[lr, g]];
+                    }
+                }
+            }
+            active_bas.extend(kept.iter().map(|&lr| bas_start + lr));
+            row0 += kept.len();
+        }
+        let ao = RIFull::from_vec([n_active, num_grids, ncomp], data).unwrap();
+        (ao, active_bas)
     }
 }
 
@@ -2674,15 +2837,17 @@ impl<'a> Producer for GridBlockProducer<'a> {
     }
 
     fn split_at(self, index: usize) -> (Self, Self) {
-        let GridBlockProducer { mol, grids, settings, total_grids, block_range } = self;
+        let GridBlockProducer { mol, grids, settings, total_grids, active_radii, row_cutoff, block_range } = self;
         let mid = block_range.start + index;
         (
             GridBlockProducer {
                 mol, grids, settings, total_grids,
+                active_radii: active_radii.clone(), row_cutoff,
                 block_range: block_range.start..mid,
             },
             GridBlockProducer {
                 mol, grids, settings, total_grids,
+                active_radii, row_cutoff,
                 block_range: mid..block_range.end,
             },
         )
@@ -2709,6 +2874,8 @@ pub struct GridParallelIterator<'a> {
     settings: BlockSettings,
     total_grids: usize,
     num_blocks: usize,
+    active_radii: std::sync::Arc<Vec<f64>>,
+    row_cutoff: f64,
 }
 
 impl<'a> GridParallelIterator<'a> {
@@ -2720,7 +2887,21 @@ impl<'a> GridParallelIterator<'a> {
         let total_grids = grids.weights.len();
         let num_blocks = if total_grids == 0 { 0 }
             else { (total_grids + settings.blksize - 1) / settings.blksize };
-        Self { mol, grids, settings, total_grids, num_blocks }
+        // Locality screening for the gradient pipeline: the row-keep cutoff is
+        // tighter than `ao_cutoff` to cover the amplification of the AO first
+        // and second derivatives used by the gradient contraction. Disabled
+        // when `ao_cutoff <= 0` (exact, dense path).
+        let row_cutoff = if mol.ctrl.ao_cutoff > 0.0 {
+            mol.ctrl.ao_cutoff * 1.0e-3
+        } else {
+            0.0
+        };
+        let active_radii = if row_cutoff > 0.0 {
+            std::sync::Arc::new(atom_influence_radii(mol, row_cutoff))
+        } else {
+            std::sync::Arc::new(Vec::new())
+        };
+        Self { mol, grids, settings, total_grids, num_blocks, active_radii, row_cutoff }
     }
 }
 
@@ -2760,6 +2941,8 @@ impl<'a> IndexedParallelIterator for GridParallelIterator<'a> {
             grids: self.grids,
             settings: self.settings,
             total_grids: self.total_grids,
+            active_radii: self.active_radii.clone(),
+            row_cutoff: self.row_cutoff,
             block_range: 0..self.num_blocks,
         })
     }
@@ -2785,7 +2968,7 @@ pub trait NumInt<'a> {
     fn par_block_loop(
         &'a self,
         mol: &'a Molecule,
-        grids: &'a mut Grids,
+        grids: &'a Grids,
         settings: BlockSettings,
     ) -> GridParallelIterator<'a> {
         GridParallelIterator::new(mol, grids, settings)

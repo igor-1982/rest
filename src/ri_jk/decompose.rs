@@ -141,6 +141,8 @@ pub fn generate_rimatr_bare(mol_obj: &Molecule, omega: Option<f64>) -> MatrixFul
         &util::get_cint_aux(mol_obj),
         mol_obj.ctrl.j2c_decomp,
         omega,
+        mol_obj.ctrl.ri_jk.c3_screen_threshold,
+        mol_obj.ctrl.ri_jk.schwartz_overlap_tol2,
     )
 }
 
@@ -155,8 +157,18 @@ pub fn generate_rimatr_bare_on_cint(
     aux: &CInt,
     j2c_decomp_option: J2CDecompOption,
     omega: Option<f64>,
+    schwartz_threshold: f64,
+    overlap_tol2: f64,
 ) -> MatrixFull<f64> {
-    generate_rimatr_bare_on_cint_prescreened(mol, aux, j2c_decomp_option, omega, None)
+    generate_rimatr_bare_on_cint_prescreened(
+        mol,
+        aux,
+        j2c_decomp_option,
+        omega,
+        None,
+        schwartz_threshold,
+        overlap_tol2,
+    )
 }
 
 /// Same as [`generate_rimatr_bare_on_cint`], with the AO-pair rows restricted to `keep` **before**
@@ -169,15 +181,20 @@ pub fn generate_rimatr_bare_on_cint(
 /// than the mask it runs afterwards.
 ///
 /// The elimination sits between the three-centre integration and the metric solve. The
-/// integration still evaluates every shell pair (the `s2ij` driver has no pair-level screening),
-/// but the metric transformation only touches `keep.len()` rows instead of the full
+/// metric transformation only touches `keep.len()` rows instead of the full
 /// `nao(nao+1)/2`, and so does the row-max sweep of the storage-level pruning that follows.
+///
+/// `schwartz_threshold > 0` additionally screens the three-centre **evaluation** at
+/// the (shell pair, aux shell) level ([`super::schwartz_c3`]). `<= 0` evaluates
+/// every shell triple (the previous behaviour).
 pub fn generate_rimatr_bare_on_cint_prescreened(
     mol: &CInt,
     aux: &CInt,
     j2c_decomp_option: J2CDecompOption,
     omega: Option<f64>,
     keep: Option<&[usize]>,
+    schwartz_threshold: f64,
+    overlap_tol2: f64,
 ) -> MatrixFull<f64> {
     let mut mol = mol.clone();
     let mut aux = aux.clone();
@@ -192,7 +209,14 @@ pub fn generate_rimatr_bare_on_cint_prescreened(
     let j2c_decomp = get_j2c_decomp(&aux, &device, j2c_decomp_option);
 
     let j3c = {
-        let (out, shape) = CInt::integrate_cross("int3c2e", [&mol, &mol, &aux], "s2ij", None).into();
+        let (out, shape): (Vec<f64>, Vec<usize>) = if schwartz_threshold > 0.0 {
+            let engine =
+                super::schwartz_c3::ScreenedC3Engine::build(&mol, &aux, overlap_tol2);
+            let log_thresh = (schwartz_threshold / super::schwartz_c3::RIMATR_AMP).ln();
+            engine.evaluate_s2ij("int3c2e", [0, aux.nbas()], log_thresh)
+        } else {
+            CInt::integrate_cross("int3c2e", [&mol, &mol, &aux], "s2ij", None).into()
+        };
         rt::asarray((out, shape.f(), &device))
     };
 
