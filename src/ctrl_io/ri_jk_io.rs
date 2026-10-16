@@ -86,11 +86,30 @@ pub struct RIJKOption {
     /// optimizations of large systems.
     #[serde_inline_default(0.0)]
     pub pair_screen_threshold: f64,
+    /// Integral-neglect threshold (Hartree) of the integral-level Schwartz screening of the
+    /// full-tensor three-centre producers: the `rimatr` build (`int3c2e`) and the analytical
+    /// gradient derivative batches (`int3c2e_ip1`/`int3c2e_ip2`). A (shell pair, aux shell)
+    /// block whose exact Schwarz bound cannot reach this threshold — tightened by internal
+    /// margins for derivative amplification and metric mixing — is left at zero instead of
+    /// being evaluated, with the output layout of the unscreened driver.
+    ///
+    /// `0.0` (default) evaluates every shell triple and is bit-identical to the unscreened
+    /// path. Measured on compact clusters (water10, 45-atom salt) at `1e-12` the screen
+    /// skips 11–18% of the triples at energy shifts below 1e-9 Ha and gradient shifts
+    /// below 3e-7, roughly break-even in runtime; it is meant for large or sparse systems
+    /// where the skipped fraction grows.
+    #[serde_inline_default(0.0)]
+    pub c3_screen_threshold: f64,
 }
 
 impl Default for RIJKOption {
     fn default() -> Self {
-        RIJKOption { schwartz_threshold: 1e-12, schwartz_overlap_tol2: 1e-24, pair_screen_threshold: 0.0 }
+        RIJKOption {
+            schwartz_threshold: 1e-12,
+            schwartz_overlap_tol2: 1e-24,
+            pair_screen_threshold: 0.0,
+            c3_screen_threshold: 0.0,
+        }
     }
 }
 

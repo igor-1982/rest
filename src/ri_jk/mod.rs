@@ -31,6 +31,7 @@ pub mod direct;
 pub mod incore;
 pub mod pair_screened_rij;
 pub mod schwartz_rij;
+pub mod schwartz_c3;
 
 // hessian implementations
 pub mod hess_r;

@@ -3418,6 +3418,8 @@ impl Molecule {
             self.ctrl.j2c_decomp,
             omega,
             keep,
+            self.ctrl.ri_jk.c3_screen_threshold,
+            self.ctrl.ri_jk.schwartz_overlap_tol2,
         );
         let (basbas2baspar, baspar2basbas) = ri_jk::generate_baspar(self.num_basis);
         (cderi, basbas2baspar, baspar2basbas)

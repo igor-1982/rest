@@ -315,6 +315,32 @@ impl RIRHFGradient<'_> {
         let aux = ri_jk::util::get_cint_aux(mol_obj);
         let device = DeviceBLAS::default();
 
+        // Integral-level Schwartz screening of the derivative batches: the
+        // engine evaluates only the (shell pair, aux shell) triples whose
+        // exact Schwarz bound can contribute above
+        // `ri_jk.c3_screen_threshold / DERIV_AMP`, filling the rest of the
+        // batch tensors with zeros (same shape and layout as the unscreened
+        // driver). `c3_screen_threshold <= 0` (default) keeps the exact unscreened path.
+        let deriv_screen = if mol_obj.ctrl.ri_jk.c3_screen_threshold > 0.0 {
+            let engine = ri_jk::schwartz_c3::ScreenedC3Engine::build(
+                &mol,
+                &aux,
+                mol_obj.ctrl.ri_jk.schwartz_overlap_tol2,
+            );
+            let log_thresh =
+                (mol_obj.ctrl.ri_jk.c3_screen_threshold / ri_jk::schwartz_c3::DERIV_AMP).ln();
+            if mol_obj.ctrl.print_level >= 2 {
+                println!(
+                    "de-jk Schwartz screen: keeping {:.1}% of (pair, aux shell) triples at threshold {:.1e}.",
+                    engine.kept_fraction([0, aux.nbas()], log_thresh) * 100.0,
+                    mol_obj.ctrl.ri_jk.c3_screen_threshold
+                );
+            }
+            Some((engine, log_thresh))
+        } else {
+            None
+        };
+
         // density matrix and triu-packed density matrix
         let dm = get_dm(self.scf_data, &device);
         let dm_tp = pack_triu_tilde(dm.view());
@@ -489,7 +515,13 @@ impl RIRHFGradient<'_> {
             time_records.count_start("de-jk batch int");
             // int3c2e_ip1
             let tsr_int3c2e_ip1 = {
-                let (out, shape) = CInt::integrate_cross("int3c2e_ip1", [&mol, &mol, &aux], "s1", shl_slices).into();
+                let (out, shape): (Vec<f64>, Vec<usize>) = match &deriv_screen {
+                    Some((engine, thr)) => engine.evaluate_s1_ip1([shl0, shl1], *thr),
+                    None => CInt::integrate_cross(
+                        "int3c2e_ip1", [&mol, &mol, &aux], "s1", shl_slices,
+                    )
+                    .into(),
+                };
                 rt::asarray((out, shape, &device))
             };
 
@@ -497,8 +529,15 @@ impl RIRHFGradient<'_> {
             let mut tsr_int3c2e_ip2 = rt::full(([], f64::NAN, &device));
             if self.flags.auxbasis_response {
                 tsr_int3c2e_ip2 = {
-                    let (out, shape) =
-                        CInt::integrate_cross("int3c2e_ip2", [&mol, &mol, &aux], "s2ij", shl_slices).into();
+                    let (out, shape): (Vec<f64>, Vec<usize>) = match &deriv_screen {
+                        Some((engine, thr)) => {
+                            engine.evaluate_s2ij("int3c2e_ip2", [shl0, shl1], *thr)
+                        }
+                        None => CInt::integrate_cross(
+                            "int3c2e_ip2", [&mol, &mol, &aux], "s2ij", shl_slices,
+                        )
+                        .into(),
+                    };
                     rt::asarray((out, shape, &device))
                 };
             }
