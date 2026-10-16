@@ -645,7 +645,7 @@ impl RIUHFGradient<'_> {
         let aux_slice = mol_obj.make_auxmol_fake().aoslice_by_atom();
 
         for atm in 0..natm {
-            let [_, _, p0, p1] = ao_slice[atm].clone().try_into().unwrap();
+            let [_, _, p0, p1] = ao_slice[atm];
             if self.flags.factor_j.is_some() {
                 *&mut de_j.i_mut((.., atm)).assign(dao_j.i(p0..p1).sum_axes(0));
             }
@@ -660,7 +660,7 @@ impl RIUHFGradient<'_> {
             // the rank that owns the corresponding auxiliary rows, so every
             // rank must restrict its aux-atom summation to its local rows; the
             // partial [3, natm] results are summed over ranks below.
-            let [_, _, p0, p1] = aux_slice[atm].clone().try_into().unwrap();
+            let [_, _, p0, p1] = aux_slice[atm];
             let (q0, q1) = (p0.max(aux_span0), p1.min(aux_span1));
             if self.flags.factor_j.is_some() && self.flags.auxbasis_response {
                 if q0 < q1 {
