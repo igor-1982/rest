@@ -7,7 +7,6 @@ build = "build.rs"
 
 [dependencies]
 anyhow = "1"
-time = "0.1.12"
 clap = "3.*"
 regex = "1.*"
 itertools = "0.15"
@@ -51,9 +50,9 @@ rest_libcint = {path="../rest_libcint"}
 #liblbfgs = {path="../rust-lbfgs"}
 liblbfgs = "0.1.0"
 sysinfo = "0.33"
-rstsr = { version = "0.7", default-features = false, features = ["openblas", "linalg", "rayon", "std", "col_major", "tblis"] }
-rstsr-core = { version = "0.7", default-features = false }
-rstsr-openblas = { version = "0.7", features = ["openmp"] }
+rstsr = { version = "0.10", default-features = false, features = ["openblas", "linalg", "rayon", "std", "col_major", "tblis"] }
+rstsr-core = { version = "0.10", default-features = false }
+rstsr-openblas = { version = "0.10", features = ["openmp"] }
 tblis = { version = "0.2", features = ["dynamic_loading"] }
 derive_builder = { version = "0.20" }
 indexmap = { version = "2.14" }

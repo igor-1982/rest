@@ -229,13 +229,13 @@ impl Basis4Elem {
         })
     }
     pub fn to_numgrid_io(&self) -> (HashMap<usize,f64>,f64) {
-        let mut alpha_max = -std::f64::MAX;
+        let mut alpha_max = -f64::MAX;
         let mut alpha_min = HashMap::new();
         self.electron_shells.iter().for_each(|value| {
             let angular_momentum = value.angular_momentum[0] as usize;
             value.exponents.iter().for_each(|exponent| {
                 alpha_max = alpha_max.max(*exponent);
-                let s = alpha_min.entry(angular_momentum).or_insert(std::f64::MAX);
+                let s = alpha_min.entry(angular_momentum).or_insert(f64::MAX);
                 if exponent < s {
                     *s = *exponent;
                 }

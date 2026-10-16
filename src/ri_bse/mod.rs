@@ -16,7 +16,7 @@ use std::fs::OpenOptions;
 use crate::solvers::davidson::{lr_davidson_solver, tda_davidson_solver, DavidsonConfig, generate_initial_guess};
 use crate::solvers::feast;
 use std::time::Instant;
-use std::{f64, fs::File, io::Write};
+use std::{fs::File, io::Write};
 pub mod dipoles;
 pub mod matvec;
 pub mod matvec_fast;
