@@ -56,6 +56,15 @@ fn build_local(rho: f64, sigma: f64, weight: f64, b: f64, c: f64) -> VV10Grid {
 }
 
 /// VV10 per-grid energy density and GGA-like potential components.
+///
+/// The pair sum is O(N_active^2) in the number of quadrature points above
+/// `RHO_THRESHOLD` and is the whole cost of a VV10 evaluation; the inner loop
+/// therefore runs on structure-of-arrays copies of the per-point data
+/// (`ax/ay/az`, `aw0`, `akappa`, `arw`). The summation order is unchanged, so
+/// the result agrees with the array-of-structs form to rounding; the memory
+/// layout changed (one 24-byte coords read plus three scalar reads per pair
+/// instead of a 72-byte struct plus a 24-byte coords element) and the pair
+/// math uses one division instead of three, see the loop comment.
 fn vv10_grid_quantities(
     rho: &[f64],
     sigma: &[f64],
@@ -63,6 +72,7 @@ fn vv10_grid_quantities(
     coords: &[[f64; 3]],
     b: f64,
     c: f64,
+    print_level: usize,
 ) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
     let n = rho.len();
     let beta = (3.0 / (b * b)).powf(0.75) / 32.0;
@@ -72,46 +82,122 @@ fn vv10_grid_quantities(
         .iter()
         .map(|&i| build_local(rho[i], sigma[i], weights[i], b, c))
         .collect();
-    let active_coords: Vec<[f64; 3]> = active.iter().map(|&i| coords[i]).collect();
+    let m = active.len();
+    if print_level >= 3 {
+        println!(
+            " [vv10] active grids: {}/{} (pair sum {:.3e} pairs)",
+            m, n, (m as f64) * (m as f64)
+        );
+    }
+
+    // Structure-of-arrays copies for the hot pair loop.
+    let mut ax = vec![0.0_f64; m];
+    let mut ay = vec![0.0_f64; m];
+    let mut az = vec![0.0_f64; m];
+    let mut aw0 = vec![0.0_f64; m];
+    let mut akappa = vec![0.0_f64; m];
+    let mut arw = vec![0.0_f64; m];
+    for (k, &i) in active.iter().enumerate() {
+        let [x, y, z] = coords[i];
+        ax[k] = x;
+        ay[k] = y;
+        az[k] = z;
+        aw0[k] = local[k].w0;
+        akappa[k] = local[k].kappa;
+        arw[k] = local[k].rho_weight;
+    }
 
     let mut f = vec![0.0; n];
     let mut u = vec![0.0; n];
     let mut w = vec![0.0; n];
 
+    // Optional pair-distance histogram (REST_VV10_PROFILE): how much of the
+    // pair-sum magnitude sits beyond 2/4/6/8/12 Bohr, and what share of the
+    // pairs. It is the sparsity probe a cell-list cutoff would rely on: it is
+    // computed fused into the pair loop only when the environment variable is
+    // set, so ordinary runs (tests included) never pay for it.
+    let profile = std::env::var_os("REST_VV10_PROFILE").is_some();
+    // r^2 bin edges: r < 2, 2-4, 4-6, 6-8, 8-12, >= 12 Bohr
+    const R2_EDGES: [f64; 5] = [4.0, 16.0, 36.0, 64.0, 144.0];
+
     // Pair sums are independent for each outer grid point.
-    let sums: Vec<(f64, f64, f64)> = active
-        .par_iter()
-        .zip(local.par_iter())
+    let sums: Vec<((f64, f64, f64), [f64; 6], [u64; 6])> = (0..m)
+        .into_par_iter()
         .with_min_len(64)
-        .map(|(&i_out, loc_out)| {
-            let [ox, oy, oz] = coords[i_out];
+        .map(|i_out| {
+            let ox = ax[i_out];
+            let oy = ay[i_out];
+            let oz = az[i_out];
+            let w0_out = aw0[i_out];
+            let kappa_out = akappa[i_out];
             let mut sum_f = 0.0;
             let mut sum_u = 0.0;
             let mut sum_w = 0.0;
+            let mut bins = [0.0_f64; 6];
+            let mut counts = [0u64; 6];
 
-            for (j, loc_in) in local.iter().enumerate() {
-                let dx = active_coords[j][0] - ox;
-                let dy = active_coords[j][1] - oy;
-                let dz = active_coords[j][2] - oz;
+            for j in 0..m {
+                let dx = ax[j] - ox;
+                let dy = ay[j] - oy;
+                let dz = az[j] - oz;
                 let r2 = dx * dx + dy * dy + dz * dz;
 
-                let g_in = r2 * loc_in.w0 + loc_in.kappa;
-                let g_out = r2 * loc_out.w0 + loc_out.kappa;
+                let g_in = r2 * aw0[j] + akappa[j];
+                let g_out = r2 * w0_out + kappa_out;
                 let g_sum = g_out + g_in;
 
-                let t = loc_in.rho_weight / (g_out * g_in * g_sum);
+                // One division per pair instead of three: with
+                // inv = 1/(g_out g_in g_sum), t = rw_in inv and
+                // 1/g_out + 1/g_sum = g_in inv (g_sum + g_out) = g_in inv (2 g_out + g_in),
+                // so tp = t g_in inv (2 g_out + g_in). The reference form needs three
+                // divisions here; this form is algebraically identical up to rounding.
+                let inv = 1.0 / (g_out * g_in * g_sum);
+                let t = arw[j] * inv;
                 sum_f += t;
-                let tp = t * (1.0 / g_out + 1.0 / g_sum);
+                let tp = t * g_in * inv * (2.0 * g_out + g_in);
                 sum_u += tp;
                 sum_w += tp * r2;
+
+                if profile {
+                    let mut b = 0;
+                    while b < 5 && r2 >= R2_EDGES[b] {
+                        b += 1;
+                    }
+                    bins[b] += t.abs();
+                    counts[b] += 1;
+                }
             }
-            (-1.5 * sum_f, sum_u, sum_w)
+            ((-1.5 * sum_f, sum_u, sum_w), bins, counts)
         })
         .collect();
-    for (&i_out, (sf, su, sw)) in active.iter().zip(sums.iter()) {
+    for (&i_out, ((sf, su, sw), _, _)) in active.iter().zip(sums.iter()) {
         f[i_out] = *sf;
         u[i_out] = *su;
         w[i_out] = *sw;
+    }
+
+    if profile {
+        let mut bins = [0.0_f64; 6];
+        let mut counts = [0u64; 6];
+        for (_, b, c) in sums.iter() {
+            for k in 0..6 {
+                bins[k] += b[k];
+                counts[k] += c[k];
+            }
+        }
+        let total: f64 = bins.iter().sum();
+        let pairs: u64 = counts.iter().sum();
+        let edges = ["r<2", "2-4", "4-6", "6-8", "8-12", ">=12"];
+        println!(" [vv10] pair-sum distance histogram (|t| share / pair share):");
+        for k in 0..6 {
+            println!(
+                " [vv10]   {:<6}: |t| {:7.4}%  pairs {:7.4}%  ({} pairs)",
+                edges[k],
+                100.0 * if total > 0.0 { bins[k] / total } else { 0.0 },
+                100.0 * if pairs > 0 { counts[k] as f64 / pairs as f64 } else { 0.0 },
+                counts[k]
+            );
+        }
     }
 
     let mut exc = vec![0.0; n];
@@ -172,8 +258,15 @@ pub fn vv10_exc_vxc(
     let rho = rho_mat.slice_column(0);
     let sigma = sigma_mat.slice_column(0);
 
-    let (exc, vrho, vsigma) =
-        vv10_grid_quantities(rho, sigma, &grids.weights, &grids.coordinates, b, c);
+    let (exc, vrho, vsigma) = vv10_grid_quantities(
+        rho,
+        sigma,
+        &grids.weights,
+        &grids.coordinates,
+        b,
+        c,
+        mol.ctrl.print_level,
+    );
 
     let exc_total: f64 = rho
         .iter()
