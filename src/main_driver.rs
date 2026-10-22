@@ -29,7 +29,7 @@ use crate::initial_guess::sap::*;
 use anyhow;
 //use crate::isdf::error_isdf;
 use crate::dft::DFA4REST;
-use crate::post_scf_analysis::mulliken::mulliken_pop;
+use crate::post_scf_analysis::mulliken::{mulliken_pop, mulliken_spin_pop};
 use crate::post_scf_analysis::spin_correction::apply_yamaguchi_spin_correction;
 
 //use crate::post_scf_analysis::{post_scf_correlation, print_out_dfa, save_chkfile};
@@ -498,6 +498,17 @@ pub fn main_driver() -> anyhow::Result<()> {
             } else {
                 println!("{:3}-{:3}: {:10.6}, Ghost Atom", i, atom, pop)
             };
+        }
+        if scf_data.mol.spin_channel == 2 {
+            let spin_pop = mulliken_spin_pop(&scf_data);
+            println!("Mulliken spin population analysis (alpha - beta):");
+            for (i, (pop, atom)) in spin_pop.iter().zip(elem_tot.iter()).enumerate() {
+                if i < ghost_atm_start {
+                    println!("{:3}-{:3}: {:10.6}", i, atom, pop)
+                } else {
+                    println!("{:3}-{:3}: {:10.6}, Ghost Atom", i, atom, pop)
+                };
+            }
         }
     }
     
