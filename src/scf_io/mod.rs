@@ -2424,6 +2424,10 @@ impl SCF {
             };
             //let (exc,vxc) = self.generate_vxc(1.0);
             let _ = utilities::timing(&dt3, Some("evaluate vxc total"));
+            if let Some((t_den, t_elem, t_gemm, t_scat, t_call)) = crate::dft::xc_timing::report_and_reset() {
+                println!("[xc-time] density {:.3}s | elem {:.3}s | gemm {:.3}s | scatter {:.3}s | contract_total {:.3}s (thread-seconds, divide by chunk count for wall)",
+                    t_den, t_elem, t_gemm, t_scat, t_call);
+            }
             for i_spin in (0..spin_channel) {
                 self.hamiltonian[i_spin].data
                                 .par_iter_mut()

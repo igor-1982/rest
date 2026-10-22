@@ -43,6 +43,36 @@ use serde::{Deserialize, Serialize};
 
 use libxc::prelude::*;
 use crate::dft::libxc_helper::{xc_code_fdqc, xc_func_init, lda_exc_vxc, gga_exc_vxc, mgga_exc_vxc, lda_exc, gga_exc, mgga_exc};
+/// Temporary XC timing instrumentation, enabled with the environment variable
+/// `REST_XC_TIME=1`. All counters are nanoseconds accumulated across the rayon
+/// chunks, so the per-iteration wall share is the sum divided by the number of
+/// chunks that run in parallel.
+pub mod xc_timing {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::Instant;
+
+    pub static DENSITY_NS: AtomicU64 = AtomicU64::new(0);
+    pub static ELEM_NS: AtomicU64 = AtomicU64::new(0);
+    pub static GEMM_NS: AtomicU64 = AtomicU64::new(0);
+    pub static SCATTER_NS: AtomicU64 = AtomicU64::new(0);
+    pub static CALL_NS: AtomicU64 = AtomicU64::new(0);
+
+    pub fn enabled() -> bool { std::env::var("REST_XC_TIME").is_ok() }
+
+    pub fn add(c: &AtomicU64, t: Instant) {
+        c.fetch_add(t.elapsed().as_nanos() as u64, Ordering::Relaxed);
+    }
+
+    pub fn report_and_reset() -> Option<(f64, f64, f64, f64, f64)> {
+        if !enabled() { return None; }
+        let d = DENSITY_NS.swap(0, Ordering::Relaxed) as f64 / 1e9;
+        let e = ELEM_NS.swap(0, Ordering::Relaxed) as f64 / 1e9;
+        let g = GEMM_NS.swap(0, Ordering::Relaxed) as f64 / 1e9;
+        let s = SCATTER_NS.swap(0, Ordering::Relaxed) as f64 / 1e9;
+        let c = CALL_NS.swap(0, Ordering::Relaxed) as f64 / 1e9;
+        Some((d, e, g, s, c))
+    }
+}
 
 
 #[derive(Clone,Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2242,6 +2272,7 @@ impl DFA4REST {
     {
         let num_grids = range_grids.len();
         let num_basis = dm[0].size[0];
+        let t_den = if xc_timing::enabled() { Some(std::time::Instant::now()) } else { None };
 
         let mut loc_rho: MatrixFull<f64> = MatrixFull::empty();
         let mut loc_rhop: RIFull<f64> = RIFull::empty();
@@ -2296,6 +2327,7 @@ impl DFA4REST {
         } else {
             MatrixFull::empty()
         };
+        if let Some(t) = t_den { xc_timing::add(&xc_timing::DENSITY_NS, t); }
 
         // Density screening
         // The screening decision is per-batch but entirely local: compact only
@@ -3600,7 +3632,9 @@ impl Grids {
         // Clamp to [32, 256]
         let target_bytes = 512 * 1024;
         let blk = target_bytes / (nao.max(1) * 16);
-        blk.max(32).min(256)
+        // Lower bound 256: measured on Rh-complex/110 atoms/1956 bfs/28 cores,
+        // blksize=32 (old lower bound) costs 15.5 s/iter vs 13.1 s at 256.
+        blk.max(256).min(512)
     }
     /// Must be called after `prepare_tabulated_ao`.
     /// If `ao_cutoff <= 0.0`, this is a no-op.
@@ -4185,6 +4219,7 @@ impl Grids {
     ) {
         let ao_c = match &self.ao_compressed { Some(c) => c, None => return };
         let aop_c = self.aop_compressed.as_ref();
+        let t_call = if xc_timing::enabled() { Some(std::time::Instant::now()) } else { None };
 
         let ibatch_start = range_grids.start / ao_c.blksize;
         let ibatch_end = ((range_grids.end + ao_c.blksize - 1) / ao_c.blksize).min(ao_c.batches.len());
@@ -4203,6 +4238,7 @@ impl Grids {
             let n_batch = g_local_end - g_local_start;
             // offset of this batch's first grid within the vrho/vsigma/vtau/rhop arrays
             let pot_offset = g_range.start + g_local_start - range_grids.start;
+            let t_elem = if xc_timing::enabled() { Some(std::time::Instant::now()) } else { None };
 
             // -- LDA: build vxc_ao_comp[n_active, n_batch] from vrho --
             let mut vxc_ao_comp = vec![MatrixFull::new([n_active, n_batch], 0.0); spin_channel];
@@ -4271,6 +4307,8 @@ impl Grids {
                 }
             }
 
+            if let Some(t) = t_elem { xc_timing::add(&xc_timing::ELEM_NS, t); }
+
             // -- Apply weights --
             for i_spin in 0..spin_channel {
                 vxc_ao_comp[i_spin].iter_columns_full_mut().enumerate()
@@ -4283,11 +4321,14 @@ impl Grids {
             // -- GEMM + scatter: ao_comp[n_active, n_batch] × vxc_ao_comp^T → loc_vxc_mat --
             for i_spin in 0..spin_channel {
                 let mut loc_mat_batch = MatrixFull::new([n_active, n_active], 0.0);
+                let t_gemm = if xc_timing::enabled() { Some(std::time::Instant::now()) } else { None };
                 _dgemm(
                     batch_ao, (0..n_active, g_local_start..g_local_end), 'N',
                     &vxc_ao_comp[i_spin], (0..n_active, 0..n_batch), 'T',
                     &mut loc_mat_batch, (0..n_active, 0..n_active), 1.0, 0.0,
                 );
+                if let Some(t) = t_gemm { xc_timing::add(&xc_timing::GEMM_NS, t); }
+                let t_sc = if xc_timing::enabled() { Some(std::time::Instant::now()) } else { None };
                 // Scatter to the global vxc matrix. `loc_mat_batch` is symmetric in the
                 // batch-local indices and both matrices are column-major, so with `j_l`
                 // outermost the destination column `nu` is fixed and the inner loop walks
@@ -4295,14 +4336,23 @@ impl Grids {
                 // (H2O)10 / PBE0: scatter phase −24%. A per-batch pair gate was tried and
                 // rejected (only ~6-9% of the pairs were skippable while building the
                 // per-AO maxima cost ~3x the scatter phase).
-                let vxc_mat_s = &mut loc_vxc_mat[i_spin];
-                for j_l in 0..n_active {
-                    let nu = indices[j_l];
-                    for i_l in 0..n_active {
-                        let mu = indices[i_l];
-                        vxc_mat_s[[mu, nu]] += loc_mat_batch[[i_l, j_l]];
+                // Raw-slice scatter: bypass the Index<[usize;2]> trait chain
+                // (get2d → index2d → contain_of → zip/map/sum → data.get → unwrap),
+                // which costs 4+ function calls and 2 bounds checks per element.
+                // With column-major layout, element (i,j) sits at data[i + j*size[0]].
+                {
+                    let stride = num_basis;
+                    let dst: &mut [f64] = &mut loc_vxc_mat[i_spin].data[..];
+                    let src: &[f64] = &loc_mat_batch.data[..];
+                    for j_l in 0..n_active {
+                        let dst_col = indices[j_l] * stride;
+                        let src_col = j_l * n_active;
+                        for (i_l, &mu) in indices.iter().enumerate() {
+                            dst[mu + dst_col] += src[i_l + src_col];
+                        }
                     }
                 }
+                if let Some(t) = t_sc { xc_timing::add(&xc_timing::SCATTER_NS, t); }
             }
 
             // -- mGGA: tau contribution --
@@ -4324,12 +4374,16 @@ impl Grids {
                                 &vxc_ao_tau[i_spin], (0..n_active, 0..n_batch), 'T',
                                 &mut loc_mat_batch, (0..n_active, 0..n_active), 1.0, 1.0,
                             );
-                            let vxc_mat_s = &mut loc_vxc_mat[i_spin];
-                            for j_l in 0..n_active {
-                                let nu = indices[j_l];
-                                for i_l in 0..n_active {
-                                    let mu = indices[i_l];
-                                    vxc_mat_s[[mu, nu]] += loc_mat_batch[[i_l, j_l]];
+                            {
+                                let stride = num_basis;
+                                let dst: &mut [f64] = &mut loc_vxc_mat[i_spin].data[..];
+                                let src: &[f64] = &loc_mat_batch.data[..];
+                                for j_l in 0..n_active {
+                                    let dst_col = indices[j_l] * stride;
+                                    let src_col = j_l * n_active;
+                                    for (i_l, &mu) in indices.iter().enumerate() {
+                                        dst[mu + dst_col] += src[i_l + src_col];
+                                    }
                                 }
                             }
                             vxc_ao_tau[i_spin].data.iter_mut().for_each(|t| *t = 0.0);
@@ -4338,6 +4392,7 @@ impl Grids {
                 }
             }
         }
+        if let Some(t) = t_call { xc_timing::add(&xc_timing::CALL_NS, t); }
     }
 
     /// Drop the grid points whose initial-guess density contribution is negligible
