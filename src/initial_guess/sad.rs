@@ -4,8 +4,65 @@ use crate::molecule_io::Molecule;
 use crate::ctrl_io::InputKeywords;
 use crate::geom_io::{GeomCell, formated_element_name};
 use crate::mpi_io::MPIOperator;
-use crate::scf_io::{scf};
+use crate::scf_io::{scf, SCF};
 use std::collections::HashMap;
+
+/// Build and solve the isolated-atom SCF that supplies the SAD (and PAO) guess data for `ielem`.
+///
+/// The atomic calculation is pinned to HF with the SAD occupation table and its own tight SCF
+/// thresholds, independently of the molecular settings, so that the atomic guess does not move
+/// when the molecular SCF is retuned. Used by [`initial_guess_from_sad`] for the density and by
+/// [`crate::initial_guess::pao`] for the occupied orbitals.
+pub(crate) fn prepare_atomic_scf(mol: &Molecule, ielem: &String) -> SCF {
+    if mol.ctrl.print_level > 0 {
+        println!("\n=======================");
+        println!("Generating SAD for atom: {}", ielem);
+        println!("=======================");
+    }
+
+    let mut atom_ctrl = InputKeywords::init_ctrl();
+    atom_ctrl.xc = String::from("hf");
+    atom_ctrl.basis_path = mol.ctrl.basis_path.clone();
+    atom_ctrl.basis_type = mol.ctrl.basis_type.clone();
+    atom_ctrl.auxbas_path = mol.ctrl.auxbas_path.clone();
+    atom_ctrl.auxbas_type = mol.ctrl.auxbas_type.clone();
+    atom_ctrl.use_auxbas = true;
+    atom_ctrl.num_threads = mol.ctrl.num_threads.clone();
+    atom_ctrl.eri_type = String::from("ri_v");
+    atom_ctrl.num_threads = Some(mol.ctrl.num_threads.unwrap());
+    atom_ctrl.mixer = "diis".to_string();
+    atom_ctrl.start_diis_cycle = 8;
+    atom_ctrl.start_check_oscillation = 100;
+    atom_ctrl.max_scf_cycle = 300;
+    atom_ctrl.initial_guess = "vsap".to_string();
+    atom_ctrl.print_level = if mol.ctrl.print_level<2 {0} else {mol.ctrl.print_level-1};
+    atom_ctrl.atom_sad = true;
+    atom_ctrl.occupation_type = OCCType::ATMSAD;
+    atom_ctrl.charge = 0.0_f64;
+    atom_ctrl.scf_acc_eev = 1.0e-8;
+    atom_ctrl.scf_acc_rho = 1.0e-8;
+    atom_ctrl.scf_acc_etot = 1.0e-8;
+    // The atomic densities are only a guess, so their stopping rule is pinned here
+    // instead of following the molecular defaults: the guess must not move when a
+    // user retunes the SCF convergence of the actual calculation.
+    atom_ctrl.scf_conv_criteria = String::from("dm,eev");
+    atom_ctrl.scf_acc_g = 1.0e-5;
+    let (spin, spin_channel, spin_polarization) = ctrl_setting_atom_sad(ielem);
+    atom_ctrl.spin = spin;
+    atom_ctrl.use_int_nelec = false;
+    atom_ctrl.spin_channel = spin_channel;
+    atom_ctrl.spin_polarization = spin_polarization;
+
+    let mut atom_geom = GeomCell::init_geom();
+    atom_geom.name = ielem.to_string();
+    atom_geom.position = MatrixFull::from_vec([3,1], vec![0.000,0.000,0.000]).unwrap();
+    atom_geom.elem = vec![ielem.to_string()];
+    atom_geom.rg_elem = atom_geom.elem.clone();
+    atom_geom.rg_position = atom_geom.position.clone();
+
+    let atom_mol = Molecule::build_native(atom_ctrl,atom_geom, None).unwrap();
+    scf(atom_mol, &None).unwrap()
+}
 
 
 pub fn initial_guess_from_sad(mol: &Molecule, mpi_operator: &Option<MPIOperator>) -> Vec<MatrixFull<f64>> {
@@ -17,59 +74,7 @@ pub fn initial_guess_from_sad(mol: &Molecule, mpi_operator: &Option<MPIOperator>
     mol.geom.elem.iter().for_each(|ielem| {
         if let None = &mut atom_dms.get(&ielem.clone()) {
 
-            if mol.ctrl.print_level > 0 {
-                println!("\n=======================");
-                println!("Generating SAD for atom: {}", &ielem);
-                println!("=======================");
-            }
-
-            //elem_name.push(ielem.to_string());
-
-            let mut atom_ctrl = InputKeywords::init_ctrl();
-            atom_ctrl.xc = String::from("hf");
-            atom_ctrl.basis_path = mol.ctrl.basis_path.clone();
-            atom_ctrl.basis_type = mol.ctrl.basis_type.clone();
-            atom_ctrl.auxbas_path = mol.ctrl.auxbas_path.clone();
-            atom_ctrl.auxbas_type = mol.ctrl.auxbas_type.clone();
-            atom_ctrl.use_auxbas = true;
-            atom_ctrl.num_threads = mol.ctrl.num_threads.clone();
-            atom_ctrl.eri_type = String::from("ri_v");
-            atom_ctrl.num_threads = Some(mol.ctrl.num_threads.unwrap());
-            atom_ctrl.mixer = "diis".to_string();
-            atom_ctrl.start_diis_cycle = 8;
-            atom_ctrl.start_check_oscillation = 100;
-            atom_ctrl.max_scf_cycle = 300;
-            atom_ctrl.initial_guess = "vsap".to_string();
-            atom_ctrl.print_level = if mol.ctrl.print_level<2 {0} else {mol.ctrl.print_level-1};
-            atom_ctrl.atom_sad = true;
-            atom_ctrl.occupation_type = OCCType::ATMSAD;
-            atom_ctrl.charge = 0.0_f64;
-            atom_ctrl.scf_acc_eev = 1.0e-8;
-            atom_ctrl.scf_acc_rho = 1.0e-8;
-            atom_ctrl.scf_acc_etot = 1.0e-8;
-            // The atomic densities are only a guess, so their stopping rule is pinned here
-            // instead of following the molecular defaults: the guess must not move when a
-            // user retunes the SCF convergence of the actual calculation.
-            atom_ctrl.scf_conv_criteria = String::from("dm,eev");
-            atom_ctrl.scf_acc_g = 1.0e-5;
-            let (spin, spin_channel, spin_polarization) = ctrl_setting_atom_sad(ielem);
-            atom_ctrl.spin = spin;
-            atom_ctrl.use_int_nelec = false;
-            atom_ctrl.spin_channel = spin_channel;
-            atom_ctrl.spin_polarization = spin_polarization;
-            //atom_ctrl.spin = 1.0;
-            //atom_ctrl.spin_channel = 1;
-            //atom_ctrl.spin_polarization = false;
-            let mut atom_geom = GeomCell::init_geom();
-            atom_geom.name = ielem.to_string();
-            atom_geom.position = MatrixFull::from_vec([3,1], vec![0.000,0.000,0.000]).unwrap();
-            atom_geom.elem = vec![ielem.to_string()];
-            atom_geom.rg_elem = atom_geom.elem.clone();
-            atom_geom.rg_position = atom_geom.position.clone();
-
-            let mut atom_mol = Molecule::build_native(atom_ctrl,atom_geom, None).unwrap();
-
-            let mut atom_scf = scf(atom_mol, &None).unwrap();
+            let mut atom_scf = prepare_atomic_scf(mol, ielem);
 
             //println!("debug: elem prepared in this loop: {}, size: {:?}", ielem, atom_scf.density_matrix[0].size());
 

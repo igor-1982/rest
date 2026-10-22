@@ -2,7 +2,7 @@
 use tensors::{MatrixFull, MatrixUpper};
 use crate::initial_guess::enxc::effective_nxc_matrix;
 #[cfg(feature = "mpi")]
-use crate::mpi_io::mpi_broadcast_matrixfull;
+use crate::mpi_io::{mpi_broadcast_matrixfull, mpi_broadcast_vector};
 use crate::mpi_io::MPIOperator;
 use crate::scf_io::{SCFType};
 use crate::{molecule_io::Molecule, scf_io::SCF, dft::Grids};
@@ -14,6 +14,7 @@ pub mod sap;
 pub mod sad;
 pub mod enxc;
 pub mod proj;
+pub mod pao;
 mod pyrest_enxc;
 use crate::fileop::chkfile;
 
@@ -99,7 +100,59 @@ pub fn initial_guess(scf_data: &mut SCF, mpi_operator: &Option<MPIOperator>) {
         scf_data.generate_occupation();
         scf_data.generate_density_matrix();
         //scf_data.generate_hf_hamiltonian();
-    } else if scf_data.mol.ctrl.initial_guess.eq(&"sad") {
+    } else if scf_data.mol.ctrl.initial_guess.eq(&"sad")
+        || scf_data.mol.ctrl.initial_guess.eq(&"pao") {
+        // The PAO guess reuses the SAD atomic SCF step and hands the atomic guess orbitals to
+        // the SCF, per spin channel. When it is not available (ghost basis, ISDF enabled, or a
+        // construction failure) the branch falls through to plain SAD below.
+        let mut pao_done = false;
+        if scf_data.mol.ctrl.initial_guess.eq(&"pao") && !scf_data.mol.ctrl.use_isdf {
+            match crate::initial_guess::pao::initial_guess_from_pao(&scf_data.mol) {
+                Some((mut eigv, mut occ)) => {
+                    #[cfg(feature = "mpi")]
+                    if let Some(mpi_op) = mpi_operator {
+                        for i_spin in 0..scf_data.mol.spin_channel {
+                            if !eigv[i_spin].data.is_empty() {
+                                mpi_broadcast_matrixfull(&mpi_op.world, &mut eigv[i_spin], 0);
+                            }
+                            if !occ[i_spin].is_empty() {
+                                mpi_broadcast_vector(&mpi_op.world, &mut occ[i_spin], 0);
+                            }
+                        }
+                    }
+                    let ncols = crate::scf_io::util::occupied_orbital_count(&occ[0]);
+                    let ncols_beta = if scf_data.mol.spin_channel == 2 {
+                        crate::scf_io::util::occupied_orbital_count(&occ[1])
+                    } else {
+                        0
+                    };
+                    scf_data.eigenvectors = [eigv[0].clone(), eigv[1].clone()];
+                    scf_data.occupation = [occ[0].clone(), occ[1].clone()];
+                    scf_data.generate_density_matrix();
+                    // The guess carries occupied orbitals, so every Fock build here and below
+                    // takes the orbital-based (pair-screened) RI-K instead of the dense dm-only
+                    // kernel. One Roothaan step then runs on that Fock: it is cheap on the orbital
+                    // path and it makes the effective starting density the same kind of object
+                    // SAD hands over (idempotent, occupations taken from `num_elec`), which keeps
+                    // the downstream SCF trajectory and the converged density bit-comparable.
+                    scf_data.mol.ctrl.use_dm_only = false;
+                    scf_data.generate_hf_hamiltonian(mpi_operator);
+                    scf_data.diagonalize_hamiltonian(mpi_operator);
+                    scf_data.generate_occupation();
+                    scf_data.generate_density_matrix();
+                    if ncols_beta > 0 {
+                        info!("PAO guess: {} alpha and {} beta occupied atomic orbitals drive the first Fock build", ncols, ncols_beta);
+                    } else {
+                        info!("PAO guess: {} occupied atomic orbitals drive the first Fock build", ncols);
+                    }
+                    pao_done = true;
+                },
+                None => {
+                    warn!("initial_guess = pao is not available for this system, falling back to SAD");
+                }
+            }
+        }
+        if !pao_done {
         if !scf_data.mol.ctrl.use_isdf {
             let cur_log_level = log::max_level();
             log::set_max_level(LevelFilter::Info);
@@ -114,6 +167,12 @@ pub fn initial_guess(scf_data: &mut SCF, mpi_operator: &Option<MPIOperator>) {
             mpi_broadcast_matrixfull(&mpi_op.world, &mut scf_data.density_matrix[0], 0);
             mpi_broadcast_matrixfull(&mpi_op.world, &mut scf_data.density_matrix[1], 0);
         }
+        // The SAD guess has no orbitals, so the first Fock build runs on the
+        // dm-only paths. NOTE: do NOT replace this with pseudo-orbitals
+        // (diagonalizing P_SAD): the SAD pseudo-eigenvectors are delocalized,
+        // which defeats the pair screening of the RI-K/XC contraction
+        // (measured 15-28x slower on ts2/water30) and breaks SCF convergence
+        // (fractional occupations, 2026-10-21 experiment).
         let original_flag = scf_data.mol.ctrl.use_dm_only;
         scf_data.mol.ctrl.use_dm_only = true;
 
@@ -148,6 +207,7 @@ pub fn initial_guess(scf_data: &mut SCF, mpi_operator: &Option<MPIOperator>) {
         //scf_data.generate_hf_hamiltonian(mpi_operator);
         //if scf_data.mol.ctrl.print_level>0 {println!("Initial guess HF energy: {:16.8}", scf_data.scf_energy)};
         //===============================see====================================
+        }
     // generate the initial guess from hcore
     } else if scf_data.mol.ctrl.initial_guess.eq(&"hcore") {
         let init_fock = scf_data.h_core.clone();

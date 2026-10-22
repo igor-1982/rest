@@ -613,7 +613,7 @@ impl InputKeywords {
             scf_acc_g: 1.0e-5,
             has_chkfile: false, // not directly set by input
             external_init_guess: None, // not directly set by input
-            initial_guess: String::from("sad"),
+            initial_guess: String::from("pao"),
             basis_projection: String::from("occupied"),
             output: OutputKeywords::default(),
             noiter: false,
@@ -1704,9 +1704,12 @@ pub fn parse_ctrl_keywords(tmp_keys: &serde_json::Value) -> anyhow::Result<Input
 
             tmp_input.has_chkfile = ! tmp_input.chkfile.to_lowercase().eq(&"none");
 
+            // Keep this fallback in sync with `InputKeywords::init_ctrl`: the parser, not the
+            // struct initializer, decides the effective default when the ctrl file has no
+            // `initial_guess` line.
             tmp_input.initial_guess = match tmp_ctrl.get("initial_guess").unwrap_or(&serde_json::Value::Null) {
                 serde_json::Value::String(tmp_str) => {tmp_str.to_lowercase()},
-                other => {String::from("sad")},
+                other => {String::from("pao")},
             };
 
             tmp_input.basis_projection = match tmp_ctrl.get("basis_projection").unwrap_or(&serde_json::Value::Null) {
